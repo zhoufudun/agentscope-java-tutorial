@@ -1,0 +1,20 @@
+# IDE
+.idea/
+*.iml
+
+# Build
+target/
+*.class
+
+# Temporary
+deploy-temp/
+*.html
+
+# Scripts
+merge_to_single_html.py
+convert_md_to_html.py
+convert_comments.py
+
+# OS
+.DS_Store
+Thumbs.db
