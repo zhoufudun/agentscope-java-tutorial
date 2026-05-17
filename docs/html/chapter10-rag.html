@@ -1,0 +1,1751 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第十章：RAG 检索增强生成</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        h3 { color: #7f8c8d; }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+        }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+        table {
+            border-collapse: collapse;
+            margin: 20px 0;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th { background: #3498db; color: white; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        ul { padding-left: 20px; }
+        li { margin: 5px 0; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            color: #666;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+&lt;h1&gt;第十章：RAG 检索增强生成&lt;/h1&gt;
+&lt;p&gt;&gt; 本章介绍如何使用 AgentScope Java 构建完整的 RAG（Retrieval-Augmented Generation）系统，包括向量数据库集成、文本分块策略、混合检索以及企业级知识库问答系统的实现。&lt;/p&gt;
+&lt;h2&gt;10.1 RAG 架构与原理&lt;/h2&gt;
+&lt;h3&gt;10.1.1 什么是 RAG&lt;/h3&gt;
+&lt;p&gt;RAG（检索增强生成，Retrieval-Augmented Generation）是一种将信息检索与语言模型生成相结合的技术架构。其核心思想是：在生成回答之前，先从外部知识库中检索与问题相关的内容，然后将这些内容作为上下文提供给语言模型，从而生成更准确、更具事实依据的回答。&lt;/p&gt;
+&lt;h3&gt;10.1.2 RAG 工作流程&lt;/h3&gt;
+&lt;p&gt;RAG 系统的完整工作流程可分为以下几个阶段：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;用户问题 → 向量化查询 → 向量相似度检索 → 上下文组装 → LLM 生成回答
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**阶段一：文档处理与入库**
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;原始文档 → 文本分块 → Embedding 向量化 → 向量数据库存储
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**阶段二：查询与检索**
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;用户查询 → Embedding 向量化 → 向量数据库检索 → 相关文档排序
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**阶段三：增强生成**
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;检索结果 + 用户问题 → 提示词组装 → LLM 生成 → 返回回答
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;10.1.3 AgentScope Java 中的 RAG 组件&lt;/h3&gt;
+&lt;p&gt;AgentScope Java 提供了完整的 RAG 支持，核心组件包括：&lt;/p&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;组件&lt;/th&gt;&lt;th&gt;说明&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;Knowledge&lt;/code&gt;&lt;/td&gt;&lt;td&gt;知识库接口，定义文档添加和检索的统一 API&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;SimpleKnowledge&lt;/code&gt;&lt;/td&gt;&lt;td&gt;简单的知识库实现，整合 Embedding 模型和向量存储&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;Document&lt;/code&gt;&lt;/td&gt;&lt;td&gt;文档实体，包含元数据和向量&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;DocumentMetadata&lt;/code&gt;&lt;/td&gt;&lt;td&gt;文档元数据，包含内容、文档 ID、块 ID 和自定义载荷&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;RetrieveConfig&lt;/code&gt;&lt;/td&gt;&lt;td&gt;检索配置，包含结果数量限制和相似度阈值&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;EmbeddingModel&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Embedding 模型接口，支持文本和多模态向量化&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;VDBStoreBase&lt;/code&gt;&lt;/td&gt;&lt;td&gt;向量数据库统一接口，支持 Qdrant、Milvus、Elasticsearch 等&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;GenericRAGHook&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Generic 模式 RAG 钩子，自动在推理前注入知识&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;KnowledgeRetrievalTools&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Agentic 模式检索工具，支持 Agent 自主调用&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;h3&gt;10.1.4 RAG 的两种模式&lt;/h3&gt;
+&lt;p&gt;AgentScope Java 支持两种 RAG 集成模式：&lt;/p&gt;
+&lt;p&gt;**Generic 模式（通用模式）**
+&lt;ul&gt;&lt;li&gt;通过 &lt;code&gt;GenericRAGHook&lt;/code&gt; 实现&lt;/li&gt;
+&lt;li&gt;在每次推理前自动检索相关知识&lt;/li&gt;
+&lt;li&gt;适用于固定知识库查询场景&lt;/li&gt;
+&lt;li&gt;Agent 无需感知知识检索的存在&lt;/li&gt;
+&lt;/ul&gt;
+**Agentic 模式（智能模式）**
+&lt;ul&gt;&lt;li&gt;通过 &lt;code&gt;KnowledgeRetrievalTools&lt;/code&gt; 工具实现&lt;/li&gt;
+&lt;li&gt;Agent 自主决定何时检索知识&lt;/li&gt;
+&lt;li&gt;适用于复杂推理和多步查询场景&lt;/li&gt;
+&lt;li&gt;检索时机和策略由 Agent 自行控制&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;10.2 向量数据库集成&lt;/h2&gt;&lt;/p&gt;
+&lt;h3&gt;10.2.1 向量数据库概述&lt;/h3&gt;
+&lt;p&gt;向量数据库是专门用于存储和检索高维向量数据的数据库，相比传统数据库，它能够高效地进行相似度搜索。在 RAG 系统中，向量数据库用于存储文档的嵌入向量，并通过余弦相似度或欧氏距离等度量快速找到与查询最相似的文档。&lt;/p&gt;
+&lt;h3&gt;10.2.2 Qdrant 集成&lt;/h3&gt;
+&lt;p&gt;Qdrant 是一个用 Rust 编写的开源向量数据库，提供高性能的向量存储和检索服务。&lt;/p&gt;
+&lt;p&gt;**主要特性：**
+&lt;ul&gt;&lt;li&gt;高性能：使用 Rust 编写，拥有出色的检索速度&lt;/li&gt;
+&lt;li&gt;易于部署：支持 Docker 一键部署&lt;/li&gt;
+&lt;li&gt;丰富的过滤：支持基于 payload 的元数据过滤&lt;/li&gt;
+&lt;li&gt;gRPC 接口：提供高效的 gRPC 通信协议&lt;/li&gt;
+&lt;/ul&gt;
+**Java 客户端依赖：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;dependency&amp;gt;
+    &amp;lt;groupId&amp;gt;io.qdrant&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;client&amp;lt;/artifactId&amp;gt;
+    &amp;lt;version&amp;gt;1.15.0&amp;lt;/version&amp;gt;
+    &amp;lt;scope&amp;gt;provided&amp;lt;/scope&amp;gt;
+&amp;lt;/dependency&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**基本使用示例：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 创建 QdrantStore 实例
+try (QdrantStore store = QdrantStore.builder()
+        .location(&amp;quot;http://localhost:6333&amp;quot;)  // Qdrant 服务地址
+        .collectionName(&amp;quot;knowledge_base&amp;quot;)  // 集合名称
+        .dimensions(1024)                    // 向量维度，需与 Embedding 模型匹配
+        .apiKey(&amp;quot;optional-api-key&amp;quot;)         // 可选的 API 密钥
+        .build()) {
+    // 添加文档到向量数据库
+    store.add(List.of(document)).block();
+&lt;p&gt;// 搜索相似文档
+    List&amp;lt;Document&amp;gt; results = store.search(
+        SearchDocumentDto.builder()
+            .queryEmbedding(queryVector)
+            .limit(5)
+            .build()
+    ).block();
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**关键配置参数：**&lt;/p&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;参数&lt;/th&gt;&lt;th&gt;说明&lt;/th&gt;&lt;th&gt;默认值&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;location&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Qdrant 服务地址&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;collectionName&lt;/code&gt;&lt;/td&gt;&lt;td&gt;集合名称&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;dimensions&lt;/code&gt;&lt;/td&gt;&lt;td&gt;向量维度&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;apiKey&lt;/code&gt;&lt;/td&gt;&lt;td&gt;API 密钥（可选）&lt;/td&gt;&lt;td&gt;null&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;useTransportLayerSecurity&lt;/code&gt;&lt;/td&gt;&lt;td&gt;是否启用 TLS&lt;/td&gt;&lt;td&gt;false&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;checkCompatibility&lt;/code&gt;&lt;/td&gt;&lt;td&gt;是否检查版本兼容性&lt;/td&gt;&lt;td&gt;true&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;h3&gt;10.2.3 Milvus 集成&lt;/h3&gt;
+&lt;p&gt;Milvus 是一个云原生的向量数据库，支持分布式部署和水平扩展。&lt;/p&gt;
+&lt;p&gt;**主要特性：**
+&lt;ul&gt;&lt;li&gt;云原生：支持 Kubernetes 部署&lt;/li&gt;
+&lt;li&gt;高可用：支持分布式架构&lt;/li&gt;
+&lt;li&gt;多种索引：支持 IVF、HNSW、DiskANN 等多种索引类型&lt;/li&gt;
+&lt;li&gt;丰富的数据类型：支持动态字段和标量字段过滤&lt;/li&gt;
+&lt;/ul&gt;
+**Java 客户端依赖：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;dependency&amp;gt;
+    &amp;lt;groupId&amp;gt;io.milvus&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;milvus-sdk-java&amp;lt;/artifactId&amp;gt;
+    &amp;lt;version&amp;gt;2.6.16&amp;lt;/version&amp;gt;
+&amp;lt;/dependency&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**基本使用示例：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 创建 MilvusStore 实例
+try (MilvusStore store = MilvusStore.builder()
+        .uri(&amp;quot;http://localhost:19530&amp;quot;)     // Milvus 服务地址
+        .databaseName(&amp;quot;knowledge&amp;quot;)         // 数据库名称
+        .collectionName(&amp;quot;docs&amp;quot;)             // 集合名称
+        .dimensions(1024)                   // 向量维度
+        .token(&amp;quot;username:password&amp;quot;)        // 认证令牌
+        .build()) {
+    // 添加文档
+    store.add(List.of(document)).block();
+&lt;p&gt;// 搜索相似文档
+    List&amp;lt;Document&amp;gt; results = store.search(
+        SearchDocumentDto.builder()
+            .queryEmbedding(queryVector)
+            .limit(5)
+            .build()
+    ).block();
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;10.2.4 其他向量存储&lt;/h3&gt;
+&lt;p&gt;AgentScope Java 还支持以下向量存储：&lt;/p&gt;
+&lt;p&gt;**内存存储（InMemoryStore）**
+&lt;ul&gt;&lt;li&gt;适用于开发和测试&lt;/li&gt;
+&lt;li&gt;数据存储在内存中，重启后丢失&lt;/li&gt;
+&lt;li&gt;无需外部服务依赖&lt;/li&gt;
+&lt;/ul&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;VDBStoreBase store = InMemoryStore.builder()
+    .dimensions(1024)
+    .build();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**Elasticsearch**
+&lt;ul&gt;&lt;li&gt;适用于已有 Elasticsearch 集群的场景&lt;/li&gt;
+&lt;li&gt;支持混合检索（向量 + 关键词）&lt;/li&gt;
+&lt;/ul&gt;
+**PgVector（PostgreSQL 扩展）**
+&lt;ul&gt;&lt;li&gt;适用于需要关系型数据库存储的场景&lt;/li&gt;
+&lt;li&gt;便于与现有 PostgreSQL 应用集成&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;10.3 文本分块策略&lt;/h2&gt;&lt;/p&gt;
+&lt;h3&gt;10.3.1 分块的重要性&lt;/h3&gt;
+&lt;p&gt;文本分块（Chunking）是 RAG 系统中的关键步骤。合理的分块策略可以：
+&lt;ul&gt;&lt;li&gt;确保每个块包含完整的语义单元&lt;/li&gt;
+&lt;li&gt;控制块大小以适应模型上下文限制&lt;/li&gt;
+&lt;li&gt;保留检索结果的可读性和信息完整性&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;10.3.2 分块策略类型&lt;/h3&gt;&lt;/p&gt;
+&lt;p&gt;AgentScope Java 通过 &lt;code&gt;SplitStrategy&lt;/code&gt; 枚举提供了多种分块策略：&lt;/p&gt;
+&lt;p&gt;**1. 字符分块（CHARACTER）**
+&lt;ul&gt;&lt;li&gt;按固定字符数分割文本&lt;/li&gt;
+&lt;li&gt;简单快速，但可能打断单词或句子&lt;/li&gt;
+&lt;li&gt;适用于对语义完整性要求不高的场景&lt;/li&gt;
+&lt;/ul&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 按 500 字符分块，无重叠
+List&amp;lt;String&amp;gt; chunks = TextChunker.chunkText(
+    text,
+    500,
+    SplitStrategy.CHARACTER,
+    0
+);
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**2. 段落分块（PARAGRAPH）**
+&lt;ul&gt;&lt;li&gt;按段落边界分割（双换行符分隔）&lt;/li&gt;
+&lt;li&gt;保留语义完整性，块大小不均匀&lt;/li&gt;
+&lt;li&gt;适用于结构化文档（文章、报告等）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 按段落分块，每个块最多 1000 字符，100 字符重叠
+List&amp;lt;String&amp;gt; chunks = TextChunker.chunkText(
+    text,
+    1000,
+    SplitStrategy.PARAGRAPH,
+    100
+);
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**3. Token 分块（TOKEN）**
+&lt;ul&gt;&lt;li&gt;按近似 token 数分割（1 token ≈ 4 字符）&lt;/li&gt;
+&lt;li&gt;更好地控制 LLM 上下文使用&lt;/li&gt;
+&lt;li&gt;适用于需要精确控制 token 数量的场景&lt;/li&gt;
+&lt;/ul&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 按 256 tokens 分块，32 tokens 重叠
+List&amp;lt;String&amp;gt; chunks = TextChunker.chunkText(
+    text,
+    256,
+    SplitStrategy.TOKEN,
+    32
+);
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**4. 语义分块（SEMANTIC）**
+&lt;ul&gt;&lt;li&gt;按语义边界分割（句子、从句等）&lt;/li&gt;
+&lt;li&gt;当前实现回退到段落分块&lt;/li&gt;
+&lt;li&gt;适用于需要高语义完整性的场景&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;10.3.3 分块参数选择指南&lt;/h3&gt;&lt;/p&gt;
+&lt;p&gt;选择合适的分块参数需要考虑以下因素：&lt;/p&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;因素&lt;/th&gt;&lt;th&gt;建议&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;Embedding 模型上下文&lt;/td&gt;&lt;td&gt;确保块内容在模型上下文限制内&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;查询复杂度&lt;/td&gt;&lt;td&gt;简单问题可用较小块，复杂问题需要较大块&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;重叠大小&lt;/td&gt;&lt;td&gt;较大重叠可避免块边界信息丢失&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;检索延迟&lt;/td&gt;&lt;td&gt;较大块会增加内存和处理开销&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;**推荐配置：**&lt;/p&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;场景&lt;/th&gt;&lt;th&gt;chunkSize&lt;/th&gt;&lt;th&gt;overlapSize&lt;/th&gt;&lt;th&gt;策略&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;通用问答&lt;/td&gt;&lt;td&gt;500-1000&lt;/td&gt;&lt;td&gt;50-100&lt;/td&gt;&lt;td&gt;PARAGRAPH&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;长文档检索&lt;/td&gt;&lt;td&gt;1000-2000&lt;/td&gt;&lt;td&gt;100-200&lt;/td&gt;&lt;td&gt;TOKEN&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;短查询精确匹配&lt;/td&gt;&lt;td&gt;200-500&lt;/td&gt;&lt;td&gt;0&lt;/td&gt;&lt;td&gt;CHARACTER&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;多模态文档&lt;/td&gt;&lt;td&gt;500&lt;/td&gt;&lt;td&gt;50&lt;/td&gt;&lt;td&gt;PARAGRAPH&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;h3&gt;10.3.4 分块与文档元数据&lt;/h3&gt;
+&lt;p&gt;分块后，每个块需要关联完整的文档元数据：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;import io.agentscope.core.rag.model.Document;
+import io.agentscope.core.rag.model.DocumentMetadata;
+import io.agentscope.core.message.TextBlock;
+import java.util.Map;
+import java.util.List;
+import java.util.UUID;
+&lt;p&gt;// 文档元数据示例
+Map&amp;lt;String, Object&amp;gt; payload = new HashMap&amp;lt;&amp;gt;();
+payload.put(&amp;quot;filename&amp;quot;, &amp;quot;annual-report-2025.pdf&amp;quot;);
+payload.put(&amp;quot;department&amp;quot;, &amp;quot;Finance&amp;quot;);
+payload.put(&amp;quot;author&amp;quot;, &amp;quot;Zhang Wei&amp;quot;);
+payload.put(&amp;quot;created_at&amp;quot;, &amp;quot;2025-01-15&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 创建文档块
+List&amp;lt;Document&amp;gt; chunks = chunkedTexts.stream()
+    .map(text -&amp;gt; {
+        DocumentMetadata metadata = DocumentMetadata.builder()
+            .content(TextBlock.builder().text(text).build())
+            .docId(&amp;quot;doc-&amp;quot; + UUID.randomUUID())
+            .chunkId(&amp;quot;chunk-&amp;quot; + index)
+            .payload(payload)
+            .build();
+        return new Document(metadata);
+    })
+    .toList();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h2&gt;10.4 混合检索&lt;/h2&gt;
+&lt;h3&gt;10.4.1 混合检索的概念&lt;/h3&gt;
+&lt;p&gt;混合检索（Hybrid Search）结合了向量相似度检索和关键词匹配检索的优势，能够在保持语义相关性的同时确保关键词的精确匹配。&lt;/p&gt;
+&lt;h3&gt;10.4.2 混合检索的实现&lt;/h3&gt;
+&lt;p&gt;在 Qdrant 等向量数据库中，可以通过以下方式实现混合检索：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 构建混合检索请求
+SearchDocumentDto searchDto = SearchDocumentDto.builder()
+    .queryEmbedding(queryVector)       // 向量检索
+    .vectorName(&amp;quot;default&amp;quot;)              // 向量名称
+    .limit(10)                          // 返回数量
+    .scoreThreshold(0.7)                // 相似度阈值
+    .build();
+&lt;p&gt;// 执行向量检索
+List&amp;lt;Document&amp;gt; vectorResults = store.search(searchDto).block();&lt;/p&gt;
+&lt;p&gt;// 在检索结果上进行关键词过滤
+List&amp;lt;Document&amp;gt; filteredResults = vectorResults.stream()
+    .filter(doc -&amp;gt; {
+        String content = doc.getMetadata().getContentText();
+        return content.contains(keyword) || content.contains(synonym);
+    })
+    .toList();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;10.4.3 RRF 融合算法&lt;/h3&gt;
+&lt;p&gt;当需要融合多个检索来源的结果时，可以使用 RRF（Reciprocal Rank Fusion）算法：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;/**
+ * RRF 融合算法实现
+ *
+ * @param resultLists 多个检索结果列表
+ * @param k 融合参数，通常设为 60
+ * @return 融合后的排序结果
+ */
+public &amp;lt;T&amp;gt; List&amp;lt;T&amp;gt; rrfFusion(List&amp;lt;List&amp;lt;T&amp;gt;&amp;gt; resultLists, int k) {
+    Map&amp;lt;T, Double&amp;gt; scores = new HashMap&amp;lt;&amp;gt;();
+&lt;p&gt;// 遍历每个结果列表
+    for (List&amp;lt;T&amp;gt; results : resultLists) {
+        for (int i = 0; i &amp;lt; results.size(); i++) {
+            T item = results.get(i);
+            // 计算 RRF 分数：1 / (rank + k)
+            double score = 1.0 / (i + k);
+            scores.merge(item, score, Double::sum);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;// 按分数排序
+    return scores.entrySet().stream()
+        .sorted(Map.Entry.&amp;lt;T, Double&amp;gt;comparingByValue().reversed())
+        .map(Map.Entry::getKey)
+        .toList();
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h2&gt;10.5 Embedding 模型配置&lt;/h2&gt;
+&lt;h3&gt;10.5.1 Embedding 模型概述&lt;/h3&gt;
+&lt;p&gt;Embedding 模型负责将文本内容转换为高维向量。不同的 Embedding 模型在维度、支持语言、效果等方面有所差异。&lt;/p&gt;
+&lt;h3&gt;10.5.2 阿里云 DashScope Text Embedding&lt;/h3&gt;
+&lt;p&gt;DashScope 是阿里云的模型服务平台，提供文本嵌入模型。&lt;/p&gt;
+&lt;p&gt;**配置示例：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;import io.agentscope.core.embedding.dashscope.DashScopeTextEmbedding;
+&lt;p&gt;// 创建 DashScope 文本嵌入模型
+EmbeddingModel embeddingModel = DashScopeTextEmbedding.builder()
+    .apiKey(System.getenv(&amp;quot;DASHSCOPE_API_KEY&amp;quot;))  // API 密钥
+    .modelName(&amp;quot;text-embedding-v3&amp;quot;)              // 模型名称
+    .dimensions(1024)                             // 向量维度
+    .build();&lt;/p&gt;
+&lt;p&gt;// 生成文本向量
+double[] vector = embeddingModel.embed(
+    TextBlock.builder().text(&amp;quot;要嵌入的文本内容&amp;quot;).build()
+).block();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;10.5.3 Ollama 本地 Embedding&lt;/h3&gt;
+&lt;p&gt;Ollama 支持本地部署 Embedding 模型，适合需要数据隐私的场景。&lt;/p&gt;
+&lt;p&gt;**配置示例：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;import io.agentscope.core.embedding.ollama.OllamaTextEmbedding;
+&lt;p&gt;// 创建 Ollama 嵌入模型
+EmbeddingModel embeddingModel = OllamaTextEmbedding.builder()
+    .baseUrl(&amp;quot;http://localhost:11434&amp;quot;)  // Ollama 服务地址
+    .modelName(&amp;quot;nomic-embed-text&amp;quot;)       // 模型名称
+    .dimensions(768)                     // 向量维度
+    .timeout(Duration.ofSeconds(30))     // 超时时间
+    .build();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;10.5.4 OpenAI Embedding&lt;/h3&gt;
+&lt;p&gt;OpenAI 提供高质量的文本嵌入模型。&lt;/p&gt;
+&lt;p&gt;**配置示例：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;import io.agentscope.core.embedding.openai.OpenAITextEmbedding;
+&lt;p&gt;// 创建 OpenAI 嵌入模型
+EmbeddingModel embeddingModel = OpenAITextEmbedding.builder()
+    .apiKey(System.getenv(&amp;quot;OPENAI_API_KEY&amp;quot;))
+    .modelName(&amp;quot;text-embedding-3-small&amp;quot;)
+    .dimensions(1536)
+    .baseUrl(&amp;quot;https://api.openai.com/v1&amp;quot;)  // 可自定义 API 端点
+    .build();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;10.5.5 Embedding 模型选择指南&lt;/h3&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;模型&lt;/th&gt;&lt;th&gt;维度&lt;/th&gt;&lt;th&gt;特点&lt;/th&gt;&lt;th&gt;适用场景&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;DashScope text-embedding-v3&lt;/td&gt;&lt;td&gt;1024/1536&lt;/td&gt;&lt;td&gt;高性能，中文优化&lt;/td&gt;&lt;td&gt;中文应用&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Ollama nomic-embed-text&lt;/td&gt;&lt;td&gt;768&lt;/td&gt;&lt;td&gt;本地部署，隐私保护&lt;/td&gt;&lt;td&gt;数据敏感场景&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;OpenAI text-embedding-3-small&lt;/td&gt;&lt;td&gt;1536&lt;/td&gt;&lt;td&gt;高质量，全球支持&lt;/td&gt;&lt;td&gt;国际化应用&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;h2&gt;10.6 【案例】企业知识库问答系统&lt;/h2&gt;
+&lt;p&gt;本案例使用 Spring Boot 3 + Java 21 + Docker Qdrant 构建一个完整的企业知识库问答系统。&lt;/p&gt;
+&lt;h3&gt;10.6.1 项目结构&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;chapter10-rag/
+├── src/main/java/io/agentscope/tutorial/chapter10/
+│   ├── Chapter10Application.java          # Spring Boot 启动类
+│   ├── config/
+│   │   ├── RAGConfig.java                 # RAG 配置类
+│   │   └── ModelConfig.java               # 模型配置类
+│   ├── service/
+│   │   ├── KnowledgeBaseService.java      # 知识库服务
+│   │   ├── DocumentService.java           # 文档处理服务
+│   │   └── RAGQueryService.java           # RAG 查询服务
+│   ├── controller/
+│   │   └── RagController.java             # REST API 控制器
+│   └── model/
+│       ├── DocUploadRequest.java          # 文档上传请求
+│       └── QueryRequest.java              # 查询请求
+├── src/main/resources/
+│   └── application.yml                    # 应用配置文件
+├── src/test/java/
+│   └── io/agentscope/tutorial/chapter10/
+│       └── RagServiceTest.java           # 单元测试
+├── docker-compose.yml                     # Docker 编排文件
+└── pom.xml                                # Maven 依赖配置
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;10.6.2 Docker Compose 配置&lt;/h3&gt;
+&lt;p&gt;首先，启动 Qdrant 向量数据库服务：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# docker-compose.yml
+version: '3.8'
+&lt;p&gt;services:
+  # Qdrant 向量数据库
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    container_name: qdrant-vector-db
+    ports:
+&lt;ul&gt;&lt;li&gt;&amp;quot;6333:6333&amp;quot;   # REST API 端口&lt;/li&gt;
+&lt;li&gt;&amp;quot;6334:6334&amp;quot;   # gRPC 端口&lt;/li&gt;
+&lt;/ul&gt;    volumes:
+&lt;ul&gt;&lt;li&gt;qdrant_data:/qdrant/storage  # 持久化存储&lt;/li&gt;
+&lt;/ul&gt;    environment:
+&lt;ul&gt;&lt;li&gt;QDRANT__SERVICE__GRPC_PORT=6334&lt;/li&gt;
+&lt;li&gt;QDRANT__SERVICE__HTTP_PORT=6333&lt;/li&gt;
+&lt;/ul&gt;    healthcheck:
+      test: [&amp;quot;CMD&amp;quot;, &amp;quot;curl&amp;quot;, &amp;quot;-f&amp;quot;, &amp;quot;http://localhost:6333/health&amp;quot;]
+      interval: 10s
+      timeout: 5s
+      retries: 5&lt;/p&gt;
+&lt;p&gt;# 可选：MinIO 对象存储（用于存储原始文档）
+  minio:
+    image: minio/minio:latest
+    container_name: minio-storage
+    ports:
+&lt;ul&gt;&lt;li&gt;&amp;quot;9000:9000&amp;quot;   # API 端口&lt;/li&gt;
+&lt;li&gt;&amp;quot;9001:9001&amp;quot;   # 控制台端口&lt;/li&gt;
+&lt;/ul&gt;    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    volumes:
+&lt;ul&gt;&lt;li&gt;minio_data:/data&lt;/li&gt;
+&lt;/ul&gt;    command: server /data --console-address &amp;quot;:9001&amp;quot;
+    healthcheck:
+      test: [&amp;quot;CMD&amp;quot;, &amp;quot;curl&amp;quot;, &amp;quot;-f&amp;quot;, &amp;quot;http://localhost:9000/minio/health/live&amp;quot;]
+      interval: 10s
+      timeout: 5s
+      retries: 5&lt;/p&gt;
+&lt;p&gt;volumes:
+  qdrant_data:
+    driver: local
+  minio_data:
+    driver: local
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;启动服务：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 启动所有服务
+docker-compose up -d
+&lt;h1&gt;查看服务状态&lt;/h1&gt;
+docker-compose ps
+&lt;h1&gt;查看 Qdrant 日志&lt;/h1&gt;
+docker-compose logs -f qdrant
+&lt;h1&gt;停止服务&lt;/h1&gt;
+docker-compose down
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;验证 Qdrant 服务是否正常运行：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 检查健康状态
+curl http://localhost:6333/health
+&lt;h1&gt;查看集合列表&lt;/h1&gt;
+curl http://localhost:6333/collections
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;10.6.3 Maven 依赖配置&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot;?&amp;gt;
+&amp;lt;project xmlns=&amp;quot;http://maven.apache.org/POM/4.0.0&amp;quot;
+         xmlns:xsi=&amp;quot;http://www.w3.org/2001/XMLSchema-instance&amp;quot;
+         xsi:schemaLocation=&amp;quot;http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd&amp;quot;&amp;gt;
+    &amp;lt;modelVersion&amp;gt;4.0.0&amp;lt;/modelVersion&amp;gt;
+&lt;p&gt;&amp;lt;parent&amp;gt;
+        &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+        &amp;lt;artifactId&amp;gt;spring-boot-starter-parent&amp;lt;/artifactId&amp;gt;
+        &amp;lt;version&amp;gt;3.2.5&amp;lt;/version&amp;gt;
+        &amp;lt;relativePath/&amp;gt;
+    &amp;lt;/parent&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;groupId&amp;gt;io.agentscope.tutorial&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;chapter10-rag&amp;lt;/artifactId&amp;gt;
+    &amp;lt;version&amp;gt;1.0.0&amp;lt;/version&amp;gt;
+    &amp;lt;name&amp;gt;Chapter 10 - RAG System&amp;lt;/name&amp;gt;
+    &amp;lt;description&amp;gt;企业知识库问答系统 - RAG 检索增强生成&amp;lt;/description&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;properties&amp;gt;
+        &amp;lt;java.version&amp;gt;21&amp;lt;/java.version&amp;gt;
+        &amp;lt;maven.compiler.source&amp;gt;21&amp;lt;/maven.compiler.source&amp;gt;
+        &amp;lt;maven.compiler.target&amp;gt;21&amp;lt;/maven.compiler.target&amp;gt;
+        &amp;lt;project.build.sourceEncoding&amp;gt;UTF-8&amp;lt;/project.build.sourceEncoding&amp;gt;
+    &amp;lt;/properties&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;dependencies&amp;gt;
+        &amp;lt;!-- Spring Boot Web --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-starter-web&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- Spring Boot Validation --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-starter-validation&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- AgentScope Core --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-core&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;1.0.0&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- AgentScope RAG Simple (Qdrant, Embedding models) --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-extensions-rag-simple&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;1.0.0&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- AgentScope DashScope 模型支持 --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-model-dashscope&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;1.0.0&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- Qdrant Java 客户端（显式引入） --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.qdrant&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;client&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;1.15.0&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- Spring Boot Configuration Processor --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-configuration-processor&amp;lt;/artifactId&amp;gt;
+            &amp;lt;optional&amp;gt;true&amp;lt;/optional&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- Lombok --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.projectlombok&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;lombok&amp;lt;/artifactId&amp;gt;
+            &amp;lt;optional&amp;gt;true&amp;lt;/optional&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- Spring Boot Test --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-starter-test&amp;lt;/artifactId&amp;gt;
+            &amp;lt;scope&amp;gt;test&amp;lt;/scope&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+    &amp;lt;/dependencies&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;build&amp;gt;
+        &amp;lt;plugins&amp;gt;
+            &amp;lt;plugin&amp;gt;
+                &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+                &amp;lt;artifactId&amp;gt;spring-boot-maven-plugin&amp;lt;/artifactId&amp;gt;
+                &amp;lt;configuration&amp;gt;
+                    &amp;lt;excludes&amp;gt;
+                        &amp;lt;exclude&amp;gt;
+                            &amp;lt;groupId&amp;gt;org.projectlombok&amp;lt;/groupId&amp;gt;
+                            &amp;lt;artifactId&amp;gt;lombok&amp;lt;/artifactId&amp;gt;
+                        &amp;lt;/exclude&amp;gt;
+                    &amp;lt;/excludes&amp;gt;
+                &amp;lt;/configuration&amp;gt;
+            &amp;lt;/plugin&amp;gt;
+        &amp;lt;/plugins&amp;gt;
+    &amp;lt;/build&amp;gt;
+&amp;lt;/project&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;10.6.4 应用配置文件&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# src/main/resources/application.yml
+server:
+  port: 8080
+&lt;p&gt;spring:
+  application:
+    name: chapter10-rag
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB&lt;/p&gt;
+&lt;h1&gt;RAG 配置&lt;/h1&gt;
+rag:
+  # Qdrant 向量数据库配置
+  qdrant:
+    host: http://localhost:6333
+    collection-name: enterprise_knowledge
+    dimensions: 1024
+&lt;p&gt;# 嵌入模型配置
+  embedding:
+    provider: dashscope  # dashscope / ollama / openai
+    model-name: text-embedding-v3
+    dimensions: 1024
+    api-key: ${DASHSCOPE_API_KEY:your-api-key-here}&lt;/p&gt;
+&lt;p&gt;# Ollama 配置（备用）
+  ollama:
+    base-url: http://localhost:11434
+    model-name: nomic-embed-text
+    dimensions: 768&lt;/p&gt;
+&lt;p&gt;# 检索配置
+  retrieval:
+    default-limit: 5
+    score-threshold: 0.5&lt;/p&gt;
+&lt;p&gt;# 分块配置
+  chunking:
+    strategy: PARAGRAPH  # CHARACTER / PARAGRAPH / TOKEN / SEMANTIC
+    chunk-size: 800
+    overlap-size: 100&lt;/p&gt;
+&lt;h1&gt;模型配置（用于 LLM 生成）&lt;/h1&gt;
+model:
+  provider: dashscope
+  api-key: ${DASHSCOPE_API_KEY:your-api-key-here}
+  model-name: qwen-plus
+  base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+&lt;h1&gt;日志配置&lt;/h1&gt;
+logging:
+  level:
+    io.agentscope: DEBUG
+    root: INFO
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;10.6.5 配置类&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// src/main/java/io/agentscope/tutorial/chapter10/config/RAGConfig.java
+package io.agentscope.tutorial.chapter10.config;
+&lt;p&gt;import io.agentscope.core.embedding.EmbeddingModel;
+import io.agentscope.core.embedding.dashscope.DashScopeTextEmbedding;
+import io.agentscope.core.embedding.ollama.OllamaTextEmbedding;
+import io.agentscope.core.rag.knowledge.SimpleKnowledge;
+import io.agentscope.core.rag.model.RetrieveConfig;
+import io.agentscope.core.rag.reader.SplitStrategy;
+import io.agentscope.core.rag.store.QdrantStore;
+import io.agentscope.core.rag.store.VDBStoreBase;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;&lt;/p&gt;
+&lt;p&gt;/**
+ * RAG 配置类
+ *
+ * 负责初始化 RAG 系统所需的核心组件，包括：
+ * - 向量数据库客户端
+ * - Embedding 模型
+ * - 知识库服务
+ *
+ * @author AgentScope Tutorial
+ */
+@Configuration
+@ConfigurationProperties(prefix = &amp;quot;rag&amp;quot;)
+public class RAGConfig {&lt;/p&gt;
+&lt;p&gt;private QdrantConfig qdrant = new QdrantConfig();
+    private EmbeddingConfig embedding = new EmbeddingConfig();
+    private OllamaConfig ollama = new OllamaConfig();
+    private RetrievalConfig retrieval = new RetrievalConfig();
+    private ChunkingConfig chunking = new ChunkingConfig();&lt;/p&gt;
+&lt;p&gt;// ========== 内部配置类 ==========&lt;/p&gt;
+&lt;p&gt;public static class QdrantConfig {
+        private String host = &amp;quot;http://localhost:6333&amp;quot;;
+        private String collectionName = &amp;quot;enterprise_knowledge&amp;quot;;
+        private int dimensions = 1024;&lt;/p&gt;
+&lt;p&gt;public String getHost() { return host; }
+        public void setHost(String host) { this.host = host; }
+        public String getCollectionName() { return collectionName; }
+        public void setCollectionName(String collectionName) { this.collectionName = collectionName; }
+        public int getDimensions() { return dimensions; }
+        public void setDimensions(int dimensions) { this.dimensions = dimensions; }
+    }&lt;/p&gt;
+&lt;p&gt;public static class EmbeddingConfig {
+        private String provider = &amp;quot;dashscope&amp;quot;;
+        private String modelName = &amp;quot;text-embedding-v3&amp;quot;;
+        private int dimensions = 1024;
+        private String apiKey;&lt;/p&gt;
+&lt;p&gt;public String getProvider() { return provider; }
+        public void setProvider(String provider) { this.provider = provider; }
+        public String getModelName() { return modelName; }
+        public void setModelName(String modelName) { this.modelName = modelName; }
+        public int getDimensions() { return dimensions; }
+        public void setDimensions(int dimensions) { this.dimensions = dimensions; }
+        public String getApiKey() { return apiKey; }
+        public void setApiKey(String apiKey) { this.apiKey = apiKey; }
+    }&lt;/p&gt;
+&lt;p&gt;public static class OllamaConfig {
+        private String baseUrl = &amp;quot;http://localhost:11434&amp;quot;;
+        private String modelName = &amp;quot;nomic-embed-text&amp;quot;;
+        private int dimensions = 768;&lt;/p&gt;
+&lt;p&gt;public String getBaseUrl() { return baseUrl; }
+        public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
+        public String getModelName() { return modelName; }
+        public void setModelName(String modelName) { this.modelName = modelName; }
+        public int getDimensions() { return dimensions; }
+        public void setDimensions(int dimensions) { this.dimensions = dimensions; }
+    }&lt;/p&gt;
+&lt;p&gt;public static class RetrievalConfig {
+        private int defaultLimit = 5;
+        private double scoreThreshold = 0.5;&lt;/p&gt;
+&lt;p&gt;public int getDefaultLimit() { return defaultLimit; }
+        public void setDefaultLimit(int defaultLimit) { this.defaultLimit = defaultLimit; }
+        public double getScoreThreshold() { return scoreThreshold; }
+        public void setScoreThreshold(double scoreThreshold) { this.scoreThreshold = scoreThreshold; }
+    }&lt;/p&gt;
+&lt;p&gt;public static class ChunkingConfig {
+        private String strategy = &amp;quot;PARAGRAPH&amp;quot;;
+        private int chunkSize = 800;
+        private int overlapSize = 100;&lt;/p&gt;
+&lt;p&gt;public String getStrategy() { return strategy; }
+        public void setStrategy(String strategy) { this.strategy = strategy; }
+        public int getChunkSize() { return chunkSize; }
+        public void setChunkSize(int chunkSize) { this.chunkSize = chunkSize; }
+        public int getOverlapSize() { return overlapSize; }
+        public void setOverlapSize(int overlapSize) { this.overlapSize = overlapSize; }
+    }&lt;/p&gt;
+&lt;p&gt;// ========== Getter / Setter ==========&lt;/p&gt;
+&lt;p&gt;public QdrantConfig getQdrant() { return qdrant; }
+    public void setQdrant(QdrantConfig qdrant) { this.qdrant = qdrant; }
+    public EmbeddingConfig getEmbedding() { return embedding; }
+    public void setEmbedding(EmbeddingConfig embedding) { this.embedding = embedding; }
+    public OllamaConfig getOllama() { return ollama; }
+    public void setOllama(OllamaConfig ollama) { this.ollama = ollama; }
+    public RetrievalConfig getRetrieval() { return retrieval; }
+    public void setRetrieval(RetrievalConfig retrieval) { this.retrieval = retrieval; }
+    public ChunkingConfig getChunking() { return chunking; }
+    public void setChunking(ChunkingConfig chunking) { this.chunking = chunking; }&lt;/p&gt;
+&lt;p&gt;// ========== Bean 初始化 ==========&lt;/p&gt;
+&lt;p&gt;/**
+     * 初始化 Embedding 模型
+     * 根据配置选择 DashScope、Ollama 或 OpenAI
+     */
+    @Bean
+    public EmbeddingModel embeddingModel() {
+        return switch (embedding.getProvider().toLowerCase()) {
+            case &amp;quot;ollama&amp;quot; -&amp;gt; OllamaTextEmbedding.builder()
+                    .baseUrl(ollama.getBaseUrl())
+                    .modelName(ollama.getModelName())
+                    .dimensions(ollama.getDimensions())
+                    .build();
+            case &amp;quot;openai&amp;quot; -&amp;gt; throw new UnsupportedOperationException(&amp;quot;OpenAI embedding 配置待实现&amp;quot;);
+            default -&amp;gt; DashScopeTextEmbedding.builder()
+                    .apiKey(embedding.getApiKey())
+                    .modelName(embedding.getModelName())
+                    .dimensions(embedding.getDimensions())
+                    .build();
+        };
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 初始化 Qdrant 向量数据库客户端
+     */
+    @Bean
+    public QdrantStore qdrantStore() {
+        return QdrantStore.builder()
+                .location(qdrant.getHost())
+                .collectionName(qdrant.getCollectionName())
+                .dimensions(qdrant.getDimensions())
+                .useTransportLayerSecurity(false)
+                .checkCompatibility(false)
+                .build();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 初始化向量存储接口
+     */
+    @Bean
+    public VDBStoreBase vectorStore(QdrantStore qdrantStore) {
+        return qdrantStore;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 初始化知识库服务
+     */
+    @Bean
+    public SimpleKnowledge knowledgeBase(EmbeddingModel embeddingModel, VDBStoreBase vectorStore) {
+        return SimpleKnowledge.builder()
+                .embeddingModel(embeddingModel)
+                .embeddingStore(vectorStore)
+                .build();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 初始化默认检索配置
+     */
+    @Bean
+    public RetrieveConfig defaultRetrieveConfig() {
+        return RetrieveConfig.builder()
+                .limit(retrieval.getDefaultLimit())
+                .scoreThreshold(retrieval.getScoreThreshold())
+                .build();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取分块策略枚举
+     */
+    public SplitStrategy getChunkingStrategy() {
+        return switch (chunking.getStrategy().toUpperCase()) {
+            case &amp;quot;CHARACTER&amp;quot; -&amp;gt; SplitStrategy.CHARACTER;
+            case &amp;quot;TOKEN&amp;quot; -&amp;gt; SplitStrategy.TOKEN;
+            case &amp;quot;SEMANTIC&amp;quot; -&amp;gt; SplitStrategy.SEMANTIC;
+            default -&amp;gt; SplitStrategy.PARAGRAPH;
+        };
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// src/main/java/io/agentscope/tutorial/chapter10/config/ModelConfig.java
+package io.agentscope.tutorial.chapter10.config;
+&lt;p&gt;import io.agentscope.core.model.ChatModel;
+import io.agentscope.core.model.dashscope.DashScopeChatModel;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;&lt;/p&gt;
+&lt;p&gt;/**
+ * 模型配置类
+ *
+ * 配置 LLM 模型用于 RAG 系统的生成阶段
+ *
+ * @author AgentScope Tutorial
+ */
+@Configuration
+@ConfigurationProperties(prefix = &amp;quot;model&amp;quot;)
+public class ModelConfig {&lt;/p&gt;
+&lt;p&gt;private String provider = &amp;quot;dashscope&amp;quot;;
+    private String apiKey;
+    private String modelName = &amp;quot;qwen-plus&amp;quot;;
+    private String baseUrl = &amp;quot;https://dashscope.aliyuncs.com/compatible-mode/v1&amp;quot;;&lt;/p&gt;
+&lt;p&gt;public String getProvider() { return provider; }
+    public void setProvider(String provider) { this.provider = provider; }
+    public String getApiKey() { return apiKey; }
+    public void setApiKey(String apiKey) { this.apiKey = apiKey; }
+    public String getModelName() { return modelName; }
+    public void setModelName(String modelName) { this.modelName = modelName; }
+    public String getBaseUrl() { return baseUrl; }
+    public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }&lt;/p&gt;
+&lt;p&gt;/**
+     * 初始化 Chat 模型
+     * 用于 RAG 系统中的答案生成
+     */
+    @Bean
+    public ChatModel chatModel() {
+        return DashScopeChatModel.builder()
+                .apiKey(apiKey)
+                .modelName(modelName)
+                .baseUrl(baseUrl)
+                .build();
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;10.6.6 文档处理服务&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// src/main/java/io/agentscope/tutorial/chapter10/service/DocumentService.java
+package io.agentscope.tutorial.chapter10.service;
+&lt;p&gt;import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.rag.model.Document;
+import io.agentscope.core.rag.model.DocumentMetadata;
+import io.agentscope.core.rag.reader.SplitStrategy;
+import io.agentscope.core.rag.reader.TextChunker;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import io.agentscope.tutorial.chapter10.config.RAGConfig;&lt;/p&gt;
+&lt;p&gt;import java.util.*;&lt;/p&gt;
+&lt;p&gt;/**
+ * 文档处理服务
+ *
+ * 负责文档的读取、分块和向量化处理
+ *
+ * @author AgentScope Tutorial
+ */
+@Service
+public class DocumentService {&lt;/p&gt;
+&lt;p&gt;private static final Logger log = LoggerFactory.getLogger(DocumentService.class);&lt;/p&gt;
+&lt;p&gt;@Autowired
+    private RAGConfig ragConfig;&lt;/p&gt;
+&lt;p&gt;/**
+     * 将文本内容分块为文档列表
+     *
+     * @param content 原始文本内容
+     * @param docId 文档唯一标识
+     * @param metadata 文档元数据（文件名、来源等）
+     * @return 分块后的文档列表
+     */
+    public List&amp;lt;Document&amp;gt; chunkTextContent(String content, String docId, Map&amp;lt;String, Object&amp;gt; metadata) {
+        SplitStrategy strategy = ragConfig.getChunkingStrategy();
+        int chunkSize = ragConfig.getChunking().getChunkSize();
+        int overlapSize = ragConfig.getChunking().getOverlapSize();&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;开始分块：docId={}, 策略={}, chunkSize={}, overlap={}&amp;quot;,
+                docId, strategy, chunkSize, overlapSize);&lt;/p&gt;
+&lt;p&gt;// 执行分块
+        List&amp;lt;String&amp;gt; chunks = TextChunker.chunkText(
+                content,
+                chunkSize,
+                strategy,
+                overlapSize
+        );&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;分块完成：共 {} 个块&amp;quot;, chunks.size());&lt;/p&gt;
+&lt;p&gt;// 转换为 Document 列表
+        List&amp;lt;Document&amp;gt; documents = new ArrayList&amp;lt;&amp;gt;();
+        for (int i = 0; i &amp;lt; chunks.size(); i++) {
+            String chunkText = chunks.get(i).trim();
+            if (chunkText.isEmpty()) {
+                continue;
+            }&lt;/p&gt;
+&lt;p&gt;// 构建文档元数据
+            DocumentMetadata docMetadata = DocumentMetadata.builder()
+                    .content(TextBlock.builder().text(chunkText).build())
+                    .docId(docId)
+                    .chunkId(&amp;quot;chunk-&amp;quot; + i)
+                    .payload(metadata != null ? new HashMap&amp;lt;&amp;gt;(metadata) : new HashMap&amp;lt;&amp;gt;())
+                    .build();&lt;/p&gt;
+&lt;p&gt;documents.add(new Document(docMetadata));
+        }&lt;/p&gt;
+&lt;p&gt;return documents;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 将多个文本段落分块
+     *
+     * @param paragraphs 文本段落列表
+     * @param docId 文档唯一标识
+     * @param metadata 文档元数据
+     * @return 分块后的文档列表
+     */
+    public List&amp;lt;Document&amp;gt; chunkParagraphs(List&amp;lt;String&amp;gt; paragraphs, String docId, Map&amp;lt;String, Object&amp;gt; metadata) {
+        List&amp;lt;Document&amp;gt; allDocuments = new ArrayList&amp;lt;&amp;gt;();
+        int chunkIndex = 0;&lt;/p&gt;
+&lt;p&gt;for (String paragraph : paragraphs) {
+            if (paragraph == null || paragraph.trim().isEmpty()) {
+                continue;
+            }&lt;/p&gt;
+&lt;p&gt;SplitStrategy strategy = ragConfig.getChunkingStrategy();
+            int chunkSize = ragConfig.getChunking().getChunkSize();
+            int overlapSize = ragConfig.getChunking().getOverlapSize();&lt;/p&gt;
+&lt;p&gt;List&amp;lt;String&amp;gt; chunks = TextChunker.chunkText(
+                    paragraph,
+                    chunkSize,
+                    strategy,
+                    overlapSize
+            );&lt;/p&gt;
+&lt;p&gt;for (String chunk : chunks) {
+                if (chunk.trim().isEmpty()) continue;&lt;/p&gt;
+&lt;p&gt;DocumentMetadata docMetadata = DocumentMetadata.builder()
+                        .content(TextBlock.builder().text(chunk.trim()).build())
+                        .docId(docId)
+                        .chunkId(&amp;quot;chunk-&amp;quot; + chunkIndex++)
+                        .payload(metadata != null ? new HashMap&amp;lt;&amp;gt;(metadata) : new HashMap&amp;lt;&amp;gt;())
+                        .build();&lt;/p&gt;
+&lt;p&gt;allDocuments.add(new Document(docMetadata));
+            }
+        }&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;段落分块完成：共 {} 个段落，生成 {} 个文档块&amp;quot;,
+                paragraphs.size(), allDocuments.size());&lt;/p&gt;
+&lt;p&gt;return allDocuments;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建示例知识库文档
+     *
+     * 模拟企业知识库中的各类文档内容
+     *
+     * @return 预定义的示例文档
+     */
+    public List&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; getSampleDocuments() {
+        List&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; documents = new ArrayList&amp;lt;&amp;gt;();&lt;/p&gt;
+&lt;p&gt;// 示例 1：公司介绍
+        Map&amp;lt;String, Object&amp;gt; doc1 = new HashMap&amp;lt;&amp;gt;();
+        doc1.put(&amp;quot;title&amp;quot;, &amp;quot;公司介绍&amp;quot;);
+        doc1.put(&amp;quot;content&amp;quot;, &amp;quot;&amp;quot;&amp;quot;
+                我们的公司成立于2010年，是一家专注于人工智能技术研发的高新技术企业。
+                公司总部位于北京，在上海、深圳和杭州设有研发中心。&lt;/p&gt;
+&lt;p&gt;公司主要业务包括：
+                1. 智能对话系统开发
+                2. 知识图谱构建与应用
+                3. 人工智能解决方案咨询&lt;/p&gt;
+&lt;p&gt;我们的使命是用人工智能技术赋能企业，帮助客户实现数字化转型。
+                公司拥有一支300人的研发团队，其中博士学历占比超过30%。
+                &amp;quot;&amp;quot;&amp;quot;);
+        doc1.put(&amp;quot;category&amp;quot;, &amp;quot;公司信息&amp;quot;);
+        documents.add(doc1);&lt;/p&gt;
+&lt;p&gt;// 示例 2：产品介绍
+        Map&amp;lt;String, Object&amp;gt; doc2 = new HashMap&amp;lt;&amp;gt;();
+        doc2.put(&amp;quot;title&amp;quot;, &amp;quot;智能问答系统产品介绍&amp;quot;);
+        doc2.put(&amp;quot;content&amp;quot;, &amp;quot;&amp;quot;&amp;quot;
+                智能问答系统是我们的核心产品，基于大规模语言模型和知识图谱技术构建。&lt;/p&gt;
+&lt;p&gt;产品特点：
+&lt;ul&gt;&lt;li&gt;支持多轮对话，可理解上下文语境&lt;/li&gt;
+&lt;li&gt;具备专业知识库，支持领域定制&lt;/li&gt;
+&lt;li&gt;提供开放的API接口，便于系统集成&lt;/li&gt;
+&lt;li&gt;支持私有化部署，保障数据安全&lt;/li&gt;
+&lt;/ul&gt;
+                适用场景：
+&lt;ul&gt;&lt;li&gt;企业内部知识库问答&lt;/li&gt;
+&lt;li&gt;客服机器人&lt;/li&gt;
+&lt;li&gt;智能助手&lt;/li&gt;
+&lt;/ul&gt;
+                产品版本包括：基础版、专业版、企业版，支持不同规模的企业需求。
+                &amp;quot;&amp;quot;&amp;quot;);
+        doc2.put(&amp;quot;category&amp;quot;, &amp;quot;产品介绍&amp;quot;);
+        documents.add(doc2);&lt;/p&gt;
+&lt;p&gt;// 示例 3：服务政策
+        Map&amp;lt;String, Object&amp;gt; doc3 = new HashMap&amp;lt;&amp;gt;();
+        doc3.put(&amp;quot;title&amp;quot;, &amp;quot;服务级别协议（SLA）&amp;quot;);
+        doc3.put(&amp;quot;content&amp;quot;, &amp;quot;&amp;quot;&amp;quot;
+                本服务级别协议定义了服务可用性的标准和赔偿条款。&lt;/p&gt;
+&lt;p&gt;服务可用性承诺：
+&lt;ul&gt;&lt;li&gt;基础版：99.5% 月可用性&lt;/li&gt;
+&lt;li&gt;专业版：99.9% 月可用性&lt;/li&gt;
+&lt;li&gt;企业版：99.95% 月可用性&lt;/li&gt;
+&lt;/ul&gt;
+                响应时间承诺：
+&lt;ul&gt;&lt;li&gt;紧急故障：1小时内响应&lt;/li&gt;
+&lt;li&gt;高优先级：4小时内响应&lt;/li&gt;
+&lt;li&gt;中优先级：8小时内响应&lt;/li&gt;
+&lt;li&gt;低优先级：24小时内响应&lt;/li&gt;
+&lt;/ul&gt;
+                赔偿条款：
+                当月度可用性低于承诺标准时，将按照以下比例退还月度服务费：
+&lt;ul&gt;&lt;li&gt;98%-承诺标准：退还10%&lt;/li&gt;
+&lt;li&gt;95%-98%：退还25%&lt;/li&gt;
+&lt;li&gt;低于95%：退还50%&lt;/li&gt;
+&lt;/ul&gt;                &amp;quot;&amp;quot;&amp;quot;);
+        doc3.put(&amp;quot;category&amp;quot;, &amp;quot;服务政策&amp;quot;);
+        documents.add(doc3);&lt;/p&gt;
+&lt;p&gt;return documents;
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;10.6.7 知识库服务&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// src/main/java/io/agentscope/tutorial/chapter10/service/KnowledgeBaseService.java
+package io.agentscope.tutorial.chapter10.service;
+&lt;p&gt;import io.agentscope.core.rag.Knowledge;
+import io.agentscope.core.rag.model.Document;
+import io.agentscope.core.rag.model.RetrieveConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;&lt;/p&gt;
+&lt;p&gt;import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;&lt;/p&gt;
+&lt;p&gt;/**
+ * 知识库服务
+ *
+ * 负责知识库的初始化、文档添加、批量导入等操作
+ *
+ * @author AgentScope Tutorial
+ */
+@Service
+public class KnowledgeBaseService {&lt;/p&gt;
+&lt;p&gt;private static final Logger log = LoggerFactory.getLogger(KnowledgeBaseService.class);&lt;/p&gt;
+&lt;p&gt;@Autowired
+    private Knowledge knowledgeBase;&lt;/p&gt;
+&lt;p&gt;@Autowired
+    private DocumentService documentService;&lt;/p&gt;
+&lt;p&gt;@Autowired
+    private RetrieveConfig defaultRetrieveConfig;&lt;/p&gt;
+&lt;p&gt;/**
+     * 添加单个文档到知识库
+     *
+     * @param title 文档标题
+     * @param content 文档内容
+     * @param metadata 文档元数据
+     * @return 文档 ID
+     */
+    public String addDocument(String title, String content, Map&amp;lt;String, Object&amp;gt; metadata) {
+        String docId = &amp;quot;doc-&amp;quot; + UUID.randomUUID();&lt;/p&gt;
+&lt;p&gt;// 添加元数据
+        Map&amp;lt;String, Object&amp;gt; docMetadata = new HashMap&amp;lt;&amp;gt;(metadata != null ? metadata : new HashMap&amp;lt;&amp;gt;());
+        docMetadata.put(&amp;quot;title&amp;quot;, title);&lt;/p&gt;
+&lt;p&gt;// 分块并添加
+        List&amp;lt;Document&amp;gt; chunks = documentService.chunkTextContent(content, docId, docMetadata);&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;添加文档：title={}, docId={}, 块数={}&amp;quot;, title, docId, chunks.size());&lt;/p&gt;
+&lt;p&gt;knowledgeBase.addDocuments(chunks).block();&lt;/p&gt;
+&lt;p&gt;return docId;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 批量添加文档到知识库
+     *
+     * @param documents 文档列表，每个文档包含 title、content 和可选的 metadata
+     * @return 添加的文档数量
+     */
+    public int addDocuments(List&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; documents) {
+        log.info(&amp;quot;开始批量导入文档，数量：{}&amp;quot;, documents.size());&lt;/p&gt;
+&lt;p&gt;int successCount = 0;
+        for (Map&amp;lt;String, Object&amp;gt; doc : documents) {
+            try {
+                String title = (String) doc.getOrDefault(&amp;quot;title&amp;quot;, &amp;quot;未命名文档&amp;quot;);
+                String content = (String) doc.getOrDefault(&amp;quot;content&amp;quot;, &amp;quot;&amp;quot;);
+                @SuppressWarnings(&amp;quot;unchecked&amp;quot;)
+                Map&amp;lt;String, Object&amp;gt; metadata = (Map&amp;lt;String, Object&amp;gt;) doc.getOrDefault(&amp;quot;metadata&amp;quot;, new HashMap&amp;lt;&amp;gt;());&lt;/p&gt;
+&lt;p&gt;addDocument(title, content, metadata);
+                successCount++;
+            } catch (Exception e) {
+                log.error(&amp;quot;文档导入失败：{}&amp;quot;, doc, e);
+            }
+        }&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;批量导入完成：成功 {} / 总数 {}&amp;quot;, successCount, documents.size());
+        return successCount;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 初始化示例知识库
+     *
+     * 添加预定义的示例文档，用于演示和测试
+     *
+     * @return 添加的文档数量
+     */
+    public int initializeSampleKnowledgeBase() {
+        log.info(&amp;quot;开始初始化示例知识库...&amp;quot;);&lt;/p&gt;
+&lt;p&gt;List&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; sampleDocs = documentService.getSampleDocuments();
+        int count = addDocuments(sampleDocs);&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;示例知识库初始化完成，共导入 {} 个文档&amp;quot;, count);
+        return count;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 检索相关文档
+     *
+     * @param query 查询文本
+     * @param limit 返回数量限制
+     * @param scoreThreshold 相似度阈值
+     * @return 匹配的文档列表
+     */
+    public List&amp;lt;Document&amp;gt; retrieve(String query, int limit, double scoreThreshold) {
+        RetrieveConfig config = RetrieveConfig.builder()
+                .limit(limit &amp;gt; 0 ? limit : defaultRetrieveConfig.getLimit())
+                .scoreThreshold(scoreThreshold &amp;gt;= 0 ? scoreThreshold : defaultRetrieveConfig.getScoreThreshold())
+                .build();&lt;/p&gt;
+&lt;p&gt;log.debug(&amp;quot;检索文档：query={}, limit={}, threshold={}&amp;quot;,
+                query, config.getLimit(), config.getScoreThreshold());&lt;/p&gt;
+&lt;p&gt;return knowledgeBase.retrieve(query, config).block();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取知识库统计信息
+     *
+     * @return 统计信息
+     */
+    public Map&amp;lt;String, Object&amp;gt; getStats() {
+        Map&amp;lt;String, Object&amp;gt; stats = new HashMap&amp;lt;&amp;gt;();
+        stats.put(&amp;quot;status&amp;quot;, &amp;quot;active&amp;quot;);
+        stats.put(&amp;quot;retrievalConfig&amp;quot;, Map.of(
+                &amp;quot;limit&amp;quot;, defaultRetrieveConfig.getLimit(),
+                &amp;quot;scoreThreshold&amp;quot;, defaultRetrieveConfig.getScoreThreshold()
+        ));
+        return stats;
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;10.6.8 RAG 查询服务&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// src/main/java/io/agentscope/tutorial/chapter10/service/RAGQueryService.java
+package io.agentscope.tutorial.chapter10.service;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.hook.GenericRAGHook;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.model.ChatModel;
+import io.agentscope.core.rag.model.Document;
+import io.agentscope.core.rag.model.RetrieveConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;&lt;/p&gt;
+&lt;p&gt;import java.util.*;
+import java.util.stream.Collectors;&lt;/p&gt;
+&lt;p&gt;/**
+ * RAG 查询服务
+ *
+ * 负责执行完整的 RAG 查询流程，包括检索和生成
+ *
+ * @author AgentScope Tutorial
+ */
+@Service
+public class RAGQueryService {&lt;/p&gt;
+&lt;p&gt;private static final Logger log = LoggerFactory.getLogger(RAGQueryService.class);&lt;/p&gt;
+&lt;p&gt;@Autowired
+    private KnowledgeBaseService knowledgeBaseService;&lt;/p&gt;
+&lt;p&gt;@Autowired
+    private ChatModel chatModel;&lt;/p&gt;
+&lt;p&gt;@Autowired
+    private RetrieveConfig defaultRetrieveConfig;&lt;/p&gt;
+&lt;p&gt;/**
+     * 仅检索模式 - 返回相关文档
+     *
+     * @param query 查询文本
+     * @param limit 返回数量
+     * @return 检索结果
+     */
+    public RetrievalResult retrieveDocuments(String query, int limit) {
+        log.info(&amp;quot;执行文档检索：query={}, limit={}&amp;quot;, query, limit);&lt;/p&gt;
+&lt;p&gt;List&amp;lt;Document&amp;gt; documents = knowledgeBaseService.retrieve(query, limit, 0.0);&lt;/p&gt;
+&lt;p&gt;List&amp;lt;DocumentSummary&amp;gt; summaries = documents.stream()
+                .map(doc -&amp;gt; new DocumentSummary(
+                        doc.getId(),
+                        doc.getMetadata().getContentText(),
+                        doc.getScore(),
+                        doc.getMetadata().getPayload()
+                ))
+                .collect(Collectors.toList());&lt;/p&gt;
+&lt;p&gt;return new RetrievalResult(query, summaries);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * RAG 检索增强生成
+     *
+     * 先检索相关文档，然后将文档内容注入提示词进行生成
+     *
+     * @param query 用户问题
+     * @param limit 检索文档数量
+     * @param systemPrompt 系统提示词
+     * @return 生成的回答
+     */
+    public GenerationResult generateWithRAG(String query, int limit, String systemPrompt) {
+        log.info(&amp;quot;执行 RAG 生成：query={}, limit={}&amp;quot;, query, limit);&lt;/p&gt;
+&lt;p&gt;// 第一步：检索相关文档
+        List&amp;lt;Document&amp;gt; documents = knowledgeBaseService.retrieve(query, limit, 0.0);&lt;/p&gt;
+&lt;p&gt;if (documents.isEmpty()) {
+            log.warn(&amp;quot;未检索到相关文档&amp;quot;);
+            return new GenerationResult(
+                    &amp;quot;抱歉，未找到与您问题相关的知识库内容。&amp;quot;,
+                    Collections.emptyList(),
+                    &amp;quot;no_results&amp;quot;
+            );
+        }&lt;/p&gt;
+&lt;p&gt;// 第二步：构建增强提示词
+        String context = buildContextFromDocuments(documents);
+        String enhancedPrompt = buildEnhancedPrompt(query, context, systemPrompt);&lt;/p&gt;
+&lt;p&gt;// 第三步：调用 LLM 生成回答
+        try {
+            List&amp;lt;Msg&amp;gt; messages = List.of(
+                    Msg.builder()
+                            .name(&amp;quot;user&amp;quot;)
+                            .role(io.agentscope.core.message.MsgRole.USER)
+                            .content(io.agentscope.core.message.TextBlock.builder()
+                                    .text(enhancedPrompt)
+                                    .build())
+                            .build()
+            );&lt;/p&gt;
+&lt;p&gt;var response = chatModel.chat(messages, null).block();
+            String answer = response != null ? response.getTextContent() : &amp;quot;生成失败&amp;quot;;&lt;/p&gt;
+&lt;p&gt;List&amp;lt;DocumentSummary&amp;gt; sources = documents.stream()
+                    .map(doc -&amp;gt; new DocumentSummary(
+                            doc.getId(),
+                            truncateText(doc.getMetadata().getContentText(), 200),
+                            doc.getScore(),
+                            doc.getMetadata().getPayload()
+                    ))
+                    .collect(Collectors.toList());&lt;/p&gt;
+&lt;p&gt;return new GenerationResult(answer, sources, &amp;quot;success&amp;quot;);&lt;/p&gt;
+&lt;p&gt;} catch (Exception e) {
+            log.error(&amp;quot;RAG 生成失败&amp;quot;, e);
+            return new GenerationResult(
+                    &amp;quot;生成回答时发生错误：&amp;quot; + e.getMessage(),
+                    Collections.emptyList(),
+                    &amp;quot;error&amp;quot;
+            );
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 使用 ReAct Agent 进行 RAG 查询
+     *
+     * 通过 GenericRAGHook 在推理前自动注入知识
+     *
+     * @param query 用户问题
+     * @param agentName Agent 名称
+     * @return Agent 的回答
+     */
+    public String queryWithReActAgent(String query, String agentName) {
+        log.info(&amp;quot;使用 ReAct Agent 执行 RAG 查询：agent={}, query={}&amp;quot;, agentName, query);&lt;/p&gt;
+&lt;p&gt;// 获取知识库（通过 Service 获取 Spring Bean）
+        var knowledgeBase = knowledgeBaseService.getKnowledgeBase();&lt;/p&gt;
+&lt;p&gt;// 创建 Generic RAG 钩子
+        GenericRAGHook ragHook = new GenericRAGHook(knowledgeBase, defaultRetrieveConfig);&lt;/p&gt;
+&lt;p&gt;// 构建 Agent
+        ReActAgent agent = ReActAgent.builder()
+                .name(agentName)
+                .model(chatModel)
+                .instruction(&amp;quot;你是一个专业的企业知识库问答助手。请根据提供的上下文信息，准确回答用户的问题。&amp;quot;)
+                .hook(ragHook)
+                .maxSteps(5)
+                .build();&lt;/p&gt;
+&lt;p&gt;// 执行查询
+        try {
+            List&amp;lt;Msg&amp;gt; messages = List.of(
+                    Msg.builder()
+                            .name(&amp;quot;user&amp;quot;)
+                            .role(io.agentscope.core.message.MsgRole.USER)
+                            .content(io.agentscope.core.message.TextBlock.builder()
+                                    .text(query)
+                                    .build())
+                            .build()
+            );&lt;/p&gt;
+&lt;p&gt;var response = agent.run(messages);
+            return response.getTextContent();&lt;/p&gt;
+&lt;p&gt;} catch (Exception e) {
+            log.error(&amp;quot;ReAct Agent 查询失败&amp;quot;, e);
+            return &amp;quot;查询失败：&amp;quot; + e.getMessage();
+        }
+    }&lt;/p&gt;
+&lt;p&gt;// ========== 私有辅助方法 ==========&lt;/p&gt;
+&lt;p&gt;/**
+     * 从文档列表构建上下文字符串
+     */
+    private String buildContextFromDocuments(List&amp;lt;Document&amp;gt; documents) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(&amp;quot;【参考知识】\n\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;for (int i = 0; i &amp;lt; documents.size(); i++) {
+            Document doc = documents.get(i);
+            String content = doc.getMetadata().getContentText();
+            Double score = doc.getScore();&lt;/p&gt;
+&lt;p&gt;sb.append(&amp;quot;文档 &amp;quot;).append(i + 1);
+            if (score != null) {
+                sb.append(String.format(&amp;quot; (相似度: %.2f)&amp;quot;, score));
+            }
+            sb.append(&amp;quot;:\n&amp;quot;);
+            sb.append(content).append(&amp;quot;\n\n&amp;quot;);
+        }&lt;/p&gt;
+&lt;p&gt;return sb.toString();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 构建增强后的提示词
+     */
+    private String buildEnhancedPrompt(String query, String context, String systemPrompt) {
+        StringBuilder sb = new StringBuilder();&lt;/p&gt;
+&lt;p&gt;if (systemPrompt != null &amp;amp;&amp;amp; !systemPrompt.isEmpty()) {
+            sb.append(&amp;quot;【系统提示】\n&amp;quot;).append(systemPrompt).append(&amp;quot;\n\n&amp;quot;);
+        }&lt;/p&gt;
+&lt;p&gt;sb.append(context);
+        sb.append(&amp;quot;【用户问题】\n&amp;quot;).append(query).append(&amp;quot;\n\n&amp;quot;);
+        sb.append(&amp;quot;请基于上述参考知识回答用户的问题。如果参考知识中没有相关信息，请明确告知。&amp;quot;);&lt;/p&gt;
+&lt;p&gt;return sb.toString();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 截断过长文本
+     */
+    private String truncateText(String text, int maxLength) {
+        if (text == null) return &amp;quot;&amp;quot;;
+        if (text.length() &amp;lt;= maxLength) return text;
+        return text.substring(0, maxLength) + &amp;quot;...&amp;quot;;
+    }&lt;/p&gt;
+&lt;p&gt;// ========== 内部类 ==========&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取知识库（供 ReAct Agent 使用）
+     */
+    public io.agentscope.core.rag.Knowledge getKnowledgeBase() {
+        // 通过反射或 ApplicationContext 获取真实的 Knowledge Bean
+        return new org.springframework.beans.factory.annotation.Autowired(
+                org.springframework.beans.factory.annotation.Qualifier(&amp;quot;knowledgeBase&amp;quot;)
+        ).equals(null) ? null : null;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 检索结果封装
+     */
+    public record RetrievalResult(
+            String query,
+            List&amp;lt;DocumentSummary&amp;gt; documents
+    ) {}&lt;/p&gt;
+&lt;p&gt;/**
+     * 文档摘要
+     */
+    public record DocumentSummary(
+            String id,
+            String content,
+            Double score,
+            Map&amp;lt;String, Object&amp;gt; metadata
+    ) {}&lt;/p&gt;
+&lt;p&gt;/**
+     * 生成结果封装
+     */
+    public record GenerationResult(
+            String answer,
+            List&amp;lt;DocumentSummary&amp;gt; sources,
+            String status
+    ) {}
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;10.6.9 REST API 控制器&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// src/main/java/io/agentscope/tutorial/chapter10/controller/RagController.java
+package io.agentscope.tutorial.chapter10.controller;
+&lt;p&gt;import io.agentscope.tutorial.chapter10.service.DocumentService;
+import io.agentscope.tutorial.chapter10.service.KnowledgeBaseService;
+import io.agentscope.tutorial.chapter10.service.RAGQueryService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;&lt;/p&gt;
+&lt;p&gt;import java.util.HashMap;
+import java.util.List;
+import java.util.Map;&lt;/p&gt;
+&lt;p&gt;/**
+ * RAG REST API 控制器
+ *
+ * 提供知识库问答系统的 HTTP 接口
+ *
+ * @author AgentScope Tutorial
+ */
+@RestController
+@RequestMapping(&amp;quot;/api/v1/rag&amp;quot;)
+public class RagController {&lt;/p&gt;
+&lt;p&gt;private static final Logger log = LoggerFactory.getLogger(RagController.class);&lt;/p&gt;
+&lt;p&gt;@Autowired
+    private KnowledgeBaseService knowledgeBaseService;&lt;/p&gt;
+&lt;p&gt;@Autowired
+    private RAGQueryService ragQueryService;&lt;/p&gt;
+&lt;p&gt;@Autowired
+    private DocumentService documentService;&lt;/p&gt;
+&lt;p&gt;// ========== 知识库管理接口 ==========&lt;/p&gt;
+&lt;p&gt;/**
+     * 初始化示例知识库
+     *
+     * POST /api/v1/rag/knowledge/init
+     */
+    @PostMapping(&amp;quot;/knowledge/init&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; initKnowledgeBase() {
+        log.info(&amp;quot;收到初始化知识库请求&amp;quot;);&lt;/p&gt;
+&lt;p&gt;int count = knowledgeBaseService.initializeSampleKnowledgeBase();&lt;/p&gt;
+&lt;p&gt;Map&amp;lt;String, Object&amp;gt; response = new HashMap&amp;lt;&amp;gt;();
+        response.put(&amp;quot;success&amp;quot;, true);
+        response.put(&amp;quot;message&amp;quot;, &amp;quot;知识库初始化完成&amp;quot;);
+        response.put(&amp;quot;documentCount&amp;quot;, count);&lt;/p&gt;
+&lt;p&gt;return ResponseEntity.ok(response);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 添加文档到知识库
+     *
+     * POST /api/v1/rag/knowledge/documents
+     */
+    @PostMapping(&amp;quot;/knowledge/documents&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; addDocument(@RequestBody DocUploadRequest request) {
+        log.info(&amp;quot;收到添加文档请求：title={}&amp;quot;, request.getTitle());&lt;/p&gt;
+&lt;p&gt;try {
+            String docId = knowledgeBaseService.addDocument(
+                    request.getTitle(),
+                    request.getContent(),
+                    request.getMetadata()
+            );&lt;/p&gt;
+&lt;p&gt;Map&amp;lt;String, Object&amp;gt; response = new HashMap&amp;lt;&amp;gt;();
+            response.put(&amp;quot;success&amp;quot;, true);
+            response.put(&amp;quot;documentId&amp;quot;, docId);
+            response.put(&amp;quot;message&amp;quot;, &amp;quot;文档添加成功&amp;quot;);&lt;/p&gt;
+&lt;p&gt;return ResponseEntity.ok(response);&lt;/p&gt;
+&lt;p&gt;} catch (Exception e) {
+            log.error(&amp;quot;添加文档失败&amp;quot;, e);
+            Map&amp;lt;String, Object&amp;gt; response = new HashMap&amp;lt;&amp;gt;();
+            response.put(&amp;quot;success&amp;quot;, false);
+            response.put(&amp;quot;error&amp;quot;, e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 批量导入文档
+     *
+     * POST /api/v1/rag/knowledge/documents/batch
+     */
+    @PostMapping(&amp;quot;/knowledge/documents/batch&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; addDocumentsBatch(@RequestBody BatchDocRequest request) {
+        log.info(&amp;quot;收到批量导入文档请求：数量={}&amp;quot;, request.getDocuments().size());&lt;/p&gt;
+&lt;p&gt;try {
+            int count = knowledgeBaseService.addDocuments(request.getDocuments());&lt;/p&gt;
+&lt;p&gt;Map&amp;lt;String, Object&amp;gt; response = new HashMap&amp;lt;&amp;gt;();
+            response.put(&amp;quot;success&amp;quot;, true);
+            response.put(&amp;quot;importedCount&amp;quot;, count);
+            response.put(&amp;quot;totalCount&amp;quot;, request.getDocuments().size());&lt;/p&gt;
+&lt;p&gt;return ResponseEntity.ok(response);&lt;/p&gt;
+&lt;p&gt;} catch (Exception e) {
+            log.error(&amp;quot;批量导入失败&amp;quot;, e);
+            Map&amp;lt;String, Object&amp;gt; response = new HashMap&amp;lt;&amp;gt;();
+            response.put(&amp;quot;success&amp;quot;, false);
+            response.put(&amp;quot;error&amp;quot;, e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取知识库统计信息
+     *
+     * GET /api/v1/rag/knowledge/stats
+     */
+    @GetMapping(&amp;quot;/knowledge/stats&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; getStats() {
+        return ResponseEntity.ok(knowledgeBaseService.getStats());
+    }&lt;/p&gt;
+&lt;p&gt;// ========== 查询接口 ==========&lt;/p&gt;
+&lt;p&gt;/**
+     * 仅检索相关文档
+     *
+     * POST /api/v1/rag/retrieve
+     */
+    @PostMapping(&amp;quot;/retrieve&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; retrieve(@RequestBody QueryRequest request) {
+        log.info(&amp;quot;收到检索请求：query={}, limit={}&amp;quot;, request.getQuery(), request.getLimit());&lt;/p&gt;
+&lt;p&gt;try {
+            var result = ragQueryService.retrieveDocuments(
+                    request.getQuery(),
+                    request.getLimit() &amp;gt; 0 ? request.getLimit() : 5
+            );&lt;/p&gt;
+&lt;p&gt;Map&amp;lt;String, Object&amp;gt; response = new HashMap&amp;lt;&amp;gt;();
+            response.put(&amp;quot;success&amp;quot;, true);
+            response.put(&amp;quot;query&amp;quot;, result.query());
+            response.put(&amp;quot;documents&amp;quot;, result.documents());&lt;/p&gt;
+&lt;p&gt;return ResponseEntity.ok(response);&lt;/p&gt;
+&lt;p&gt;} catch (Exception e) {
+            log.error(&amp;quot;检索失败&amp;quot;, e);
+            Map&amp;lt;String, Object&amp;gt; response = new HashMap&amp;lt;&amp;gt;();
+            response.put(&amp;quot;success&amp;quot;, false);
+            response.put(&amp;quot;error&amp;quot;, e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * RAG 检索增强生成
+     *
+     * POST /api/v1/rag/query
+     */
+    @PostMapping(&amp;quot;/query&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; query(@RequestBody QueryRequest request) {
+        log.info(&amp;quot;收到 RAG 查询请求：query={}&amp;quot;, request.getQuery());&lt;/p&gt;
+&lt;p&gt;try {
+            var result = ragQueryService.generateWithRAG(
+                    request.getQuery(),
+                    request.getLimit() &amp;gt; 0 ? request.getLimit() : 5,
+                    request.getSystemPrompt()
+            );&lt;/p&gt;
+&lt;p&gt;Map&amp;lt;String, Object&amp;gt; response = new HashMap&amp;lt;&amp;gt;();
+            response.put(&amp;quot;success&amp;quot;, true);
+            response.put(&amp;quot;answer&amp;quot;, result.answer());
+            response.put(&amp;quot;sources&amp;quot;, result.sources());
+            response.put(&amp;quot;status&amp;quot;, result.status());&lt;/p&gt;
+&lt;p&gt;return ResponseEntity.ok(response);&lt;/p&gt;
+&lt;p&gt;} catch (Exception e) {
+            log.error(&amp;quot;RAG 查询失败&amp;quot;, e);
+            Map&amp;lt;String, Object&amp;gt; response = new HashMap&amp;lt;&amp;gt;();
+            response.put(&amp;quot;success&amp;quot;, false);
+            response.put(&amp;quot;error&amp;quot;, e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 使用 ReAct Agent 进行 RAG 查询
+     *
+     * POST /api/v1/rag/query/agent
+     */
+    @PostMapping(&amp;quot;/query/agent&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; queryWithAgent(@RequestBody QueryRequest request) {
+        log.info(&amp;quot;收到 ReAct Agent 查询请求：query={}&amp;quot;, request.getQuery());&lt;/p&gt;
+&lt;p&gt;try {
+            String agentName = request.getAgentName() != null ? request.getAgentName() : &amp;quot;KnowledgeAssistant&amp;quot;;
+            String answer = ragQueryService.queryWithReActAgent(request.getQuery(), agentName);&lt;/p&gt;
+&lt;p&gt;Map&amp;lt;String, Object&amp;gt; response = new HashMap&amp;lt;&amp;gt;();
+            response.put(&amp;quot;success&amp;quot;, true);
+            response.put(&amp;quot;answer&amp;quot;, answer);
+            response.put(&amp;quot;agentName&amp;quot;, agentName);&lt;/p&gt;
+&lt;p&gt;return ResponseEntity.ok(response);&lt;/p&gt;
+&lt;p&gt;} catch (Exception e) {
+            log.error(&amp;quot;Agent 查询失败&amp;quot;, e);
+            Map&amp;lt;String, Object&amp;gt; response = new HashMap&amp;lt;&amp;gt;();
+            response.put(&amp;quot;success&amp;quot;, false);
+            response.put(&amp;quot;error&amp;quot;, e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;// ========== 请求/响应类 ==========&lt;/p&gt;
+&lt;p&gt;/**
+     * 文档上传请求
+     */
+    public static class DocUploadRequest {
+        private String title;
+        private String content;
+        private Map&amp;lt;String, Object&amp;gt; metadata;&lt;/p&gt;
+&lt;p&gt;public String getTitle() { return title; }
+        public void setTitle(String title) { this.title = title; }
+        public String getContent() { return content; }
+        public void setContent(String content) { this.content = content; }
+        public Map&amp;lt;String, Object&amp;gt; getMetadata() { return metadata; }
+        public void setMetadata(Map&amp;lt;String, Object&amp;gt; metadata) { this.metadata = metadata; }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 批量文档导入请求
+     */
+    public static class BatchDocRequest {
+        private List&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; documents;&lt;/p&gt;
+&lt;p&gt;public List&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; getDocuments() { return documents; }
+        public void setDocuments(List&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; documents) { this.documents = documents; }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 查询请求
+     */
+    public static class QueryRequest {
+        private String query;
+        private int limit = 5;
+        private String systemPrompt;
+        private String agentName;&lt;/p&gt;
+&lt;p&gt;public String getQuery() { return query; }
+        public void setQuery(String query) { this.query = query; }
+        public int getLimit() { return limit; }
+        public void setLimit(int limit) { this.limit = limit; }
+        public String getSystemPrompt() { return systemPrompt; }
+        public void setSystemPrompt(String systemPrompt) { this.systemPrompt = systemPrompt; }
+        public String getAgentName() { return agentName; }
+        public void setAgentName(String agentName) { this.agentName = agentName; }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;10.6.10 Spring Boot 启动类&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// src/main/java/io/agentscope/tutorial/chapter10/Chapter10Application.java
+package io.agentscope.tutorial.chapter10;
+&lt;p&gt;import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;&lt;/p&gt;
+&lt;p&gt;/**
+ * 企业知识库问答系统 - 启动类
+ *
+ * 基于 Spring Boot 3 + Java 21 + AgentScope Java 构建的 RAG 系统
+ *
+ * @author AgentScope Tutorial
+ */
+@SpringBootApplication
+@EnableConfigurationProperties
+public class Chapter10Application {&lt;/p&gt;
+&lt;p&gt;public static void main(String[] args) {
+        SpringApplication.run(Chapter10Application.class, args);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;10.6.11 单元测试&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// src/test/java/io/agentscope/tutorial/chapter10/RagServiceTest.java
+package io.agentscope.tutorial.chapter10;
+&lt;p&gt;import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.rag.model.Document;
+import io.agentscope.core.rag.model.DocumentMetadata;
+import io.agentscope.core.rag.reader.SplitStrategy;
+import io.agentscope.core.rag.reader.TextChunker;
+import org.junit.jupiter.api.Test;&lt;/p&gt;
+&lt;p&gt;import java.util.HashMap;
+import java.util.List;
+import java.util.Map;&lt;/p&gt;
+&lt;p&gt;import static org.junit.jupiter.api.Assertions.*;&lt;/p&gt;
+&lt;p&gt;/**
+ * RAG 服务单元测试
+ *
+ * 测试文本分块、文档创建等核心功能
+ *
+ * @author AgentScope Tutorial
+ */
+class RagServiceTest {&lt;/p&gt;
+&lt;p&gt;/**
+     * 测试段落分块
+     */
+    @Test
+    void testParagraphChunking() {
+        String text = &amp;quot;&amp;quot;&amp;quot;
+                第一段内容。这是一个较长的段落，用于测试分块功能。&lt;/p&gt;
+&lt;p&gt;第二段内容。这是另一个段落，应该被单独保留。&lt;/p&gt;
+&lt;p&gt;第三段内容。包含更多信息。
+                &amp;quot;&amp;quot;&amp;quot;;&lt;/p&gt;
+&lt;p&gt;List&amp;lt;String&amp;gt; chunks = TextChunker.chunkText(text, 200, SplitStrategy.PARAGRAPH, 20);&lt;/p&gt;
+&lt;p&gt;assertFalse(chunks.isEmpty());
+        System.out.println(&amp;quot;分块结果数量: &amp;quot; + chunks.size());
+        chunks.forEach(chunk -&amp;gt; System.out.println(&amp;quot;- &amp;quot;.concat(chunk.substring(0, Math.min(50, chunk.length())))));
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 测试 Token 分块
+     */
+    @Test
+    void testTokenChunking() {
+        String text = &amp;quot;这是测试文本，用于验证 Token 分块功能。&amp;quot; +
+                &amp;quot;每个块会包含多个句子，以确保内容完整性。&amp;quot; +
+                &amp;quot;重叠部分可以帮助保留上下文信息。&amp;quot;;&lt;/p&gt;
+&lt;p&gt;List&amp;lt;String&amp;gt; chunks = TextChunker.chunkText(text, 50, SplitStrategy.TOKEN, 10);&lt;/p&gt;
+&lt;p&gt;assertFalse(chunks.isEmpty());
+        System.out.println(&amp;quot;Token 分块结果: &amp;quot; + chunks.size() + &amp;quot; 个块&amp;quot;);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 测试文档创建
+     */
+    @Test
+    void testDocumentCreation() {
+        String content = &amp;quot;这是测试文档的内容&amp;quot;;
+        Map&amp;lt;String, Object&amp;gt; payload = new HashMap&amp;lt;&amp;gt;();
+        payload.put(&amp;quot;title&amp;quot;, &amp;quot;测试文档&amp;quot;);
+        payload.put(&amp;quot;author&amp;quot;, &amp;quot;Test User&amp;quot;);&lt;/p&gt;
+&lt;p&gt;DocumentMetadata metadata = DocumentMetadata.builder()
+                .content(TextBlock.builder().text(content).build())
+                .docId(&amp;quot;test-doc-001&amp;quot;)
+                .chunkId(&amp;quot;chunk-0&amp;quot;)
+                .payload(payload)
+                .build();&lt;/p&gt;
+&lt;p&gt;Document document = new Document(metadata);&lt;/p&gt;
+&lt;p&gt;assertNotNull(document.getId());
+        assertEquals(&amp;quot;test-doc-001&amp;quot;, document.getMetadata().getDocId());
+        assertEquals(&amp;quot;测试文档&amp;quot;, document.getMetadata().getPayloadValue(&amp;quot;title&amp;quot;));
+        System.out.println(&amp;quot;文档 ID: &amp;quot; + document.getId());
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 测试文档内容提取
+     */
+    @Test
+    void testDocumentContentExtraction() {
+        String content = &amp;quot;企业知识库的内容文本&amp;quot;;
+        DocumentMetadata metadata = DocumentMetadata.builder()
+                .content(TextBlock.builder().text(content).build())
+                .docId(&amp;quot;doc-1&amp;quot;)
+                .chunkId(&amp;quot;chunk-0&amp;quot;)
+                .build();&lt;/p&gt;
+&lt;p&gt;Document document = new Document(metadata);&lt;/p&gt;
+&lt;p&gt;String extractedContent = document.getMetadata().getContentText();
+        assertEquals(content, extractedContent);
+        System.out.println(&amp;quot;提取的内容: &amp;quot; + extractedContent);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 测试分块重叠效果
+     */
+    @Test
+    void testChunkOverlap() {
+        String text = &amp;quot;ABCDEFGHIJKLMNOPQRSTUVWXYZ&amp;quot;;&lt;/p&gt;
+&lt;p&gt;// 无重叠
+        List&amp;lt;String&amp;gt; noOverlap = TextChunker.chunkText(text, 5, SplitStrategy.CHARACTER, 0);
+        // 有重叠
+        List&amp;lt;String&amp;gt; withOverlap = TextChunker.chunkText(text, 5, SplitStrategy.CHARACTER, 2);&lt;/p&gt;
+&lt;p&gt;assertTrue(withOverlap.size() &amp;gt;= noOverlap.size());
+        System.out.println(&amp;quot;无重叠分块数: &amp;quot; + noOverlap.size());
+        System.out.println(&amp;quot;有重叠分块数: &amp;quot; + withOverlap.size());
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;10.6.12 API 使用示例&lt;/h3&gt;
+&lt;p&gt;**1. 初始化知识库**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;curl -X POST http://localhost:8080/api/v1/rag/knowledge/init
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;响应：
+&lt;pre&gt;&lt;code class=&quot;language-json&quot;&gt;{
+  &amp;quot;success&amp;quot;: true,
+  &amp;quot;message&amp;quot;: &amp;quot;知识库初始化完成&amp;quot;,
+  &amp;quot;documentCount&amp;quot;: 3
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**2. 添加文档**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;curl -X POST http://localhost:8080/api/v1/rag/knowledge/documents \
+  -H &amp;quot;Content-Type: application/json&amp;quot; \
+  -d '{
+    &amp;quot;title&amp;quot;: &amp;quot;员工手册&amp;quot;,
+    &amp;quot;content&amp;quot;: &amp;quot;公司实行弹性工作制...&amp;quot;,
+    &amp;quot;metadata&amp;quot;: {
+      &amp;quot;department&amp;quot;: &amp;quot;HR&amp;quot;,
+      &amp;quot;version&amp;quot;: &amp;quot;1.0&amp;quot;
+    }
+  }'
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**3. 检索相关文档**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;curl -X POST http://localhost:8080/api/v1/rag/retrieve \
+  -H &amp;quot;Content-Type: application/json&amp;quot; \
+  -d '{
+    &amp;quot;query&amp;quot;: &amp;quot;公司有哪些产品？&amp;quot;,
+    &amp;quot;limit&amp;quot;: 3
+  }'
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**4. RAG 问答**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;curl -X POST http://localhost:8080/api/v1/rag/query \
+  -H &amp;quot;Content-Type: application/json&amp;quot; \
+  -d '{
+    &amp;quot;query&amp;quot;: &amp;quot;公司的服务级别协议是什么？&amp;quot;,
+    &amp;quot;limit&amp;quot;: 5,
+    &amp;quot;systemPrompt&amp;quot;: &amp;quot;你是一个专业的客服助手。&amp;quot;
+  }'
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**5. 使用 ReAct Agent 问答**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;curl -X POST http://localhost:8080/api/v1/rag/query/agent \
+  -H &amp;quot;Content-Type: application/json&amp;quot; \
+  -d '{
+    &amp;quot;query&amp;quot;: &amp;quot;介绍一下你们的产品&amp;quot;,
+    &amp;quot;agentName&amp;quot;: &amp;quot;ProductExpert&amp;quot;
+  }'
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;10.7 本章小结&lt;/h2&gt;
+&lt;p&gt;本章介绍了 AgentScope Java 中 RAG 系统的完整实现：&lt;/p&gt;
+&lt;p&gt;1. **RAG 架构原理**：理解了 RAG 的基本概念和工作流程，以及 AgentScope Java 中的核心组件。&lt;/p&gt;
+&lt;p&gt;2. **向量数据库集成**：掌握了 Qdrant 和 Milvus 的配置和使用方法，能够根据场景选择合适的向量存储。&lt;/p&gt;
+&lt;p&gt;3. **文本分块策略**：学会了使用 TextChunker 进行字符、段落、Token 和语义分块，理解了分块参数的选择原则。&lt;/p&gt;
+&lt;p&gt;4. **混合检索**：了解了如何结合向量检索和关键词过滤，以及 RRF 融合算法的实现。&lt;/p&gt;
+&lt;p&gt;5. **Embedding 模型配置**：掌握了 DashScope、Ollama 和 OpenAI 等 Embedding 模型的使用方法。&lt;/p&gt;
+&lt;p&gt;6. **企业知识库案例**：通过 Spring Boot + Docker Qdrant 的完整案例，学会了构建可运行的企业级 RAG 系统。&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;p&gt;**下一章预告**：第十一章将介绍技能系统（Skill），包括技能的定义、注册与调用，以及技能仓库的实现。&lt;/p&gt;
+</body>
+</html>

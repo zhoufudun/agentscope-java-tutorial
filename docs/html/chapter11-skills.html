@@ -1,0 +1,1526 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第十一章：技能系统</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        h3 { color: #7f8c8d; }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+        }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+        table {
+            border-collapse: collapse;
+            margin: 20px 0;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th { background: #3498db; color: white; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        ul { padding-left: 20px; }
+        li { margin: 5px 0; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            color: #666;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+&lt;h1&gt;第十一章：技能系统&lt;/h1&gt;
+&lt;p&gt;&gt; 本章节配套完整可运行的 Spring Boot 项目，演示如何使用 AgentScope Java 的技能（Skill）系统实现动态技能加载与持久化存储。&lt;/p&gt;
+&lt;h2&gt;11.1 技能（Skill）的定义&lt;/h2&gt;
+&lt;h3&gt;11.1.1 什么是 Skill&lt;/h3&gt;
+&lt;p&gt;在 AgentScope Java 中，**技能（Skill）** 是扩展智能体能力的模块化数据包。每个 Skill 包含指令、元数据（metadata）和可选资源（如脚本、参考文档、示例等），智能体在执行相关任务时会自动加载并使用这些资源。&lt;/p&gt;
+&lt;p&gt;与直接给智能体喂大量上下文不同，Skill 采用**渐进式披露（Progressive Disclosure）**机制：
+&lt;ul&gt;&lt;li&gt;**阶段一**：智能体启动时，系统中只加载技能的元数据（name、description），约 100 tokens/Skill&lt;/li&gt;
+&lt;li&gt;**阶段二**：AI 判断任务需要某个 Skill 时，调用 &lt;code&gt;load_skill_through_path&lt;/code&gt; 工具加载完整指令（通常 &lt;5k tokens）&lt;/li&gt;
+&lt;li&gt;**阶段三**：智能体按需访问 Skill 附带的资源文件（如参考文档、脚本等）&lt;/li&gt;
+&lt;/ul&gt;
+这种设计显著减少了初始上下文大小，同时保证智能体在需要时能获取完整技能内容。&lt;/p&gt;
+&lt;h3&gt;11.1.2 Skill 的结构&lt;/h3&gt;
+&lt;p&gt;一个标准 Skill 的目录结构如下：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-text&quot;&gt;skill-name/
+├── SKILL.md              # 必需：入口文件，包含 YAML frontmatter 和技能指令
+├── references/            # 可选：详细参考文档
+│   ├── api-doc.md
+│   └── best-practices.md
+├── examples/             # 可选：工作示例
+│   └── example1.java
+└── scripts/              # 可选：可执行脚本
+    └── process.py
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**SKILL.md 格式**：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;---
+name: skill-name                        # 必需：技能名称（小写字母、数字、下划线）
+description: This skill should be used when...  # 必需：触发描述，说明何时使用
+homepage: https://example.com/docs     # 可选：额外元数据
+metadata:
+  clawdbot:
+    requires:
+      env:
+&lt;ul&gt;&lt;li&gt;API_KEY&lt;/li&gt;
+&lt;/ul&gt;---
+&lt;h1&gt;技能名称&lt;/h1&gt;
+&lt;h2&gt;功能概述&lt;/h2&gt;
+[详细说明该技能的功能]
+&lt;h2&gt;使用方法&lt;/h2&gt;
+[使用步骤和最佳实践]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;11.1.3 AgentSkill 类&lt;/h3&gt;
+&lt;p&gt;在代码中，技能由 &lt;code&gt;io.agentscope.core.skill.AgentSkill&lt;/code&gt; 类表示，核心字段如下：&lt;/p&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;字段&lt;/th&gt;&lt;th&gt;说明&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;name&lt;/code&gt;&lt;/td&gt;&lt;td&gt;技能名称，从 metadata 中提取&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;description&lt;/code&gt;&lt;/td&gt;&lt;td&gt;技能描述，AI 据此判断何时使用该技能&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;skillContent&lt;/code&gt;&lt;/td&gt;&lt;td&gt;技能的完整内容（SKILL.md 正文）&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;resources&lt;/code&gt;&lt;/td&gt;&lt;td&gt;资源文件 Map（path -&gt; content）&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;metadata&lt;/code&gt;&lt;/td&gt;&lt;td&gt;完整元数据 Map&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;**创建 Skill 的三种方式**：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 方式一：使用 Builder（推荐）
+AgentSkill skill = AgentSkill.builder()
+    .name(&amp;quot;data_analysis&amp;quot;)
+    .description(&amp;quot;Use this skill when analyzing data, calculating statistics, or generating reports&amp;quot;)
+    .skillContent(&amp;quot;# Data Analysis\n...&amp;quot;)
+    .addResource(&amp;quot;references/api-doc.md&amp;quot;, &amp;quot;# API Reference\n...&amp;quot;)
+    .addResource(&amp;quot;scripts/process.py&amp;quot;, &amp;quot;def process(data): ...\n&amp;quot;)
+    .source(&amp;quot;custom&amp;quot;)
+    .build();
+&lt;p&gt;// 方式二：从 Markdown 创建
+String skillMd = &amp;quot;&amp;quot;&amp;quot;
+---
+name: data_analysis
+description: Use this skill when analyzing data
+---
+&lt;h1&gt;Data Analysis&lt;/h1&gt;
+Content...
+&amp;quot;&amp;quot;&amp;quot;;
+Map&amp;lt;String, String&amp;gt; resources = Map.of(&amp;quot;references/formulas.md&amp;quot;, &amp;quot;# Formulas\n...&amp;quot;);
+AgentSkill skill = SkillUtil.createFrom(skillMd, resources);&lt;/p&gt;
+&lt;p&gt;// 方式三：直接构造
+AgentSkill skill = new AgentSkill(
+    &amp;quot;data_analysis&amp;quot;,
+    &amp;quot;Use when analyzing data...&amp;quot;,
+    &amp;quot;# Data Analysis\n...&amp;quot;,
+    resources
+);
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;11.1.4 内置 Skill 工具&lt;/h3&gt;
+&lt;p&gt;AgentScope 为 Skill 系统内置了 &lt;code&gt;load_skill_through_path&lt;/code&gt; 工具：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 工具签名
+load_skill_through_path(skillId: enum, resourcePath?: string)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;ul&gt;&lt;li&gt;**&lt;code&gt;skillId&lt;/code&gt;**：枚举字段，只能从已注册的 Skill 中选择，保证准确性&lt;/li&gt;
+&lt;li&gt;**&lt;code&gt;resourcePath&lt;/code&gt;**：相对于 Skill 根目录的资源路径（如 &lt;code&gt;references/api-doc.md&lt;/code&gt;）&lt;/li&gt;
+&lt;li&gt;路径错误时返回所有可用资源路径列表，帮助 LLM 自我纠正&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;11.2 技能注册与调用&lt;/h2&gt;
+&lt;h3&gt;11.2.1 SkillBox：技能容器&lt;/h3&gt;
+&lt;code&gt;SkillBox&lt;/code&gt; 是技能系统的核心组件，负责：
+&lt;p&gt;1. 持有 &lt;code&gt;Toolkit&lt;/code&gt; 并注册所有 Skill
+2. 生成技能系统提示词（注入到 Agent 的 system prompt 中）
+3. 管理 Skill 与 Tool 的绑定关系&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 基础用法
+Toolkit toolkit = new Toolkit();
+SkillBox skillBox = new SkillBox(toolkit);
+&lt;p&gt;// 注册技能
+skillBox.registerSkill(dataSkill);
+skillBox.registerSkill(sqlSkill);&lt;/p&gt;
+&lt;p&gt;// 或使用 registration() 进行链式注册（支持 Skill 与 Tool 绑定）
+skillBox.registration()
+    .skill(dataSkill)
+    .tool(loadDataTool)   // 将 Tool 绑定到该 Skill，仅在 Skill 激活时生效
+    .apply();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;11.2.2 将 Skill 集成到 Agent&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 方式一：使用 SkillBox（推荐）
+SkillBox skillBox = new SkillBox(new Toolkit());
+skillBox.registerSkill(mySkill);
+&lt;p&gt;ReActAgent agent = ReActAgent.builder()
+    .name(&amp;quot;MyAssistant&amp;quot;)
+    .model(model)
+    .skillBox(skillBox)
+    .build();&lt;/p&gt;
+&lt;p&gt;// 方式二：同时使用 Toolkit 和 SkillBox
+Toolkit toolkit = new Toolkit();
+SkillBox skillBox = new SkillBox(toolkit);
+skillBox.registerSkill(mySkill);&lt;/p&gt;
+&lt;p&gt;ReActAgent agent = ReActAgent.builder()
+    .name(&amp;quot;MyAssistant&amp;quot;)
+    .model(model)
+    .toolkit(toolkit)
+    .skillBox(skillBox)  // 自动注册 skill 工具
+    .memory(new InMemoryMemory())
+    .build();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;11.2.3 渐进式披露的 Tool 生命周期&lt;/h3&gt;
+&lt;p&gt;将 Tool 与 Skill 绑定后，Tool 的生命周期与 Skill 保持一致：
+&lt;ul&gt;&lt;li&gt;Skill 激活后，绑定的 Tool 在整个会话期间保持可用&lt;/li&gt;
+&lt;li&gt;避免了旧机制中每轮对话后 Tool 失活导致的调用失败问题&lt;/li&gt;
+&lt;/ul&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;SkillBox skillBox = new SkillBox(toolkit);&lt;/p&gt;
+&lt;p&gt;AgentTool dataLoadTool = new AgentTool(...);
+AgentTool reportGenTool = new AgentTool(...);&lt;/p&gt;
+&lt;p&gt;// 为不同 Skill 绑定不同的 Tool
+skillBox.registration()
+    .skill(dataSkill)
+    .tool(dataLoadTool)
+    .apply();&lt;/p&gt;
+&lt;p&gt;skillBox.registration()
+    .skill(reportSkill)
+    .tool(reportGenTool)
+    .apply();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;11.2.4 自定义技能提示词&lt;/h3&gt;
+&lt;p&gt;SkillBox 默认会为每个注册的 Skill 生成 XML &lt;code&gt;&lt;skill&gt;&lt;/code&gt; 条目注入到系统提示词。可以通过 &lt;code&gt;instruction&lt;/code&gt; 参数自定义提示词头部：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 自定义 instruction 头部
+String customInstruction = &amp;quot;&amp;quot;&amp;quot;
+    ## 可用技能
+    当任务匹配某个技能时，使用 load_skill_through_path 加载它。
+    &amp;quot;&amp;quot;&amp;quot;;
+&lt;p&gt;SkillBox skillBox = new SkillBox(toolkit, customInstruction);&lt;/p&gt;
+&lt;p&gt;// 可选：仅向 prompt 暴露核心 metadata
+skillBox.setExposeAllSkillMetadata(false);
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h2&gt;11.3 技能仓库（MySQL / Git）&lt;/h2&gt;
+&lt;p&gt;AgentScope 提供了多种 Skill 持久化存储方案，支持从不同来源加载技能。&lt;/p&gt;
+&lt;h3&gt;11.3.1 仓库接口&lt;/h3&gt;
+&lt;p&gt;所有仓库实现 &lt;code&gt;io.agentscope.core.skill.repository.AgentSkillRepository&lt;/code&gt; 接口：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;public interface AgentSkillRepository extends AutoCloseable {
+    AgentSkill getSkill(String name);
+    List&amp;lt;String&amp;gt; getAllSkillNames();
+    List&amp;lt;AgentSkill&amp;gt; getAllSkills();
+    boolean save(List&amp;lt;AgentSkill&amp;gt; skills, boolean force);
+    boolean delete(String skillName);
+    boolean skillExists(String skillName);
+    AgentSkillRepositoryInfo getRepositoryInfo();
+    String getSource();
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;11.3.2 MySQL 存储&lt;/h3&gt;
+&lt;p&gt;使用 &lt;code&gt;MysqlSkillRepository&lt;/code&gt; 将技能存储到 MySQL 数据库。数据库表结构如下：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;-- 技能主表
+CREATE TABLE agentscope_skills (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT NOT NULL,
+    skill_content LONGTEXT NOT NULL,
+    source VARCHAR(255) NOT NULL,
+    metadata_json LONGTEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+&lt;p&gt;-- 技能资源表
+CREATE TABLE agentscope_skill_resources (
+    id BIGINT NOT NULL,
+    resource_path VARCHAR(500) NOT NULL,
+    resource_content LONGTEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id, resource_path),
+    FOREIGN KEY (id) REFERENCES agentscope_skills(id) ON DELETE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**使用方式**：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 简单构造函数（使用默认数据库/表名）
+DataSource dataSource = createDataSource();
+MysqlSkillRepository repo = new MysqlSkillRepository(dataSource, true, true);
+&lt;p&gt;// 使用 Builder 进行自定义配置
+MysqlSkillRepository repo = MysqlSkillRepository.builder(dataSource)
+    .databaseName(&amp;quot;my_database&amp;quot;)
+    .skillsTableName(&amp;quot;my_skills&amp;quot;)
+    .resourcesTableName(&amp;quot;my_resources&amp;quot;)
+    .createIfNotExist(true)
+    .writeable(true)
+    .build();&lt;/p&gt;
+&lt;p&gt;// 保存技能
+repo.save(List.of(skill), false);&lt;/p&gt;
+&lt;p&gt;// 加载技能
+AgentSkill loaded = repo.getSkill(&amp;quot;data_analysis&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 列出所有技能
+List&amp;lt;AgentSkill&amp;gt; allSkills = repo.getAllSkills();&lt;/p&gt;
+&lt;p&gt;// 删除技能
+repo.delete(&amp;quot;old_skill&amp;quot;);
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;11.3.3 Git 仓库（只读）&lt;/h3&gt;
+&lt;p&gt;使用 &lt;code&gt;GitSkillRepository&lt;/code&gt; 从 Git 仓库加载技能（只读），支持 HTTPS 和 SSH：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 自动同步模式（默认每次读取检查远端变化）
+AgentSkillRepository repo = new GitSkillRepository(
+    &amp;quot;https://github.com/your-org/your-skills-repo.git&amp;quot;);
+AgentSkill skill = repo.getSkill(&amp;quot;data-analysis&amp;quot;);
+List&amp;lt;AgentSkill&amp;gt; allSkills = repo.getAllSkills();
+&lt;p&gt;// 手动同步模式
+GitSkillRepository manualRepo = new GitSkillRepository(
+    &amp;quot;https://github.com/your-org/your-skills-repo.git&amp;quot;, false);
+manualRepo.sync();  // 手动刷新
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;11.3.4 Classpath 仓库（只读）&lt;/h3&gt;
+&lt;p&gt;从 classpath 资源中加载预打包的 Skills，适用于 JAR 或 Spring Boot Fat JAR：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;try (ClasspathSkillRepository repository = new ClasspathSkillRepository(&amp;quot;skills&amp;quot;)) {
+    AgentSkill skill = repository.getSkill(&amp;quot;data-analysis&amp;quot;);
+    List&amp;lt;AgentSkill&amp;gt; allSkills = repository.getAllSkills();
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;资源目录结构：&lt;code&gt;src/main/resources/skills/&lt;/code&gt; 下放置多个 Skill 子目录，每个子目录包含 &lt;code&gt;SKILL.md&lt;/code&gt;。&lt;/p&gt;
+&lt;h3&gt;11.3.5 文件系统仓库&lt;/h3&gt;
+&lt;p&gt;从本地文件系统加载技能：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;AgentSkillRepository repo = new FileSystemSkillRepository(Path.of(&amp;quot;./skills&amp;quot;));
+repo.save(List.of(skill), false);
+AgentSkill loaded = repo.getSkill(&amp;quot;data_analysis&amp;quot;);
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;11.3.6 Nacos 仓库（只读）&lt;/h3&gt;
+&lt;p&gt;从 Nacos 配置中心实时拉取或订阅 Skill，适合需要与 Nacos 保持同步的在线场景：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 需引入 agentscope-extensions-nacos-skill 依赖
+try (NacosSkillRepository repository = new NacosSkillRepository(aiService, &amp;quot;namespace&amp;quot;)) {
+    AgentSkill skill = repository.getSkill(&amp;quot;data-analysis&amp;quot;);
+    boolean exists = repository.skillExists(&amp;quot;data-analysis&amp;quot;);
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;11.4 【案例】动态技能加载&lt;/h2&gt;
+&lt;p&gt;本案例使用 Java 21 + Spring Boot 3 + H2 嵌入式数据库，完整演示：
+&lt;ul&gt;&lt;li&gt;技能的定义与注册&lt;/li&gt;
+&lt;li&gt;MySQL 风格存储（使用 H2 模拟 MySQL 表结构）&lt;/li&gt;
+&lt;li&gt;动态技能加载与执行&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;11.4.1 项目结构&lt;/h3&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;chapter11-skills/
+├── pom.xml
+├── src/main/java/io/agentscope/tutorial/chapter11/
+│   ├── Chapter11Application.java          # Spring Boot 启动类
+│   ├── config/
+│   │   └── SkillConfig.java              # Skill 配置类
+│   ├── model/
+│   │   └── MockChatModel.java            # 模拟模型（用于演示）
+│   ├── repository/
+│   │   └── H2SkillRepository.java        # H2 实现 MySQL 表结构
+│   └── service/
+│       └── SkillService.java             # 技能服务
+└── src/main/resources/
+    ├── application.yml
+    └── data.sql                           # H2 初始化数据
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;11.4.2 pom.xml&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot;?&amp;gt;
+&amp;lt;project xmlns=&amp;quot;http://maven.apache.org/POM/4.0.0&amp;quot;
+         xmlns:xsi=&amp;quot;http://www.w3.org/2001/XMLSchema-instance&amp;quot;
+         xsi:schemaLocation=&amp;quot;http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd&amp;quot;&amp;gt;
+    &amp;lt;modelVersion&amp;gt;4.0.0&amp;lt;/modelVersion&amp;gt;
+&lt;p&gt;&amp;lt;parent&amp;gt;
+        &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+        &amp;lt;artifactId&amp;gt;spring-boot-starter-parent&amp;lt;/artifactId&amp;gt;
+        &amp;lt;version&amp;gt;3.3.0&amp;lt;/version&amp;gt;
+        &amp;lt;relativePath/&amp;gt;
+    &amp;lt;/parent&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;groupId&amp;gt;io.agentscope.tutorial&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;chapter11-skills&amp;lt;/artifactId&amp;gt;
+    &amp;lt;version&amp;gt;1.0.0&amp;lt;/version&amp;gt;
+    &amp;lt;name&amp;gt;Chapter 11 - Skills System&amp;lt;/name&amp;gt;
+    &amp;lt;description&amp;gt;AgentScope Java 技能系统教程案例&amp;lt;/description&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;properties&amp;gt;
+        &amp;lt;java.version&amp;gt;21&amp;lt;/java.version&amp;gt;
+        &amp;lt;maven.compiler.source&amp;gt;21&amp;lt;/maven.compiler.source&amp;gt;
+        &amp;lt;maven.compiler.target&amp;gt;21&amp;lt;/maven.compiler.target&amp;gt;
+    &amp;lt;/properties&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;dependencies&amp;gt;
+        &amp;lt;!-- Spring Boot Web --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-starter-web&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- H2 数据库（模拟 MySQL） --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;com.h2database&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;h2&amp;lt;/artifactId&amp;gt;
+            &amp;lt;scope&amp;gt;runtime&amp;lt;/scope&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- JDBC（用于 MysqlSkillRepository） --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-starter-jdbc&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- AgentScope Core（包含 Skill 相关类） --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-core&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;1.0.0&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- AgentScope MySQL Skill Repository 扩展 --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-extensions-skill-mysql-repository&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;1.0.0&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- 简化 YAML 解析 --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.yaml&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;snakeyaml&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;2.2&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- Lombok（可选，简化代码） --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.projectlombok&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;lombok&amp;lt;/artifactId&amp;gt;
+            &amp;lt;optional&amp;gt;true&amp;lt;/optional&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- 测试 --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-starter-test&amp;lt;/artifactId&amp;gt;
+            &amp;lt;scope&amp;gt;test&amp;lt;/scope&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+    &amp;lt;/dependencies&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;build&amp;gt;
+        &amp;lt;plugins&amp;gt;
+            &amp;lt;plugin&amp;gt;
+                &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+                &amp;lt;artifactId&amp;gt;spring-boot-maven-plugin&amp;lt;/artifactId&amp;gt;
+            &amp;lt;/plugin&amp;gt;
+        &amp;lt;/plugins&amp;gt;
+    &amp;lt;/build&amp;gt;
+&amp;lt;/project&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;&gt; **注意**：实际项目中请将 &lt;code&gt;agentscope-core&lt;/code&gt; 和扩展模块版本替换为实际版本，或通过 Maven Central 获取最新版本。&lt;/p&gt;
+&lt;h3&gt;11.4.3 application.yml&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;spring:
+  application:
+    name: chapter11-skills
+&lt;p&gt;# H2 控制台（开发时方便查看数据）
+  h2:
+    console:
+      enabled: true
+      path: /h2-console&lt;/p&gt;
+&lt;p&gt;# 数据源配置（H2 模拟 MySQL）
+  datasource:
+    url: jdbc:h2:mem:agentscope;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:&lt;/p&gt;
+&lt;p&gt;# JPA 配置（H2 使用 JDBC 而非 JPA）
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: true&lt;/p&gt;
+&lt;p&gt;sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      data-locations: classpath:data.sql&lt;/p&gt;
+&lt;h1&gt;技能仓库配置&lt;/h1&gt;
+skill:
+  repository:
+    # MySQL 仓库配置（使用 H2 模拟）
+    mysql:
+      database-name: agentscope
+      skills-table: agentscope_skills
+      resources-table: agentscope_skill_resources
+      create-if-not-exist: true
+      writeable: true
+&lt;h1&gt;日志配置&lt;/h1&gt;
+logging:
+  level:
+    io.agentscope: DEBUG
+    chapter11: INFO
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;11.4.4 schema.sql（H2 模拟 MySQL 表结构）&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;-- =====================================================
+-- 技能系统表结构（H2 模拟 MySQL，支持 MysqlSkillRepository）
+-- =====================================================
+&lt;p&gt;-- 创建技能主表（与 MySQL 版本完全兼容）
+CREATE TABLE IF NOT EXISTS agentscope_skills (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT NOT NULL,
+    skill_content LONGTEXT NOT NULL,
+    source VARCHAR(255) NOT NULL,
+    metadata_json LONGTEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);&lt;/p&gt;
+&lt;p&gt;-- 创建技能资源表
+CREATE TABLE IF NOT EXISTS agentscope_skill_resources (
+    id BIGINT NOT NULL,
+    resource_path VARCHAR(500) NOT NULL,
+    resource_content LONGTEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id, resource_path),
+    FOREIGN KEY (id) REFERENCES agentscope_skills(id) ON DELETE CASCADE
+);&lt;/p&gt;
+&lt;p&gt;-- 创建索引（提升查询性能）
+CREATE INDEX IF NOT EXISTS idx_skills_name ON agentscope_skills(name);
+CREATE INDEX IF NOT EXISTS idx_resources_skill_id ON agentscope_skill_resources(id);
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;11.4.5 data.sql（初始化示例技能）&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;-- =====================================================
+-- 初始化示例技能数据
+-- =====================================================
+&lt;p&gt;-- 数据分析技能
+INSERT INTO agentscope_skills (name, description, skill_content, source, metadata_json)
+VALUES (
+    'data_analysis',
+    'Use this skill when analyzing data, calculating statistics, or generating data reports',
+    CONCAT(
+        '# Data Analysis Skill\n\n',
+        '## 功能概述\n',
+        '提供全面的数据分析能力，包括：\n',
+        '- 描述性统计分析（均值、中位数、标准差等）\n',
+        '- 数据可视化建议\n',
+        '- 趋势分析\n',
+        '- 异常检测\n\n',
+        '## 使用方法\n',
+        '1. 明确分析目标\n',
+        '2. 收集并清洗数据\n',
+        '3. 选择合适的分析方法\n',
+        '4. 解读结果并生成报告\n\n',
+        '## 常用公式\n',
+        '- 均值: SUM(x) / COUNT(x)\n',
+        '- 标准差: SQRT(VAR_POP(x))\n',
+        '- 相关系数: CORR(x, y)\n\n',
+        '## 注意事项\n',
+        '- 确保数据质量再进行分析\n',
+        '- 选择与业务场景匹配的分析方法\n',
+        '- 结果需结合业务含义解读'
+    ),
+    'system',
+    '{&amp;quot;category&amp;quot;: &amp;quot;analytics&amp;quot;, &amp;quot;version&amp;quot;: &amp;quot;1.0&amp;quot;, &amp;quot;tags&amp;quot;: [&amp;quot;data&amp;quot;, &amp;quot;analysis&amp;quot;, &amp;quot;statistics&amp;quot;]}'
+);&lt;/p&gt;
+&lt;p&gt;-- SQL 查询技能
+INSERT INTO agentscope_skills (name, description, skill_content, source, metadata_json)
+VALUES (
+    'sql_query',
+    'Use this skill when writing SQL queries, optimizing database performance, or designing data models',
+    CONCAT(
+        '# SQL Query Skill\n\n',
+        '## 功能概述\n',
+        '帮助你编写高效的 SQL 查询，包括：\n',
+        '- SELECT 查询与聚合函数\n',
+        '- 多表连接（JOIN）\n',
+        '- 子查询与 CTE\n',
+        '- 窗口函数\n',
+        '- 查询性能优化\n\n',
+        '## 常用模式\n\n',
+        '### 聚合查询\n',
+        '&lt;/code&gt;&lt;/pre&gt;sql\n',
+        'SELECT dept_id,\n',
+        '       COUNT(*) as order_count,\n',
+        '       SUM(amount) as total_amount,\n',
+        '       AVG(amount) as avg_amount\n',
+        'FROM orders\n',
+        'WHERE order_date &gt;= ''2024-01-01''\n',
+        'GROUP BY dept_id\n',
+        'HAVING COUNT(*) &gt; 10\n',
+        'ORDER BY total_amount DESC;\n',
+        '``&lt;code&gt;\n\n',
+        '### 窗口函数\n',
+        '&lt;/code&gt;`&lt;code&gt;sql\n',
+        'SELECT employee_id,\n',
+        '       department,\n',
+        '       salary,\n',
+        '       RANK() OVER (PARTITION BY department ORDER BY salary DESC) as rank,\n',
+        '       AVG(salary) OVER (PARTITION BY department) as dept_avg\n',
+        'FROM employees;\n',
+        '&lt;/code&gt;`&lt;code&gt;\n\n',
+        '## 优化建议\n',
+        '- 使用合适的索引\n',
+        '- 避免 SELECT *\n',
+        '- 使用 LIMIT 限制结果集\n',
+        '- 避免在 WHERE 中使用函数'
+    ),
+    'system',
+    '{&quot;category&quot;: &quot;database&quot;, &quot;version&quot;: &quot;1.0&quot;, &quot;tags&quot;: [&quot;sql&quot;, &quot;database&quot;, &quot;query&quot;]}'
+);&lt;/p&gt;
+&lt;p&gt;-- 代码审查技能
+INSERT INTO agentscope_skills (name, description, skill_content, source, metadata_json)
+VALUES (
+    'code_review',
+    'Use this skill when reviewing code changes, identifying bugs, or suggesting improvements',
+    CONCAT(
+        '# Code Review Skill\n\n',
+        '## 功能概述\n',
+        '进行代码审查，发现潜在问题和改进机会：\n\n',
+        '## 审查要点\n\n',
+        '### 正确性\n',
+        '- 逻辑是否正确\n',
+        '- 边界条件处理\n',
+        '- 错误处理是否完善\n\n',
+        '### 安全性\n',
+        '- 输入验证\n',
+        '- SQL 注入防护\n',
+        '- XSS 防护\n',
+        '- 权限检查\n\n',
+        '### 性能\n',
+        '- 算法复杂度\n',
+        '- 数据库查询优化\n',
+        '- 缓存使用\n\n',
+        '### 可维护性\n',
+        '- 代码清晰度\n',
+        '- 命名规范\n',
+        '- 注释完整性\n',
+        '- 重复代码检测\n\n',
+        '## 审查输出格式\n',
+        '&lt;/code&gt;`&lt;code&gt;\n',
+        '## 代码审查报告\n\n',
+        '### 问题列表\n',
+        '1. [严重] 文件:Line - 问题描述\n',
+        '   建议: 修复方案\n\n',
+        '### 建议改进\n',
+        '- 改进点\n\n',
+        '### 优点\n',
+        '- 做得好的地方\n',
+        '&lt;/code&gt;`&lt;code&gt;'
+    ),
+    'system',
+    '{&quot;category&quot;: &quot;development&quot;, &quot;version&quot;: &quot;1.0&quot;, &quot;tags&quot;: [&quot;code&quot;, &quot;review&quot;, &quot;quality&quot;]}'
+);
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;
+&lt;h3&gt;11.4.6 Chapter11Application.java&lt;/h3&gt;&lt;/p&gt;
+&lt;/code&gt;&lt;/pre&gt;java
+package io.agentscope.tutorial.chapter11;
+&lt;p&gt;import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;&lt;/p&gt;
+&lt;p&gt;/**
+ * AgentScope Java 技能系统教程 - Spring Boot 启动类.
+ *
+ * &lt;p&gt;本章演示如何使用技能（Skill）系统实现：
+ * &lt;ul&gt;
+ *   &lt;ul&gt;&lt;li&gt;技能的定义与注册&lt;/li&gt;
+&lt;/ul&gt; *   &lt;ul&gt;&lt;li&gt;MySQL 风格存储（使用 H2 模拟）&lt;/li&gt;
+&lt;/ul&gt; *   &lt;ul&gt;&lt;li&gt;动态技能加载与执行&lt;/li&gt;
+&lt;/ul&gt; * &lt;/ul&gt;
+ */
+@SpringBootApplication
+public class Chapter11Application {&lt;/p&gt;
+&lt;p&gt;public static void main(String[] args) {
+        SpringApplication.run(Chapter11Application.class, args);
+    }
+}
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;
+&lt;h3&gt;11.4.7 H2SkillRepository.java（自定义 H2 实现）&lt;/h3&gt;&lt;/p&gt;
+&lt;/code&gt;&lt;/pre&gt;java
+package io.agentscope.tutorial.chapter11.repository;
+&lt;p&gt;import io.agentscope.core.skill.AgentSkill;
+import io.agentscope.core.skill.repository.AgentSkillRepository;
+import io.agentscope.core.skill.repository.AgentSkillRepositoryInfo;
+import com.fasterxml.jackson.core.type.TypeReference;
+import io.agentscope.core.util.JsonUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Repository;&lt;/p&gt;
+&lt;p&gt;import java.sql.*;
+import java.util.*;&lt;/p&gt;
+&lt;p&gt;/**
+ * 基于 H2 的技能仓库实现.
+ *
+ * &lt;p&gt;使用 H2 模拟 MySQL 表结构，完整兼容 MysqlSkillRepository 的使用方式.
+ * 在实际生产环境中替换为真实的 MySQL DataSource 即可.
+ *
+ * &lt;p&gt;表结构：
+ * &lt;ul&gt;
+ *   &lt;ul&gt;&lt;li&gt;agentscope_skills: 存储技能元数据和内容&lt;/li&gt;
+&lt;/ul&gt; *   &lt;ul&gt;&lt;li&gt;agentscope_skill_resources: 存储技能附带的资源文件&lt;/li&gt;
+&lt;/ul&gt; * &lt;/ul&gt;
+ *
+ * @author AgentScope Tutorial
+ */
+@Repository
+public class H2SkillRepository implements AgentSkillRepository {&lt;/p&gt;
+&lt;p&gt;private static final Logger log = LoggerFactory.getLogger(H2SkillRepository.class);&lt;/p&gt;
+&lt;p&gt;private final javax.sql.DataSource dataSource;&lt;/p&gt;
+&lt;p&gt;public H2SkillRepository(javax.sql.DataSource dataSource) {
+        this.dataSource = dataSource;
+        log.info(&quot;H2SkillRepository 初始化完成&quot;);
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== AgentSkillRepository 接口实现 ====================&lt;/p&gt;
+&lt;p&gt;@Override
+    public AgentSkill getSkill(String name) {
+        validateSkillName(name);&lt;/p&gt;
+&lt;p&gt;String selectSkillSql =
+            &quot;SELECT id, name, description, skill_content, source, metadata_json &quot; +
+            &quot;FROM agentscope_skills WHERE name = ?&quot;;&lt;/p&gt;
+&lt;p&gt;String selectResourcesSql =
+            &quot;SELECT resource_path, resource_content &quot; +
+            &quot;FROM agentscope_skill_resources WHERE id = ?&quot;;&lt;/p&gt;
+&lt;p&gt;try (Connection conn = dataSource.getConnection()) {
+            long skillId;
+            String description;
+            String skillContent;
+            String source;
+            String metadataJson;&lt;/p&gt;
+&lt;p&gt;// 查询技能基本信息
+            try (PreparedStatement stmt = conn.prepareStatement(selectSkillSql)) {
+                stmt.setString(1, name);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (!rs.next()) {
+                        throw new IllegalArgumentException(&quot;Skill not found: &quot; + name);
+                    }
+                    skillId = rs.getLong(&quot;id&quot;);
+                    description = rs.getString(&quot;description&quot;);
+                    skillContent = rs.getString(&quot;skill_content&quot;);
+                    source = rs.getString(&quot;source&quot;);
+                    metadataJson = rs.getString(&quot;metadata_json&quot;);
+                }
+            }&lt;/p&gt;
+&lt;p&gt;// 查询技能资源
+            Map&lt;String, String&gt; resources = new HashMap&lt;&gt;();
+            try (PreparedStatement stmt = conn.prepareStatement(selectResourcesSql)) {
+                stmt.setLong(1, skillId);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    while (rs.next()) {
+                        resources.put(
+                            rs.getString(&quot;resource_path&quot;),
+                            rs.getString(&quot;resource_content&quot;)
+                        );
+                    }
+                }
+            }&lt;/p&gt;
+&lt;p&gt;return buildSkill(name, description, skillContent, source, metadataJson, resources);&lt;/p&gt;
+&lt;p&gt;} catch (SQLException e) {
+            throw new RuntimeException(&quot;Failed to load skill: &quot; + name, e);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public List&lt;String&gt; getAllSkillNames() {
+        String sql = &quot;SELECT name FROM agentscope_skills ORDER BY name&quot;;
+        List&lt;String&gt; names = new ArrayList&lt;&gt;();&lt;/p&gt;
+&lt;p&gt;try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
+            while (rs.next()) {
+                names.add(rs.getString(&quot;name&quot;));
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(&quot;Failed to list skill names&quot;, e);
+        }&lt;/p&gt;
+&lt;p&gt;return names;
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public List&lt;AgentSkill&gt; getAllSkills() {
+        String selectAllSql =
+            &quot;SELECT id, name, description, skill_content, source, metadata_json &quot; +
+            &quot;FROM agentscope_skills ORDER BY name&quot;;&lt;/p&gt;
+&lt;p&gt;String selectResourcesSql =
+            &quot;SELECT id, resource_path, resource_content FROM agentscope_skill_resources&quot;;&lt;/p&gt;
+&lt;p&gt;try (Connection conn = dataSource.getConnection()) {
+            // 加载所有技能
+            Map&lt;Long, SkillRecord&gt; skillMap = new LinkedHashMap&lt;&gt;();&lt;/p&gt;
+&lt;p&gt;try (PreparedStatement stmt = conn.prepareStatement(selectAllSql);
+                 ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    long id = rs.getLong(&quot;id&quot;);
+                    skillMap.put(id, new SkillRecord(
+                        rs.getString(&quot;name&quot;),
+                        rs.getString(&quot;description&quot;),
+                        rs.getString(&quot;skill_content&quot;),
+                        rs.getString(&quot;source&quot;),
+                        rs.getString(&quot;metadata_json&quot;)
+                    ));
+                }
+            }&lt;/p&gt;
+&lt;p&gt;// 加载所有资源
+            try (PreparedStatement stmt = conn.prepareStatement(selectResourcesSql);
+                 ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    long id = rs.getLong(&quot;id&quot;);
+                    SkillRecord record = skillMap.get(id);
+                    if (record != null) {
+                        record.resources.put(
+                            rs.getString(&quot;resource_path&quot;),
+                            rs.getString(&quot;resource_content&quot;)
+                        );
+                    }
+                }
+            }&lt;/p&gt;
+&lt;p&gt;// 构建 Skill 对象列表
+            List&lt;AgentSkill&gt; skills = new ArrayList&lt;&gt;();
+            for (SkillRecord record : skillMap.values()) {
+                try {
+                    skills.add(buildSkill(
+                        record.name,
+                        record.description,
+                        record.skillContent,
+                        record.source,
+                        record.metadataJson,
+                        record.resources
+                    ));
+                } catch (Exception e) {
+                    log.warn(&quot;Failed to build skill: {}&quot;, e.getMessage());
+                }
+            }&lt;/p&gt;
+&lt;p&gt;return skills;&lt;/p&gt;
+&lt;p&gt;} catch (SQLException e) {
+            throw new RuntimeException(&quot;Failed to load all skills&quot;, e);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public boolean save(List&lt;AgentSkill&gt; skills, boolean force) {
+        if (skills == null || skills.isEmpty()) {
+            return false;
+        }&lt;/p&gt;
+&lt;p&gt;try (Connection conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);&lt;/p&gt;
+&lt;p&gt;try {
+                for (AgentSkill skill : skills) {
+                    // 如果 force=false，先检查是否存在
+                    if (!force &amp;&amp; skillExistsInternal(conn, skill.getName())) {
+                        throw new IllegalStateException(
+                            &quot;Skill already exists: &quot; + skill.getName() +
+                            &quot;. Use force=true to overwrite.&quot;
+                        );
+                    }&lt;/p&gt;
+&lt;p&gt;// 如果已存在，先删除
+                    if (skillExistsInternal(conn, skill.getName())) {
+                        deleteSkillInternal(conn, skill.getName());
+                    }&lt;/p&gt;
+&lt;p&gt;// 插入新技能
+                    long skillId = insertSkill(conn, skill);&lt;/p&gt;
+&lt;p&gt;// 插入资源
+                    insertResources(conn, skillId, skill.getResources());&lt;/p&gt;
+&lt;p&gt;log.info(&quot;Saved skill: {} (id={})&quot;, skill.getName(), skillId);
+                }&lt;/p&gt;
+&lt;p&gt;conn.commit();
+                return true;&lt;/p&gt;
+&lt;p&gt;} catch (Exception e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
+            }&lt;/p&gt;
+&lt;p&gt;} catch (SQLException e) {
+            throw new RuntimeException(&quot;Failed to save skills&quot;, e);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public boolean delete(String skillName) {
+        validateSkillName(skillName);&lt;/p&gt;
+&lt;p&gt;try (Connection conn = dataSource.getConnection()) {
+            if (!skillExistsInternal(conn, skillName)) {
+                log.warn(&quot;Skill does not exist: {}&quot;, skillName);
+                return false;
+            }&lt;/p&gt;
+&lt;p&gt;conn.setAutoCommit(false);
+            try {
+                deleteSkillInternal(conn, skillName);
+                conn.commit();
+                log.info(&quot;Deleted skill: {}&quot;, skillName);
+                return true;
+            } catch (Exception e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
+            }&lt;/p&gt;
+&lt;p&gt;} catch (SQLException e) {
+            throw new RuntimeException(&quot;Failed to delete skill: &quot; + skillName, e);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public boolean skillExists(String skillName) {
+        if (skillName == null || skillName.isEmpty()) {
+            return false;
+        }&lt;/p&gt;
+&lt;p&gt;try (Connection conn = dataSource.getConnection()) {
+            return skillExistsInternal(conn, skillName);
+        } catch (SQLException e) {
+            throw new RuntimeException(&quot;Failed to check skill existence&quot;, e);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public AgentSkillRepositoryInfo getRepositoryInfo() {
+        return new AgentSkillRepositoryInfo(&quot;h2&quot;, &quot;agentscope.agentscope_skills&quot;, true);
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public String getSource() {
+        return &quot;h2_agentscope_agentscope_skills&quot;;
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public void close() {
+        log.debug(&quot;H2SkillRepository closed&quot;);
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 私有辅助方法 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 构建 AgentSkill 对象.
+     */
+    private AgentSkill buildSkill(
+            String name,
+            String description,
+            String skillContent,
+            String source,
+            String metadataJson,
+            Map&lt;String, String&gt; resources) {
+        Map&lt;String, Object&gt; metadata = deserializeMetadata(metadataJson, name, description);
+        return new AgentSkill(metadata, skillContent, resources, source);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 反序列化 metadata_json 字段.
+     */
+    private Map&lt;String, Object&gt; deserializeMetadata(String metadataJson,
+                                                     String name,
+                                                     String description) {
+        LinkedHashMap&lt;String, Object&gt; metadata = new LinkedHashMap&lt;&gt;();
+        if (metadataJson != null &amp;&amp; !metadataJson.isBlank()) {
+            try {
+                Map&lt;String, Object&gt; parsed = JsonUtils.getJsonCodec()
+                    .fromJson(metadataJson, new TypeReference&lt;Map&lt;String, Object&gt;&gt;() {});
+                if (parsed != null) {
+                    metadata.putAll(parsed);
+                }
+            } catch (RuntimeException e) {
+                log.warn(&quot;Failed to deserialize metadata_json, using core fields only&quot;, e);
+            }
+        }
+        metadata.put(&quot;name&quot;, name);
+        metadata.put(&quot;description&quot;, description);
+        return metadata;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 序列化 metadata 为 JSON 字符串.
+     */
+    private String serializeMetadata(Map&lt;String, Object&gt; metadata) {
+        return JsonUtils.getJsonCodec().toJson(metadata);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 检查技能是否存在（使用现有连接）.
+     */
+    private boolean skillExistsInternal(Connection conn, String skillName) throws SQLException {
+        String sql = &quot;SELECT 1 FROM agentscope_skills WHERE name = ? LIMIT 1&quot;;
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, skillName);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 插入技能记录并返回生成的 ID.
+     */
+    private long insertSkill(Connection conn, AgentSkill skill) throws SQLException {
+        String sql =
+            &quot;INSERT INTO agentscope_skills (name, description, skill_content, source, metadata_json) &quot; +
+            &quot;VALUES (?, ?, ?, ?, ?)&quot;;&lt;/p&gt;
+&lt;p&gt;try (PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            stmt.setString(1, skill.getName());
+            stmt.setString(2, skill.getDescription());
+            stmt.setString(3, skill.getSkillContent());
+            stmt.setString(4, skill.getSource());
+            stmt.setString(5, serializeMetadata(skill.getMetadata()));
+            stmt.executeUpdate();&lt;/p&gt;
+&lt;p&gt;try (ResultSet keys = stmt.getGeneratedKeys()) {
+                if (keys.next()) {
+                    return keys.getLong(1);
+                }
+                throw new SQLException(&quot;Failed to get generated key for skill: &quot; + skill.getName());
+            }
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 批量插入技能资源.
+     */
+    private void insertResources(Connection conn, long skillId,
+                                Map&lt;String, String&gt; resources) throws SQLException {
+        if (resources == null || resources.isEmpty()) {
+            return;
+        }&lt;/p&gt;
+&lt;p&gt;String sql = &quot;INSERT INTO agentscope_skill_resources (id, resource_path, resource_content) VALUES (?, ?, ?)&quot;;&lt;/p&gt;
+&lt;p&gt;try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            for (Map.Entry&lt;String, String&gt; entry : resources.entrySet()) {
+                stmt.setLong(1, skillId);
+                stmt.setString(2, entry.getKey());
+                stmt.setString(3, entry.getValue());
+                stmt.addBatch();
+            }
+            stmt.executeBatch();
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 删除技能（使用现有连接）.
+     */
+    private void deleteSkillInternal(Connection conn, String skillName) throws SQLException {
+        // 资源会通过外键级联删除
+        String sql = &quot;DELETE FROM agentscope_skills WHERE name = ?&quot;;
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, skillName);
+            stmt.executeUpdate();
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 验证技能名称.
+     */
+    private void validateSkillName(String name) {
+        if (name == null || name.trim().isEmpty()) {
+            throw new IllegalArgumentException(&quot;Skill name cannot be null or empty&quot;);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 内部类 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 临时持有技能记录，用于批量加载时聚合资源.
+     */
+    private static class SkillRecord {
+        final String name;
+        final String description;
+        final String skillContent;
+        final String source;
+        final String metadataJson;
+        final Map&lt;String, String&gt; resources = new HashMap&lt;&gt;();&lt;/p&gt;
+&lt;p&gt;SkillRecord(String name, String description, String skillContent,
+                    String source, String metadataJson) {
+            this.name = name;
+            this.description = description;
+            this.skillContent = skillContent;
+            this.source = source;
+            this.metadataJson = metadataJson;
+        }
+    }
+}
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;
+&lt;h3&gt;11.4.8 SkillConfig.java（Spring 配置类）&lt;/h3&gt;&lt;/p&gt;
+&lt;/code&gt;&lt;/pre&gt;java
+package io.agentscope.tutorial.chapter11.config;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.memory.InMemoryMemory;
+import io.agentscope.core.model.DashScopeChatModel;
+import io.agentscope.core.skill.AgentSkill;
+import io.agentscope.core.skill.SkillBox;
+import io.agentscope.core.skill.repository.AgentSkillRepository;
+import io.agentscope.core.tool.Toolkit;
+import io.agentscope.tutorial.chapter11.repository.H2SkillRepository;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;&lt;/p&gt;
+&lt;p&gt;import java.util.List;&lt;/p&gt;
+&lt;p&gt;/**
+ * 技能系统配置类.
+ *
+ * &lt;p&gt;演示如何在 Spring Boot 中配置 AgentScope 的技能系统：
+ * &lt;ul&gt;
+ *   &lt;ul&gt;&lt;li&gt;技能仓库（H2 模拟 MySQL）&lt;/li&gt;
+&lt;/ul&gt; *   &lt;ul&gt;&lt;li&gt;SkillBox 与技能注册&lt;/li&gt;
+&lt;/ul&gt; *   &lt;ul&gt;&lt;li&gt;ReActAgent 集成&lt;/li&gt;
+&lt;/ul&gt; * &lt;/ul&gt;
+ */
+@Configuration
+public class SkillConfig {&lt;/p&gt;
+&lt;p&gt;private static final String SYSTEM_PROMPT = &quot;&quot;&quot;
+        You are a helpful assistant with specialized skills.
+        When a task matches a skill description, use the load_skill_through_path tool to load the skill.
+        Skills are loaded progressively - you will see skill metadata first, then load full content when needed.
+        &quot;&quot;&quot;;&lt;/p&gt;
+&lt;p&gt;// ==================== 技能仓库配置 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 配置技能仓库（从 H2 数据库加载）.
+     */
+    @Bean
+    public AgentSkillRepository skillRepository(H2SkillRepository h2Repository) {
+        // 包装 H2Repository 实现，使其符合 AgentScope 的仓库接口
+        // 实际使用时也可以直接注入 H2SkillRepository
+        return h2Repository;
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== SkillBox 配置 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 配置 Toolkit 和 SkillBox.
+     *
+     * &lt;p&gt;从仓库加载所有技能并注册到 SkillBox.
+     */
+    @Bean
+    public SkillBox skillBox(Toolkit toolkit, AgentSkillRepository skillRepository) {
+        SkillBox skillBox = new SkillBox(toolkit);&lt;/p&gt;
+&lt;p&gt;// 从仓库加载所有技能并注册
+        List&lt;AgentSkill&gt; skills = skillRepository.getAllSkills();
+        for (AgentSkill skill : skills) {
+            skillBox.registerSkill(skill);
+            System.out.println(&quot;Registered skill: &quot; + skill.getName() +
+                             &quot; - &quot; + skill.getDescription());
+        }&lt;/p&gt;
+&lt;p&gt;System.out.println(&quot;\nTotal skills registered: &quot; + skills.size());&lt;/p&gt;
+&lt;p&gt;return skillBox;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 配置 Toolkit（空的工具包，可以根据需要添加工具）.
+     */
+    @Bean
+    public Toolkit toolkit() {
+        return new Toolkit();
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== Agent 配置 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 配置 ReActAgent with Skill support.
+     *
+     * &lt;p&gt;这个 Agent 可以使用加载的技能来处理复杂任务.
+     */
+    @Bean
+    public ReActAgent skillAgent(Toolkit toolkit, SkillBox skillBox) {
+        String apiKey = System.getenv(&quot;AI_DASHSCOPE_API_KEY&quot;);&lt;/p&gt;
+&lt;p&gt;return ReActAgent.builder()
+            .name(&quot;skill_assistant&quot;)
+            .sysPrompt(SYSTEM_PROMPT)
+            // 如果没有配置 DashScope API Key，可以使用模拟模型进行演示
+            .model(DashScopeChatModel.builder()
+                .apiKey(apiKey != null ? apiKey : &quot;demo-key&quot;)
+                .modelName(&quot;qwen-plus&quot;)
+                .build())
+            .toolkit(toolkit)
+            .skillBox(skillBox)
+            .memory(new InMemoryMemory())
+            .build();
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 启动时打印技能列表 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 启动时打印所有已注册的技能信息.
+     */
+    @Bean
+    public CommandLineRunner listSkills(SkillBox skillBox, AgentSkillRepository repository) {
+        return args -&gt; {
+            System.out.println(&quot;\n========== 技能系统已就绪 ==========&quot;);
+            System.out.println(&quot;仓库源: &quot; + repository.getSource());
+            System.out.println(&quot;已注册技能列表:&quot;);&lt;/p&gt;
+&lt;p&gt;for (String name : repository.getAllSkillNames()) {
+                AgentSkill skill = repository.getSkill(name);
+                System.out.println(&quot;  - [&quot; + skill.getName() + &quot;]&quot;);
+                System.out.println(&quot;    描述: &quot; + skill.getDescription());
+                System.out.println(&quot;    来源: &quot; + skill.getSource());
+                System.out.println(&quot;    资源数: &quot; + skill.getResources().size());
+                System.out.println();
+            }
+            System.out.println(&quot;=====================================\n&quot;);
+        };
+    }
+}
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;
+&lt;h3&gt;11.4.9 SkillService.java（技能服务）&lt;/h3&gt;&lt;/p&gt;
+&lt;/code&gt;&lt;/pre&gt;java
+package io.agentscope.tutorial.chapter11.service;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.skill.AgentSkill;
+import io.agentscope.core.skill.SkillBox;
+import io.agentscope.core.skill.repository.AgentSkillRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;&lt;/p&gt;
+&lt;p&gt;import java.util.List;
+import java.util.Map;
+import java.util.Optional;&lt;/p&gt;
+&lt;p&gt;/**
+ * 技能服务类.
+ *
+ * &lt;p&gt;提供技能的管理和执行功能：
+ * &lt;ul&gt;
+ *   &lt;ul&gt;&lt;li&gt;技能查询（按名称或标签）&lt;/li&gt;
+&lt;/ul&gt; *   &lt;ul&gt;&lt;li&gt;技能 CRUD 操作&lt;/li&gt;
+&lt;/ul&gt; *   &lt;ul&gt;&lt;li&gt;技能执行（通过 Agent）&lt;/li&gt;
+&lt;/ul&gt; *   &lt;ul&gt;&lt;li&gt;技能搜索（按描述关键词）&lt;/li&gt;
+&lt;/ul&gt; * &lt;/ul&gt;
+ */
+@Service
+public class SkillService {&lt;/p&gt;
+&lt;p&gt;private static final Logger log = LoggerFactory.getLogger(SkillService.class);&lt;/p&gt;
+&lt;p&gt;private final AgentSkillRepository skillRepository;
+    private final SkillBox skillBox;
+    private final ReActAgent skillAgent;&lt;/p&gt;
+&lt;p&gt;public SkillService(
+            AgentSkillRepository skillRepository,
+            SkillBox skillBox,
+            ReActAgent skillAgent) {
+        this.skillRepository = skillRepository;
+        this.skillBox = skillBox;
+        this.skillAgent = skillAgent;
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 技能查询 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取所有技能名称.
+     */
+    public List&lt;String&gt; getAllSkillNames() {
+        return skillRepository.getAllSkillNames();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取所有技能.
+     */
+    public List&lt;AgentSkill&gt; getAllSkills() {
+        return skillRepository.getAllSkills();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 根据名称获取技能.
+     */
+    public Optional&lt;AgentSkill&gt; getSkill(String name) {
+        try {
+            return Optional.of(skillRepository.getSkill(name));
+        } catch (IllegalArgumentException e) {
+            log.debug(&quot;Skill not found: {}&quot;, name);
+            return Optional.empty();
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 检查技能是否存在.
+     */
+    public boolean skillExists(String name) {
+        return skillRepository.skillExists(name);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 按关键词搜索技能（匹配名称或描述）.
+     */
+    public List&lt;AgentSkill&gt; searchSkills(String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return getAllSkills();
+        }&lt;/p&gt;
+&lt;p&gt;String lowerKeyword = keyword.toLowerCase();
+        return getAllSkills().stream()
+            .filter(skill -&gt;
+                skill.getName().toLowerCase().contains(lowerKeyword) ||
+                skill.getDescription().toLowerCase().contains(lowerKeyword)
+            )
+            .toList();
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 技能管理 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 添加新技能.
+     *
+     * @param skill 要添加的技能
+     * @param force 如果技能已存在是否覆盖
+     * @return 是否添加成功
+     */
+    public boolean addSkill(AgentSkill skill, boolean force) {
+        try {
+            boolean saved = skillRepository.save(List.of(skill), force);
+            if (saved) {
+                // 重新注册到 SkillBox
+                skillBox.registerSkill(skill);
+                log.info(&quot;Skill added and registered: {}&quot;, skill.getName());
+            }
+            return saved;
+        } catch (Exception e) {
+            log.error(&quot;Failed to add skill: {}&quot;, skill.getName(), e);
+            return false;
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 更新技能.
+     *
+     * @param skill 更新后的技能
+     * @return 是否更新成功
+     */
+    public boolean updateSkill(AgentSkill skill) {
+        return addSkill(skill, true);  // force=true 覆盖现有技能
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 删除技能.
+     *
+     * @param name 技能名称
+     * @return 是否删除成功
+     */
+    public boolean deleteSkill(String name) {
+        boolean deleted = skillRepository.delete(name);
+        if (deleted) {
+            log.info(&quot;Skill deleted: {}&quot;, name);
+            // 注意：SkillBox 不提供 unregister 方法，
+            // 重新构建 SkillBox 或重启应用可以清除已删除的技能
+        }
+        return deleted;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 从 Markdown 和资源创建并添加技能.
+     */
+    public boolean createAndAddSkill(String name, String description, String content,
+                                      Map&lt;String, String&gt; resources) {
+        AgentSkill skill = AgentSkill.builder()
+            .name(name)
+            .description(description)
+            .skillContent(content)
+            .resources(resources != null ? resources : Map.of())
+            .source(&quot;custom&quot;)
+            .build();&lt;/p&gt;
+&lt;p&gt;return addSkill(skill, false);
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 技能执行 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 使用技能执行任务.
+     *
+     * &lt;p&gt;通过 Agent 调用技能来处理用户请求.
+     *
+     * @param userInput 用户输入
+     * @return Agent 响应文本
+     */
+    public String executeWithSkills(String userInput) {
+        Msg userMsg = Msg.builder()
+            .role(MsgRole.USER)
+            .content(TextBlock.builder().text(userInput).build())
+            .build();&lt;/p&gt;
+&lt;p&gt;try {
+            // 调用 Agent（支持 Skill 的渐进式加载）
+            Msg response = skillAgent.call(userMsg).block();
+            return response != null ? response.getTextContent() : &quot;No response&quot;;
+        } catch (Exception e) {
+            log.error(&quot;Failed to execute with skills&quot;, e);
+            return &quot;Error: &quot; + e.getMessage();
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 直接加载并返回技能内容（不通过 Agent）.
+     *
+     * @param skillName 技能名称
+     * @return 技能内容，如果不存在返回空
+     */
+    public Optional&lt;String&gt; loadSkillContent(String skillName) {
+        return getSkill(skillName).map(AgentSkill::getSkillContent);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取技能的资源文件内容.
+     *
+     * @param skillName 技能名称
+     * @param resourcePath 资源路径
+     * @return 资源内容，如果不存在返回空
+     */
+    public Optional&lt;String&gt; getSkillResource(String skillName, String resourcePath) {
+        return getSkill(skillName)
+            .map(skill -&gt; skill.getResource(resourcePath));
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 仓库信息 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取仓库信息.
+     */
+    public String getRepositoryInfo() {
+        return skillRepository.getRepositoryInfo().toString();
+    }
+}
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;
+&lt;h3&gt;11.4.10 SkillController.java（REST API 控制器）&lt;/h3&gt;&lt;/p&gt;
+&lt;/code&gt;&lt;/pre&gt;java
+package io.agentscope.tutorial.chapter11.controller;
+&lt;p&gt;import io.agentscope.core.skill.AgentSkill;
+import io.agentscope.tutorial.chapter11.service.SkillService;
+import org.springframework.web.bind.annotation.*;&lt;/p&gt;
+&lt;p&gt;import java.util.List;
+import java.util.Map;&lt;/p&gt;
+&lt;p&gt;/**
+ * 技能系统 REST API.
+ *
+ * &lt;p&gt;提供技能的查询、管理和执行接口：
+ * &lt;ul&gt;
+ *   &lt;ul&gt;&lt;li&gt;GET  /api/skills - 获取所有技能&lt;/li&gt;
+&lt;/ul&gt; *   &lt;ul&gt;&lt;li&gt;GET  /api/skills/{name} - 获取指定技能&lt;/li&gt;
+&lt;/ul&gt; *   &lt;ul&gt;&lt;li&gt;GET  /api/skills/search?keyword=xxx - 搜索技能&lt;/li&gt;
+&lt;/ul&gt; *   &lt;ul&gt;&lt;li&gt;POST /api/skills - 添加新技能&lt;/li&gt;
+&lt;/ul&gt; *   &lt;ul&gt;&lt;li&gt;DELETE /api/skills/{name} - 删除技能&lt;/li&gt;
+&lt;/ul&gt; *   &lt;ul&gt;&lt;li&gt;POST /api/skills/execute - 使用技能执行任务&lt;/li&gt;
+&lt;/ul&gt; * &lt;/ul&gt;
+ */
+@RestController
+@RequestMapping(&quot;/api/skills&quot;)
+public class SkillController {&lt;/p&gt;
+&lt;p&gt;private final SkillService skillService;&lt;/p&gt;
+&lt;p&gt;public SkillController(SkillService skillService) {
+        this.skillService = skillService;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取所有技能.
+     */
+    @GetMapping
+    public List&lt;String&gt; getAllSkillNames() {
+        return skillService.getAllSkillNames();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取指定技能详情.
+     */
+    @GetMapping(&quot;/{name}&quot;)
+    public Map&lt;String, Object&gt; getSkill(@PathVariable String name) {
+        return skillService.getSkill(name)
+            .map(skill -&gt; Map.&lt;String, Object&gt;of(
+                &quot;name&quot;, skill.getName(),
+                &quot;description&quot;, skill.getDescription(),
+                &quot;skillContent&quot;, skill.getSkillContent(),
+                &quot;source&quot;, skill.getSource(),
+                &quot;resourceCount&quot;, skill.getResources().size(),
+                &quot;metadata&quot;, skill.getMetadata()
+            ))
+            .orElse(Map.of(&quot;error&quot;, &quot;Skill not found: &quot; + name));
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 搜索技能.
+     */
+    @GetMapping(&quot;/search&quot;)
+    public List&lt;Map&lt;String, String&gt;&gt; searchSkills(@RequestParam String keyword) {
+        return skillService.searchSkills(keyword).stream()
+            .map(skill -&gt; Map.of(
+                &quot;name&quot;, skill.getName(),
+                &quot;description&quot;, skill.getDescription()
+            ))
+            .toList();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 添加新技能（从请求体构建）.
+     */
+    @PostMapping
+    public Map&lt;String, Object&gt; addSkill(@RequestBody Map&lt;String, Object&gt; request) {
+        String name = (String) request.get(&quot;name&quot;);
+        String description = (String) request.get(&quot;description&quot;);
+        String content = (String) request.get(&quot;content&quot;);
+        @SuppressWarnings(&quot;unchecked&quot;)
+        Map&lt;String, String&gt; resources = (Map&lt;String, String&gt;) request.get(&quot;resources&quot;);&lt;/p&gt;
+&lt;p&gt;boolean success = skillService.createAndAddSkill(name, description, content, resources);&lt;/p&gt;
+&lt;p&gt;return Map.of(
+            &quot;success&quot;, success,
+            &quot;message&quot;, success ? &quot;Skill added: &quot; + name : &quot;Failed to add skill&quot;
+        );
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 删除技能.
+     */
+    @DeleteMapping(&quot;/{name}&quot;)
+    public Map&lt;String, Object&gt; deleteSkill(@PathVariable String name) {
+        boolean success = skillService.deleteSkill(name);
+        return Map.of(
+            &quot;success&quot;, success,
+            &quot;message&quot;, success ? &quot;Skill deleted: &quot; + name : &quot;Skill not found or delete failed&quot;
+        );
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 使用技能执行任务.
+     */
+    @PostMapping(&quot;/execute&quot;)
+    public Map&lt;String, Object&gt; executeWithSkills(@RequestBody Map&lt;String, String&gt; request) {
+        String userInput = request.get(&quot;input&quot;);
+        if (userInput == null || userInput.isBlank()) {
+            return Map.of(&quot;error&quot;, &quot;input is required&quot;);
+        }&lt;/p&gt;
+&lt;p&gt;String response = skillService.executeWithSkills(userInput);
+        return Map.of(
+            &quot;input&quot;, userInput,
+            &quot;response&quot;, response
+        );
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取仓库信息.
+     */
+    @GetMapping(&quot;/info&quot;)
+    public Map&lt;String, Object&gt; getInfo() {
+        return Map.of(
+            &quot;repository&quot;, skillService.getRepositoryInfo(),
+            &quot;totalSkills&quot;, skillService.getAllSkillNames().size()
+        );
+    }
+}
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;
+&lt;h3&gt;11.4.11 运行与测试&lt;/h3&gt;&lt;/p&gt;
+&lt;p&gt;**1. 编译运行**&lt;/p&gt;
+&lt;/code&gt;&lt;/pre&gt;bash
+cd chapter11-skills
+./mvnw spring-boot:run
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;
+**2. 访问 H2 控制台**（开发时查看数据）
+&lt;/code&gt;&lt;/pre&gt;
+http://localhost:8080/h2-console
+JDBC URL: jdbc:h2:mem:agentscope
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;
+**3. REST API 测试**
+&lt;/code&gt;&lt;/pre&gt;bash
+&lt;h1&gt;获取所有技能&lt;/h1&gt;
+curl http://localhost:8080/api/skills
+&lt;h1&gt;获取技能详情&lt;/h1&gt;
+curl http://localhost:8080/api/skills/data_analysis
+&lt;h1&gt;搜索技能&lt;/h1&gt;
+curl &quot;http://localhost:8080/api/skills/search?keyword=data&quot;
+&lt;h1&gt;添加新技能&lt;/h1&gt;
+curl -X POST http://localhost:8080/api/skills \
+  -H &quot;Content-Type: application/json&quot; \
+  -d '{&quot;name&quot;:&quot;python_script&quot;,&quot;description&quot;:&quot;Use for Python scripting&quot;,&quot;content&quot;:&quot;# Python Script\n...&quot;}'
+&lt;h1&gt;使用技能执行任务（需配置 AI_DASHSCOPE_API_KEY）&lt;/h1&gt;
+curl -X POST http://localhost:8080/api/skills/execute \
+  -H &quot;Content-Type: application/json&quot; \
+  -d '{&quot;input&quot;:&quot;分析这份销售数据的趋势&quot;}'
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;
+&lt;h3&gt;11.4.12 完整工作流程示例&lt;/h3&gt;
+&lt;/code&gt;&lt;/pre&gt;java
+// 完整的技能使用流程示例
+public class SkillUsageExample {
+&lt;p&gt;public static void main(String[] args) {
+        // 1. 创建技能
+        AgentSkill sqlSkill = AgentSkill.builder()
+            .name(&quot;advanced_sql&quot;)
+            .description(&quot;Use for complex SQL queries and database optimization&quot;)
+            .skillContent(&quot;# Advanced SQL Skill\n\n## 窗口函数\n...&quot;)
+            .addResource(&quot;references/window-functions.md&quot;, &quot;# Window Functions Reference\n...&quot;)
+            .source(&quot;tutorial&quot;)
+            .build();&lt;/p&gt;
+&lt;p&gt;// 2. 保存到仓库
+        skillRepository.save(List.of(sqlSkill), false);&lt;/p&gt;
+&lt;p&gt;// 3. 注册到 SkillBox
+        skillBox.registerSkill(sqlSkill);&lt;/p&gt;
+&lt;p&gt;// 4. 通过 Agent 使用
+        String userQuery = &quot;Write a SQL to find top 10 customers by order volume&quot;;
+        String response = skillService.executeWithSkills(userQuery);&lt;/p&gt;
+&lt;p&gt;System.out.println(&quot;Response: &quot; + response);&lt;/p&gt;
+&lt;p&gt;// 5. 直接加载技能内容
+        Optional&lt;String&gt; content = skillService.loadSkillContent(&quot;advanced_sql&quot;);
+        content.ifPresent(c -&gt; System.out.println(&quot;Skill content length: &quot; + c.length()));
+    }
+}
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;
+&lt;h2&gt;11.5 代码执行能力&lt;/h2&gt;&lt;/p&gt;
+&lt;p&gt;Skill 系统还支持为技能提供隔离的代码执行环境：&lt;/p&gt;
+&lt;/code&gt;&lt;/pre&gt;java
+// 启用代码执行工具
+skillBox.codeExecution()
+    .workDir(&quot;/data/agent-workspace&quot;)           // 工作目录
+    .uploadDir(&quot;/data/agent-workspace/my-skills&quot;) // 资源上传目录
+    .withShell()    // Shell 命令工具
+    .withRead()     // 读文件工具
+    .withWrite()    // 写文件工具
+    .enable();
+&lt;p&gt;// 自定义文件过滤
+skillBox.codeExecution()
+    .includeFolders(Set.of(&quot;scripts/&quot;, &quot;data/&quot;))
+    .includeExtensions(Set.of(&quot;.py&quot;, &quot;.json&quot;))
+    .withShell()
+    .enable();&lt;/p&gt;
+&lt;p&gt;// 自定义 Shell（指定允许的命令）
+ShellCommandTool customShell = new ShellCommandTool(
+    null,
+    Set.of(&quot;python3&quot;, &quot;node&quot;, &quot;npm&quot;),
+    command -&gt; askUserApproval(command)  // 命令审批回调
+);&lt;/p&gt;
+&lt;p&gt;skillBox.codeExecution()
+    .withShell(customShell)
+    .enable();
+&lt;/code&gt;`&lt;code&gt;&lt;/p&gt;
+&lt;h2&gt;11.6 性能优化建议&lt;/h2&gt;
+&lt;p&gt;1. **控制 SKILL.md 大小**：保持在 5k tokens 以内，建议 1.5-2k tokens
+2. **合理组织资源**：将详细文档放在 &lt;/code&gt;references/&lt;code&gt; 中，而非 SKILL.md
+3. **定期清理版本**：使用仓库的 &lt;/code&gt;clearAllSkills()` 清理不再需要的旧技能
+4. **避免重复注册**：AgentScope 有重复注册保护机制，相同 Skill 配多个 Tool 不会创建重复版本&lt;/p&gt;
+&lt;h2&gt;11.7 小结&lt;/h2&gt;
+&lt;p&gt;本章介绍了 AgentScope Java 的技能系统：&lt;/p&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;概念&lt;/th&gt;&lt;th&gt;说明&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;**AgentSkill**&lt;/td&gt;&lt;td&gt;技能的数据模型，包含名称、描述、内容、资源和元数据&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**SkillBox**&lt;/td&gt;&lt;td&gt;技能容器，管理技能的注册和系统提示词注入&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**渐进式披露**&lt;/td&gt;&lt;td&gt;三阶段按需加载机制，优化上下文大小&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**AgentSkillRepository**&lt;/td&gt;&lt;td&gt;技能仓库接口，支持 MySQL、Git、Classpath 等多种存储&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**load_skill_through_path**&lt;/td&gt;&lt;td&gt;内置工具，用于按需加载技能内容和资源&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**Tool 绑定**&lt;/td&gt;&lt;td&gt;可将 Tool 与 Skill 绑定，仅在 Skill 激活时生效&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;通过案例我们看到，技能系统与 Spring Boot 可以很好地集成，使用 H2 模拟 MySQL 表结构进行开发和测试，实际生产环境只需替换数据源即可。&lt;/p&gt;
+&lt;h2&gt;相关文档&lt;/h2&gt;
+&lt;ul&gt;&lt;li&gt;&lt;a href=&quot;./agent.md&quot;&gt;Agent 配置&lt;/a&gt; - 智能体配置和使用&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;./tool.md&quot;&gt;Tool 使用指南&lt;/a&gt; - 工具系统的使用方法&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://platform.claude.com/docs/zh-CN/agents-and-tools/agent-skills/overview&quot;&gt;Claude Agent Skills 官方文档&lt;/a&gt; - 完整的概念和架构介绍&lt;/li&gt;&lt;/ul&gt;
+</body>
+</html>

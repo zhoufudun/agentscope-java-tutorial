@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第二章：快速开始</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        h3 { color: #7f8c8d; }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+        }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+        table {
+            border-collapse: collapse;
+            margin: 20px 0;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th { background: #3498db; color: white; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        ul { padding-left: 20px; }
+        li { margin: 5px 0; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            color: #666;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+&lt;h1&gt;第二章：快速开始&lt;/h1&gt;
+&lt;p&gt;本章将带你从零开始，通过一个完整的案例，手把手教你搭建并运行第一个 AgentScope Java 项目。&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;2.1 Maven 依赖配置&lt;/h2&gt;
+&lt;p&gt;AgentScope Java 通过 Maven 进行依赖管理。核心模块为 &lt;code&gt;agentscope-core&lt;/code&gt;，提供了 Agent、模型、工具、记忆等所有基础能力。&lt;/p&gt;
+&lt;h3&gt;引入 BOM（Bill of Materials）&lt;/h3&gt;
+&lt;p&gt;推荐先引入父 BOM，统一管理版本号，避免依赖冲突：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot;?&amp;gt;
+&amp;lt;project xmlns=&amp;quot;http://maven.apache.org/POM/4.0.0&amp;quot;
+         xmlns:xsi=&amp;quot;http://www.w3.org/2001/XMLSchema-instance&amp;quot;
+         xsi:schemaLocation=&amp;quot;http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd&amp;quot;&amp;gt;
+    &amp;lt;modelVersion&amp;gt;4.0.0&amp;lt;/modelVersion&amp;gt;
+&lt;p&gt;&amp;lt;groupId&amp;gt;io.agentscope.tutorial&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;chapter02-quickstart&amp;lt;/artifactId&amp;gt;
+    &amp;lt;version&amp;gt;1.0.0&amp;lt;/version&amp;gt;
+    &amp;lt;packaging&amp;gt;jar&amp;lt;/packaging&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;name&amp;gt;AgentScope Java - Tutorial - Chapter 02 Quickstart&amp;lt;/name&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- 引入父 BOM，统一管理所有 AgentScope 依赖版本 --&amp;gt;
+    &amp;lt;parent&amp;gt;
+        &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+        &amp;lt;artifactId&amp;gt;agentscope-parent&amp;lt;/artifactId&amp;gt;
+        &amp;lt;version&amp;gt;${revision}&amp;lt;/version&amp;gt;
+        &amp;lt;relativePath/&amp;gt;
+    &amp;lt;/parent&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;properties&amp;gt;
+        &amp;lt;revision&amp;gt;1.1.0-SNAPSHOT&amp;lt;/revision&amp;gt;
+        &amp;lt;maven.compiler.source&amp;gt;21&amp;lt;/maven.compiler.source&amp;gt;
+        &amp;lt;maven.compiler.target&amp;gt;21&amp;lt;/maven.compiler.target&amp;gt;
+        &amp;lt;project.build.sourceEncoding&amp;gt;UTF-8&amp;lt;/project.build.sourceEncoding&amp;gt;
+    &amp;lt;/properties&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;dependencies&amp;gt;
+        &amp;lt;!-- 核心模块：包含 Agent、模型、工具、记忆等所有基础能力 --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-core&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- 如需 Spring Boot 集成 --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-spring-boot-starter&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- 如使用阿里云百炼模型（可选） --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;com.alibaba&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;dashscope-sdk-java&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+    &amp;lt;/dependencies&amp;gt;
+&amp;lt;/project&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;&gt; **提示**：AgentScope Java 要求 JDK 17 及以上，推荐使用 JDK 21 以获得最佳性能。&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;2.2 创建第一个 Agent&lt;/h2&gt;
+&lt;p&gt;AgentScope Java 的核心是 &lt;code&gt;ReActAgent&lt;/code&gt;，它基于 ReAct（Reasoning + Acting）范式，让 Agent 能够思考、推理并调用工具完成任务。&lt;/p&gt;
+&lt;h3&gt;基本创建步骤&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter02;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.memory.InMemoryMemory;
+import io.agentscope.core.tool.Toolkit;&lt;/p&gt;
+&lt;p&gt;public class FirstAgent {&lt;/p&gt;
+&lt;p&gt;public static void main(String[] args) {
+        // 1. 创建内存（保存对话历史）
+        var memory = new InMemoryMemory();&lt;/p&gt;
+&lt;p&gt;// 2. 创建工具包（Agent 可调用的工具集合）
+        var toolkit = new Toolkit();&lt;/p&gt;
+&lt;p&gt;// 3. 构建 Agent
+        ReActAgent agent = ReActAgent.builder()
+                .name(&amp;quot;MyFirstAgent&amp;quot;)           // Agent 名称
+                .sysPrompt(&amp;quot;你是一个有帮助的AI助手&amp;quot;)  // 系统提示词
+                .model(dashScopeModel())         // 模型客户端（见下一节）
+                .memory(memory)                  // 记忆组件
+                .toolkit(toolkit)                // 工具包
+                .build();&lt;/p&gt;
+&lt;p&gt;// 4. 执行对话
+        System.out.println(&amp;quot;Agent 构建成功！&amp;quot;);
+    }&lt;/p&gt;
+&lt;p&gt;private static Object dashScopeModel() {
+        // 见 2.3 节
+        return null;
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;Agent 核心配置项说明&lt;/h3&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;配置项&lt;/th&gt;&lt;th&gt;类型&lt;/th&gt;&lt;th&gt;必需&lt;/th&gt;&lt;th&gt;说明&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;name&lt;/code&gt;&lt;/td&gt;&lt;td&gt;String&lt;/td&gt;&lt;td&gt;是&lt;/td&gt;&lt;td&gt;Agent 唯一标识名称&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;sysPrompt&lt;/code&gt;&lt;/td&gt;&lt;td&gt;String&lt;/td&gt;&lt;td&gt;是&lt;/td&gt;&lt;td&gt;系统提示词，定义 Agent 的角色和行为&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;model&lt;/code&gt;&lt;/td&gt;&lt;td&gt;&lt;code&gt;Model&lt;/code&gt;&lt;/td&gt;&lt;td&gt;是&lt;/td&gt;&lt;td&gt;模型客户端，负责与 LLM 交互&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;memory&lt;/code&gt;&lt;/td&gt;&lt;td&gt;&lt;code&gt;Memory&lt;/code&gt;&lt;/td&gt;&lt;td&gt;是&lt;/td&gt;&lt;td&gt;记忆组件，保存对话历史&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;toolkit&lt;/code&gt;&lt;/td&gt;&lt;td&gt;&lt;code&gt;Toolkit&lt;/code&gt;&lt;/td&gt;&lt;td&gt;否&lt;/td&gt;&lt;td&gt;工具包，包含 Agent 可调用的工具&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;maxIterations&lt;/code&gt;&lt;/td&gt;&lt;td&gt;int&lt;/td&gt;&lt;td&gt;否&lt;/td&gt;&lt;td&gt;最大迭代次数，默认 10，防止无限循环&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;maxToolCallCount&lt;/code&gt;&lt;/td&gt;&lt;td&gt;int&lt;/td&gt;&lt;td&gt;否&lt;/td&gt;&lt;td&gt;单次执行最大工具调用次数&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;2.3 配置模型客户端&lt;/h2&gt;
+&lt;p&gt;模型客户端是 Agent 的大脑，负责与 LLM 进行通信。AgentScope Java 内置支持多种模型：
+&lt;ul&gt;&lt;li&gt;**DashScope**（阿里云百炼）&lt;/li&gt;
+&lt;li&gt;**OpenAI 兼容接口**&lt;/li&gt;
+&lt;li&gt;**Ollama 本地模型**&lt;/li&gt;
+&lt;li&gt;**Google Gemini**&lt;/li&gt;
+&lt;li&gt;**Anthropic Claude**&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;以 DashScope 为例&lt;/h3&gt;&lt;/p&gt;
+&lt;p&gt;DashScope 是阿里云提供的 LLM 服务，支持通义千问系列模型。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter02;
+&lt;p&gt;import io.agentscope.core.formatter.dashscope.DashScopeChatFormatter;
+import io.agentscope.core.model.DashScopeChatModel;
+import io.agentscope.core.model.GenerateOptions;&lt;/p&gt;
+&lt;p&gt;// 配置 DashScope 模型客户端
+public class ModelConfig {&lt;/p&gt;
+&lt;p&gt;public static DashScopeChatModel createDashScopeModel() {
+        // ⚠️ 请替换为你的实际 API Key
+        // 可通过环境变量 DASHSCOPE_API_KEY 设置
+        String apiKey = System.getenv(&amp;quot;DASHSCOPE_API_KEY&amp;quot;);
+        if (apiKey == null || apiKey.isEmpty()) {
+            apiKey = &amp;quot;your-api-key-here&amp;quot;; // 占位符，请替换
+        }&lt;/p&gt;
+&lt;p&gt;return DashScopeChatModel.builder()
+                .apiKey(apiKey)                              // API Key
+                .modelName(&amp;quot;qwen-plus&amp;quot;)                      // 模型名称：qwen-plus / qwen-turbo / qwen-max 等
+                .stream(true)                                // 启用流式输出
+                .enableThinking(true)                         // 启用思考模式（部分模型支持）
+                .formatter(new DashScopeChatFormatter())     // 消息格式化器
+                .defaultOptions(
+                        GenerateOptions.builder()
+                                .thinkingBudget(1024)       // 思考 token 上限
+                                .temperature(0.7)           // 温度参数
+                                .build())
+                .build();
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;模型配置参数详解&lt;/h3&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;参数&lt;/th&gt;&lt;th&gt;类型&lt;/th&gt;&lt;th&gt;说明&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;apiKey&lt;/code&gt;&lt;/td&gt;&lt;td&gt;String&lt;/td&gt;&lt;td&gt;模型服务的 API Key&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;modelName&lt;/code&gt;&lt;/td&gt;&lt;td&gt;String&lt;/td&gt;&lt;td&gt;模型标识符，如 &lt;code&gt;qwen-plus&lt;/code&gt;、&lt;code&gt;gpt-4o&lt;/code&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;stream&lt;/code&gt;&lt;/td&gt;&lt;td&gt;boolean&lt;/td&gt;&lt;td&gt;是否启用流式输出（默认 true）&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;enableThinking&lt;/code&gt;&lt;/td&gt;&lt;td&gt;boolean&lt;/td&gt;&lt;td&gt;是否启用思考模式（部分模型支持）&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;formatter&lt;/code&gt;&lt;/td&gt;&lt;td&gt;&lt;code&gt;ChatFormatter&lt;/code&gt;&lt;/td&gt;&lt;td&gt;消息格式化器，用于将 AgentScope 消息转换为模型格式&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;defaultOptions&lt;/code&gt;&lt;/td&gt;&lt;td&gt;&lt;code&gt;GenerateOptions&lt;/code&gt;&lt;/td&gt;&lt;td&gt;默认生成参数（temperature、topP、thinkingBudget 等）&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;2.4 Agent 执行流程&lt;/h2&gt;
+&lt;p&gt;理解 Agent 的执行流程，有助于更好地使用 AgentScope Java。&lt;/p&gt;
+&lt;h3&gt;ReAct 执行循环&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;┌─────────────────────────────────────────────────────────┐
+│                    ReAct 执行流程                         │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  ┌──────────┐    1. 思考 (Reasoning)                     │
+│  │  开始    │──────────────────────────┐                 │
+│  └──────────┘                         ▼                 │
+│                               ┌──────────────┐          │
+│                               │  思考当前状态 │          │
+│                               │  决定下一步   │          │
+│                               └──────────────┘          │
+│                                       │                 │
+│                          2. 行动 (Acting)               │
+│                                       ▼                 │
+│                               ┌──────────────┐          │
+│                               │  调用工具     │          │
+│                               │  或生成回复   │          │
+│                               └──────────────┘          │
+│                                       │                 │
+│                    3. 观察 (Observation)                 │
+│                                       ▼                 │
+│                               ┌──────────────┐          │
+│                               │  获取工具结果 │          │
+│                               │  或用户反馈   │          │
+│                               └──────────────┘          │
+│                                       │                 │
+│                               ┌───────┴───────┐         │
+│                               │  达到终止条件? │         │
+│                               └───────────────┘         │
+│                                    是 │ 否              │
+│                                      ▼                  │
+│                               回到 步骤1                 │
+│                                                         │
+│  终止条件：                                              │
+│  - 生成了最终回复                                        │
+│  - 达到最大迭代次数                                      │
+│  - 用户中断                                             │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;核心方法&lt;/h3&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;方法&lt;/th&gt;&lt;th&gt;说明&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;agent.call(msg)&lt;/code&gt;&lt;/td&gt;&lt;td&gt;非流式调用，阻塞等待完整响应，返回 &lt;code&gt;Mono&lt;Msg&gt;&lt;/code&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;agent.stream(msg, options)&lt;/code&gt;&lt;/td&gt;&lt;td&gt;流式调用，实时返回响应事件，返回 &lt;code&gt;Flux&lt;Event&gt;&lt;/code&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;agent.run(task)&lt;/code&gt;&lt;/td&gt;&lt;td&gt;运行任务描述，自动构建消息并执行&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;2.5 运行你的第一个 Agent&lt;/h2&gt;
+&lt;p&gt;下面通过一个完整的案例，演示如何运行一个简单的问答 Agent。&lt;/p&gt;
+&lt;h3&gt;2.5.1 项目结构&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;chapter02-quickstart/
+├── pom.xml
+└── src/
+    └── main/
+        └── java/
+            └── io/
+                └── agentscope/
+                    └── tutorial/
+                        └── chapter02/
+                            ├── App.java                    # 运行入口
+                            ├── agent/
+                            │   └── QAAgent.java            # Agent 配置类
+                            └── config/
+                                └── ModelConfig.java         # 模型配置
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h3&gt;2.5.2 pom.xml&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot;?&amp;gt;
+&amp;lt;!--
+  ~ Copyright 2024-2026 the original author or authors.
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the &amp;quot;License&amp;quot;);
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an &amp;quot;AS IS&amp;quot; BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+--&amp;gt;
+&amp;lt;project xmlns=&amp;quot;http://maven.apache.org/POM/4.0.0&amp;quot;
+         xmlns:xsi=&amp;quot;http://www.w3.org/2001/XMLSchema-instance&amp;quot;
+         xsi:schemaLocation=&amp;quot;http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd&amp;quot;&amp;gt;
+    &amp;lt;modelVersion&amp;gt;4.0.0&amp;lt;/modelVersion&amp;gt;
+&lt;p&gt;&amp;lt;groupId&amp;gt;io.agentscope.tutorial&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;chapter02-quickstart&amp;lt;/artifactId&amp;gt;
+    &amp;lt;version&amp;gt;1.0.0&amp;lt;/version&amp;gt;
+    &amp;lt;packaging&amp;gt;jar&amp;lt;/packaging&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;name&amp;gt;AgentScope Java - Tutorial - Chapter 02 Quickstart&amp;lt;/name&amp;gt;
+    &amp;lt;description&amp;gt;第二章快速开始示例：创建你的第一个 Agent&amp;lt;/description&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- 继承 AgentScope 父 BOM，统一管理版本 --&amp;gt;
+    &amp;lt;parent&amp;gt;
+        &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+        &amp;lt;artifactId&amp;gt;agentscope-parent&amp;lt;/artifactId&amp;gt;
+        &amp;lt;version&amp;gt;${revision}&amp;lt;/version&amp;gt;
+        &amp;lt;relativePath/&amp;gt;
+    &amp;lt;/parent&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;properties&amp;gt;
+        &amp;lt;!-- 请确保使用 JDK 21 或更高版本 --&amp;gt;
+        &amp;lt;revision&amp;gt;1.1.0-SNAPSHOT&amp;lt;/revision&amp;gt;
+        &amp;lt;maven.compiler.source&amp;gt;21&amp;lt;/maven.compiler.source&amp;gt;
+        &amp;lt;maven.compiler.target&amp;gt;21&amp;lt;/maven.compiler.target&amp;gt;
+        &amp;lt;project.build.sourceEncoding&amp;gt;UTF-8&amp;lt;/project.build.sourceEncoding&amp;gt;
+    &amp;lt;/properties&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;dependencies&amp;gt;
+        &amp;lt;!-- 核心模块：包含 Agent、模型、工具、记忆等所有基础能力 --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-core&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- 引入 DashScope SDK（用于模型调用） --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;com.alibaba&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;dashscope-sdk-java&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- SLF4J 日志门面（AgentScope 使用 slf4j 记录日志） --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.slf4j&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;slf4j-simple&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+    &amp;lt;/dependencies&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- 配置 Maven 插件 --&amp;gt;
+    &amp;lt;build&amp;gt;
+        &amp;lt;plugins&amp;gt;
+            &amp;lt;plugin&amp;gt;
+                &amp;lt;groupId&amp;gt;org.apache.maven.plugins&amp;lt;/groupId&amp;gt;
+                &amp;lt;artifactId&amp;gt;maven-compiler-plugin&amp;lt;/artifactId&amp;gt;
+                &amp;lt;configuration&amp;gt;
+                    &amp;lt;source&amp;gt;21&amp;lt;/source&amp;gt;
+                    &amp;lt;target&amp;gt;21&amp;lt;/target&amp;gt;
+                &amp;lt;/configuration&amp;gt;
+            &amp;lt;/plugin&amp;gt;
+            &amp;lt;plugin&amp;gt;
+                &amp;lt;groupId&amp;gt;org.apache.maven.plugins&amp;lt;/groupId&amp;gt;
+                &amp;lt;artifactId&amp;gt;maven-jar-plugin&amp;lt;/artifactId&amp;gt;
+                &amp;lt;configuration&amp;gt;
+                    &amp;lt;archive&amp;gt;
+                        &amp;lt;manifest&amp;gt;
+                            &amp;lt;mainClass&amp;gt;io.agentscope.tutorial.chapter02.App&amp;lt;/mainClass&amp;gt;
+                        &amp;lt;/manifest&amp;gt;
+                    &amp;lt;/archive&amp;gt;
+                &amp;lt;/configuration&amp;gt;
+            &amp;lt;/plugin&amp;gt;
+        &amp;lt;/plugins&amp;gt;
+    &amp;lt;/build&amp;gt;
+&amp;lt;/project&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h3&gt;2.5.3 模型配置 - config/ModelConfig.java&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;/*
+ * Copyright 2024-2026 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &amp;quot;License&amp;quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &amp;quot;AS IS&amp;quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package io.agentscope.tutorial.chapter02.config;
+&lt;p&gt;import io.agentscope.core.formatter.dashscope.DashScopeChatFormatter;
+import io.agentscope.core.model.DashScopeChatModel;
+import io.agentscope.core.model.GenerateOptions;&lt;/p&gt;
+&lt;p&gt;/**
+ * 模型配置类。
+ *
+ * &amp;lt;p&amp;gt;本类负责创建和配置模型客户端，支持 DashScope（阿里云百炼）模型服务。
+ *
+ * &amp;lt;p&amp;gt;API Key 获取方式：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;环境变量：设置 DASHSCOPE_API_KEY&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;阿里云控制台：https://dashscope.console.aliyun.com/apiKey&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * @author AgentScope Team
+ * @since 1.0
+ */
+public class ModelConfig {&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建 DashScope 模型客户端。
+     *
+     * &amp;lt;p&amp;gt;配置说明：
+     * &amp;lt;ul&amp;gt;
+     *   &amp;lt;li&amp;gt;modelName: 支持 qwen-plus（推荐）、qwen-turbo（快速）、qwen-max（最强）等&amp;lt;/li&amp;gt;
+     *   &amp;lt;li&amp;gt;stream: 启用流式输出，实时显示思考过程和回复&amp;lt;/li&amp;gt;
+     *   &amp;lt;li&amp;gt;enableThinking: 启用思考模式，模型会先思考再回答&amp;lt;/li&amp;gt;
+     * &amp;lt;/ul&amp;gt;
+     *
+     * @return 配置好的 DashScopeChatModel 实例
+     */
+    public static DashScopeChatModel createDashScopeModel() {
+        // 从环境变量获取 API Key，如果未设置则使用占位符
+        // ⚠️ 生产环境请确保通过环境变量或安全配置获取 API Key
+        String apiKey = System.getenv(&amp;quot;DASHSCOPE_API_KEY&amp;quot;);
+        if (apiKey == null || apiKey.isEmpty()) {
+            System.out.println(&amp;quot;[警告] 未设置 DASHSCOPE_API_KEY 环境变量，使用占位符演示&amp;quot;);
+            apiKey = &amp;quot;your-api-key-here&amp;quot;;
+        }&lt;/p&gt;
+&lt;p&gt;return DashScopeChatModel.builder()
+                // API Key：从环境变量或配置中心获取
+                .apiKey(apiKey)
+                // 模型名称：qwen-plus（通义千问增强版）
+                // 其他可选：qwen-turbo（快速版）、qwen-max（最强版）、qwen-vl-plus（视觉版）
+                .modelName(&amp;quot;qwen-plus&amp;quot;)
+                // 启用流式输出：实时显示模型的思考和回复过程
+                .stream(true)
+                // 启用思考模式：模型会先进行推理思考，再给出最终答案
+                .enableThinking(true)
+                // 消息格式化器：将 AgentScope 消息格式转换为 DashScope API 格式
+                .formatter(new DashScopeChatFormatter())
+                // 默认生成参数
+                .defaultOptions(
+                        GenerateOptions.builder()
+                                // 思考 token 预算：允许模型使用最多 1024 个 token 进行思考
+                                .thinkingBudget(1024)
+                                // 温度参数：控制输出的随机性（0=确定性强，1=创造性高）
+                                .temperature(0.7)
+                                // 最大 token 数：限制单次回复的最大长度
+                                .maxTokens(2048)
+                                .build())
+                .build();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建带自定义参数的模型客户端。
+     *
+     * @param modelName   模型名称
+     * @param temperature 温度参数
+     * @param thinkingBudget 思考 token 预算
+     * @return 配置好的模型客户端
+     */
+    public static DashScopeChatModel createCustomModel(
+            String modelName, double temperature, int thinkingBudget) {
+        String apiKey = System.getenv(&amp;quot;DASHSCOPE_API_KEY&amp;quot;);
+        if (apiKey == null || apiKey.isEmpty()) {
+            apiKey = &amp;quot;your-api-key-here&amp;quot;;
+        }&lt;/p&gt;
+&lt;p&gt;return DashScopeChatModel.builder()
+                .apiKey(apiKey)
+                .modelName(modelName)
+                .stream(true)
+                .enableThinking(true)
+                .formatter(new DashScopeChatFormatter())
+                .defaultOptions(
+                        GenerateOptions.builder()
+                                .thinkingBudget(thinkingBudget)
+                                .temperature(temperature)
+                                .maxTokens(2048)
+                                .build())
+                .build();
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h3&gt;2.5.4 Agent 配置类 - agent/QAAgent.java&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;/*
+ * Copyright 2024-2026 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &amp;quot;License&amp;quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &amp;quot;AS IS&amp;quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package io.agentscope.tutorial.chapter02.agent;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.memory.InMemoryMemory;
+import io.agentscope.core.tool.Toolkit;
+import io.agentscope.tutorial.chapter02.config.ModelConfig;&lt;/p&gt;
+&lt;p&gt;/**
+ * 问答 Agent 配置类。
+ *
+ * &amp;lt;p&amp;gt;本类负责构建一个简单的问答 Agent，具备以下能力：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;基于通义千问大模型进行对话&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;保存对话历史，实现多轮对话&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;支持思考模式，展示推理过程&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * &amp;lt;p&amp;gt;Agent 构建器模式：
+ * &amp;lt;pre&amp;gt;{@code
+ * ReActAgent agent = QAAgent.create();
+ * }&amp;lt;/pre&amp;gt;
+ *
+ * @author AgentScope Team
+ * @since 1.0
+ */
+public class QAAgent {&lt;/p&gt;
+&lt;p&gt;/** Agent 默认名称 */
+    private static final String DEFAULT_NAME = &amp;quot;QAAgent&amp;quot;;&lt;/p&gt;
+&lt;p&gt;/** 默认系统提示词 */
+    private static final String DEFAULT_SYS_PROMPT =
+            &amp;quot;你是一个专业、耐心的AI助手。你的任务是：\n&amp;quot;
+                    + &amp;quot;1. 准确理解用户的问题\n&amp;quot;
+                    + &amp;quot;2. 提供清晰、有条理的回答\n&amp;quot;
+                    + &amp;quot;3. 如果不确定，诚实告知用户\n&amp;quot;
+                    + &amp;quot;4. 适当使用思考过程来分析问题&amp;quot;;&lt;/p&gt;
+&lt;p&gt;/** 最大迭代次数：防止 Agent 陷入无限循环 */
+    private static final int DEFAULT_MAX_ITERATIONS = 10;&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建默认配置的问答 Agent。
+     *
+     * &amp;lt;p&amp;gt;使用配置：
+     * &amp;lt;ul&amp;gt;
+     *   &amp;lt;li&amp;gt;模型：qwen-plus（通义千问增强版）&amp;lt;/li&amp;gt;
+     *   &amp;lt;li&amp;gt;记忆：内存记忆（对话关闭后丢失）&amp;lt;/li&amp;gt;
+     *   &amp;lt;li&amp;gt;工具：无（纯问答场景）&amp;lt;/li&amp;gt;
+     * &amp;lt;/ul&amp;gt;
+     *
+     * @return 配置好的 ReActAgent 实例
+     */
+    public static ReActAgent create() {
+        return create(DEFAULT_NAME, DEFAULT_SYS_PROMPT);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建自定义名称和提示词的问答 Agent。
+     *
+     * @param name      Agent 名称
+     * @param sysPrompt 系统提示词
+     * @return 配置好的 ReActAgent 实例
+     */
+    public static ReActAgent create(String name, String sysPrompt) {
+        // 1. 创建内存组件：用于保存对话历史
+        // InMemoryMemory：基于内存的记忆实现，重启后丢失
+        // 如需持久化，可使用 SessionMemory 或其他实现
+        var memory = new InMemoryMemory();&lt;/p&gt;
+&lt;p&gt;// 2. 创建工具包：定义 Agent 可调用的工具集合
+        // 当前为空（new Toolkit()），表示这是一个纯问答 Agent
+        // 如需添加工具，可通过 toolkit.register(...) 注册
+        var toolkit = new Toolkit();&lt;/p&gt;
+&lt;p&gt;// 3. 构建 ReActAgent
+        return ReActAgent.builder()
+                // Agent 名称：唯一标识，用于日志和调试
+                .name(name)
+                // 系统提示词：定义 Agent 的角色、能力边界和行为规范
+                .sysPrompt(sysPrompt)
+                // 模型客户端：从配置类获取
+                .model(ModelConfig.createDashScopeModel())
+                // 记忆组件：保存对话历史
+                .memory(memory)
+                // 工具包：Agent 可调用的工具集合
+                .toolkit(toolkit)
+                // 最大迭代次数：防止无限循环
+                .maxIterations(DEFAULT_MAX_ITERATIONS)
+                // 构建 Agent 实例
+                .build();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建带工具的问答 Agent。
+     *
+     * &amp;lt;p&amp;gt;示例：创建一个能够搜索网络的问答 Agent
+     *
+     * @param toolkit 工具包
+     * @return 配置好的 ReActAgent 实例
+     */
+    public static ReActAgent createWithTools(Toolkit toolkit) {
+        return ReActAgent.builder()
+                .name(DEFAULT_NAME)
+                .sysPrompt(DEFAULT_SYS_PROMPT)
+                .model(ModelConfig.createDashScopeModel())
+                .memory(new InMemoryMemory())
+                .toolkit(toolkit)
+                .maxIterations(DEFAULT_MAX_ITERATIONS)
+                .build();
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h3&gt;2.5.5 运行入口 - App.java&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;/*
+ * Copyright 2024-2026 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &amp;quot;License&amp;quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &amp;quot;AS IS&amp;quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package io.agentscope.tutorial.chapter02;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.agent.Agent;
+import io.agentscope.core.agent.EventType;
+import io.agentscope.core.agent.StreamOptions;
+import io.agentscope.core.message.ContentBlock;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.message.ThinkingBlock;
+import io.agentscope.tutorial.chapter02.agent.QAAgent;&lt;/p&gt;
+&lt;p&gt;import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;&lt;/p&gt;
+&lt;p&gt;/**
+ * 第二章快速开始：运行你的第一个 Agent。
+ *
+ * &amp;lt;p&amp;gt;本示例演示：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;如何创建一个简单的问答 Agent&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;如何使用流式输出实时显示思考和回复&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;如何实现多轮对话&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * &amp;lt;p&amp;gt;运行方式：
+ * &amp;lt;pre&amp;gt;{@code
+ * # 设置 API Key
+ * export DASHSCOPE_API_KEY=your-api-key
+ *
+ * # 编译运行
+ * mvn compile exec:java -Dexec.mainClass=&amp;quot;io.agentscope.tutorial.chapter02.App&amp;quot;
+ * }&amp;lt;/pre&amp;gt;
+ *
+ * @author AgentScope Team
+ * @since 1.0
+ */
+public class App {&lt;/p&gt;
+&lt;p&gt;/** 标准输入读取器 */
+    private static final BufferedReader reader =
+            new BufferedReader(new InputStreamReader(System.in));&lt;/p&gt;
+&lt;p&gt;/**
+     * 程序入口。
+     *
+     * @param args 命令行参数（当前未使用）
+     */
+    public static void main(String[] args) {
+        // 打印欢迎信息
+        printWelcome();&lt;/p&gt;
+&lt;p&gt;// 创建 Agent
+        ReActAgent agent = QAAgent.create();
+        System.out.println(&amp;quot;[INFO] Agent 创建成功！\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 进入交互式对话循环
+        runChatLoop(agent);&lt;/p&gt;
+&lt;p&gt;// 退出提示
+        System.out.println(&amp;quot;[INFO] 程序结束&amp;quot;);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 打印欢迎信息。
+     */
+    private static void printWelcome() {
+        System.out.println(&amp;quot;╔════════════════════════════════════════════════════════════╗&amp;quot;);
+        System.out.println(&amp;quot;║        AgentScope Java - 第二章：快速开始                  ║&amp;quot;);
+        System.out.println(&amp;quot;║        你的第一个 AI Agent                                 ║&amp;quot;);
+        System.out.println(&amp;quot;╚════════════════════════════════════════════════════════════╝&amp;quot;);
+        System.out.println();&lt;/p&gt;
+&lt;p&gt;// 检查 API Key
+        String apiKey = System.getenv(&amp;quot;DASHSCOPE_API_KEY&amp;quot;);
+        if (apiKey == null || apiKey.isEmpty()) {
+            System.out.println(&amp;quot;[警告] 未设置 DASHSCOPE_API_KEY 环境变量&amp;quot;);
+            System.out.println(&amp;quot;       请先设置：export DASHSCOPE_API_KEY=your-key&amp;quot;);
+            System.out.println(&amp;quot;       或访问：https://dashscope.console.aliyun.com/apiKey&amp;quot;);
+            System.out.println();
+        } else {
+            System.out.println(&amp;quot;[INFO] API Key 已配置（已脱敏显示）&amp;quot;);
+            System.out.println(&amp;quot;       &amp;quot; + maskApiKey(apiKey));
+            System.out.println();
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 运行交互式对话循环。
+     *
+     * @param agent 要对话的 Agent 实例
+     */
+    private static void runChatLoop(Agent agent) {
+        System.out.println(&amp;quot;=== 对话开始 ===&amp;quot;);
+        System.out.println(&amp;quot;输入 'exit' 或 'quit' 退出对话\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;while (true) {
+            // 读取用户输入
+            System.out.print(&amp;quot;你&amp;gt; &amp;quot;);
+            String input;
+            try {
+                input = reader.readLine();
+            } catch (IOException e) {
+                System.err.println(&amp;quot;[错误] 读取输入失败：&amp;quot; + e.getMessage());
+                break;
+            }&lt;/p&gt;
+&lt;p&gt;// 处理退出命令
+            if (input == null || &amp;quot;exit&amp;quot;.equalsIgnoreCase(input.trim())
+                    || &amp;quot;quit&amp;quot;.equalsIgnoreCase(input.trim())) {
+                System.out.println(&amp;quot;再见！&amp;quot;);
+                break;
+            }&lt;/p&gt;
+&lt;p&gt;// 跳过空输入
+            if (input.trim().isEmpty()) {
+                continue;
+            }&lt;/p&gt;
+&lt;p&gt;// 发送消息并显示响应
+            try {
+                sendMessage(agent, input);
+            } catch (Exception e) {
+                System.err.println(&amp;quot;\n[错误] &amp;quot; + e.getMessage());
+                e.printStackTrace();
+            }&lt;/p&gt;
+&lt;p&gt;System.out.println();
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 发送消息并显示响应（流式输出）。
+     *
+     * @param agent Agent 实例
+     * @param input 用户输入
+     */
+    private static void sendMessage(Agent agent, String input) {
+        // 构建用户消息
+        Msg userMsg = Msg.builder()
+                .role(MsgRole.USER)
+                .content(TextBlock.builder().text(input).build())
+                .build();&lt;/p&gt;
+&lt;p&gt;System.out.print(&amp;quot;Agent&amp;gt; &amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 用于跟踪输出状态
+        AtomicBoolean hasPrintedThinkingHeader = new AtomicBoolean(false);
+        AtomicBoolean hasPrintedTextHeader = new AtomicBoolean(false);
+        AtomicBoolean hasPrintedTextSeparator = new AtomicBoolean(false);
+        AtomicReference&amp;lt;String&amp;gt; lastThinkingContent = new AtomicReference&amp;lt;&amp;gt;(&amp;quot;&amp;quot;);
+        AtomicReference&amp;lt;String&amp;gt; lastTextContent = new AtomicReference&amp;lt;&amp;gt;(&amp;quot;&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 配置流式输出选项
+        StreamOptions streamOptions = StreamOptions.builder()
+                // 监听推理过程和工具结果事件
+                .eventTypes(EventType.REASONING, EventType.TOOL_RESULT)
+                // 增量模式：只显示新增内容
+                .incremental(true)
+                // 不包含最终的推理结果文本（已在思考中显示）
+                .includeReasoningResult(false)
+                .build();&lt;/p&gt;
+&lt;p&gt;try {
+            // 使用流式调用，实时显示响应
+            agent.stream(userMsg, streamOptions)
+                    .doOnNext(event -&amp;gt; {
+                        Msg msg = event.getMessage();
+                        for (ContentBlock block : msg.getContent()) {
+                            if (block instanceof ThinkingBlock) {
+                                // 显示思考过程
+                                printStreamContent(
+                                        ((ThinkingBlock) block).getThinking(),
+                                        lastThinkingContent,
+                                        hasPrintedThinkingHeader,
+                                        &amp;quot;&amp;gt; 思考: &amp;quot;,
+                                        null);
+                            } else if (block instanceof TextBlock) {
+                                // 显示回复文本
+                                printStreamContent(
+                                        ((TextBlock) block).getText(),
+                                        lastTextContent,
+                                        hasPrintedTextHeader,
+                                        &amp;quot;回答: &amp;quot;,
+                                        () -&amp;gt; {
+                                            // 在思考和回答之间添加分隔
+                                            if (hasPrintedThinkingHeader.get()
+                                                    &amp;amp;&amp;amp; !hasPrintedTextSeparator.get()) {
+                                                System.out.print(&amp;quot;\n\n&amp;quot;);
+                                                hasPrintedTextSeparator.set(true);
+                                            }
+                                        });
+                            }
+                        }
+                    })
+                    .blockLast(); // 等待流式输出完成&lt;/p&gt;
+&lt;p&gt;} catch (Exception e) {
+            // 流式调用失败时的降级处理
+            System.err.println(&amp;quot;\n[警告] 流式输出失败，尝试普通调用...&amp;quot;);
+            System.err.println(&amp;quot;       原因：&amp;quot; + e.getMessage());&lt;/p&gt;
+&lt;p&gt;try {
+                // 降级为普通调用
+                Msg response = agent.call(userMsg).block();
+                if (response != null) {
+                    printNonStreamResponse(response);
+                }
+            } catch (Exception ex) {
+                System.err.println(&amp;quot;[错误] 调用失败：&amp;quot; + ex.getMessage());
+            }
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 打印非流式响应。
+     *
+     * @param response 响应消息
+     */
+    private static void printNonStreamResponse(Msg response) {
+        // 提取思考内容
+        String thinking = response.getContent().stream()
+                .filter(block -&amp;gt; block instanceof ThinkingBlock)
+                .map(block -&amp;gt; ((ThinkingBlock) block).getThinking())
+                .collect(Collectors.joining(&amp;quot;\n&amp;quot;));&lt;/p&gt;
+&lt;p&gt;// 提取文本内容
+        String text = response.getContent().stream()
+                .filter(block -&amp;gt; block instanceof TextBlock)
+                .map(block -&amp;gt; ((TextBlock) block).getText())
+                .collect(Collectors.joining(&amp;quot;\n&amp;quot;));&lt;/p&gt;
+&lt;p&gt;boolean hasContent = false;
+        if (!thinking.isEmpty()) {
+            System.out.print(&amp;quot;&amp;gt; 思考: &amp;quot; + thinking);
+            hasContent = true;
+        }
+        if (!text.isEmpty()) {
+            if (hasContent) {
+                System.out.print(&amp;quot;\n\n&amp;quot;);
+            }
+            System.out.print(&amp;quot;回答: &amp;quot; + text);
+        }
+        if (!hasContent) {
+            System.out.print(&amp;quot;[无响应]&amp;quot;);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 打印流式内容（增量模式）。
+     *
+     * @param content          当前内容
+     * @param lastContentRef   上次内容引用
+     * @param hasPrintedHeaderRef 是否已打印标题引用
+     * @param header           标题前缀
+     * @param prePrintAction   打印前的操作
+     */
+    private static void printStreamContent(
+            String content,
+            AtomicReference&amp;lt;String&amp;gt; lastContentRef,
+            AtomicBoolean hasPrintedHeaderRef,
+            String header,
+            Runnable prePrintAction) {
+        String lastContent = lastContentRef.get();
+        String toPrint;&lt;/p&gt;
+&lt;p&gt;// 检测是增量模式还是累积模式
+        if (content.startsWith(lastContent)) {
+            // 累积模式：只打印新增部分
+            toPrint = content.substring(lastContent.length());
+            lastContentRef.set(content);
+        } else {
+            // 增量模式：直接打印
+            toPrint = content;
+            lastContentRef.set(lastContent + content);
+        }&lt;/p&gt;
+&lt;p&gt;if (!toPrint.isEmpty()) {
+            // 执行打印前操作（如添加分隔）
+            if (prePrintAction != null) {
+                prePrintAction.run();
+            }&lt;/p&gt;
+&lt;p&gt;// 打印标题（仅第一次）
+            if (!hasPrintedHeaderRef.get()) {
+                System.out.print(header);
+                hasPrintedHeaderRef.set(true);
+            }&lt;/p&gt;
+&lt;p&gt;// 打印内容并刷新输出缓冲
+            System.out.print(toPrint);
+            System.out.flush();
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 脱敏显示 API Key（显示首尾各 4 位，中间用 *** 替代）。
+     *
+     * @param apiKey 原始 API Key
+     * @return 脱敏后的字符串
+     */
+    private static String maskApiKey(String apiKey) {
+        if (apiKey == null || apiKey.length() &amp;lt;= 8) {
+            return &amp;quot;***&amp;quot;;
+        }
+        return apiKey.substring(0, 4) + &amp;quot;****&amp;quot; + apiKey.substring(apiKey.length() - 4);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h3&gt;2.5.6 运行方式&lt;/h3&gt;
+&lt;p&gt;**1. 编译项目**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;cd chapter02-quickstart
+mvn clean compile
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**2. 设置 API Key**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# Linux / macOS
+export DASHSCOPE_API_KEY=your-actual-api-key
+&lt;h1&gt;Windows PowerShell&lt;/h1&gt;
+$env:DASHSCOPE_API_KEY=&amp;quot;your-actual-api-key&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**3. 运行程序**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;mvn exec:java -Dexec.mainClass=&amp;quot;io.agentscope.tutorial.chapter02.App&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**4. 预期输出**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;╔════════════════════════════════════════════════════════════╗
+║        AgentScope Java - 第二章：快速开始                  ║
+║        你的第一个 AI Agent                                 ║
+╚════════════════════════════════════════════════════════════╝
+&lt;p&gt;[INFO] API Key 已配置（已脱敏显示）
+       sk-****abcd&lt;/p&gt;
+&lt;p&gt;[INFO] Agent 创建成功！&lt;/p&gt;
+&lt;p&gt;=== 对话开始 ===
+输入 'exit' 或 'quit' 退出对话&lt;/p&gt;
+&lt;p&gt;你&amp;gt; 你好，请介绍一下你自己
+Agent&amp;gt; &amp;gt; 思考: 这个问题要求我介绍自己，我需要说明我是基于通义千问的AI助手...
+回答: 你好！我是基于通义千问大模型的AI助手...&lt;/p&gt;
+&lt;p&gt;你&amp;gt; exit
+再见！
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;2.6 本章小结&lt;/h2&gt;
+&lt;p&gt;本章学习了以下内容：&lt;/p&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;知识点&lt;/th&gt;&lt;th&gt;说明&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;Maven 依赖&lt;/td&gt;&lt;td&gt;通过 &lt;code&gt;agentscope-core&lt;/code&gt; 引入框架核心能力&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;ReActAgent&lt;/td&gt;&lt;td&gt;基于 ReAct 范式的 Agent 实现&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;模型配置&lt;/td&gt;&lt;td&gt;以 DashScope 为例，配置模型客户端&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;执行方法&lt;/td&gt;&lt;td&gt;&lt;code&gt;call()&lt;/code&gt;（同步）和 &lt;code&gt;stream()&lt;/code&gt;（流式）两种调用方式&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;完整案例&lt;/td&gt;&lt;td&gt;包含配置类、Agent 类和运行入口的完整项目&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;h3&gt;常见问题&lt;/h3&gt;
+&lt;p&gt;**Q: 为什么我的 Agent 没有响应？**
+&lt;ul&gt;&lt;li&gt;检查 API Key 是否正确配置&lt;/li&gt;
+&lt;li&gt;确认网络可以访问阿里云百炼服务&lt;/li&gt;
+&lt;li&gt;查看日志是否有错误信息&lt;/li&gt;
+&lt;/ul&gt;
+**Q: 如何实现流式输出？**
+&lt;ul&gt;&lt;li&gt;使用 &lt;code&gt;agent.stream()&lt;/code&gt; 方法，配合 &lt;code&gt;StreamOptions&lt;/code&gt; 配置&lt;/li&gt;
+&lt;li&gt;需要模型服务端支持流式输出&lt;/li&gt;
+&lt;/ul&gt;
+**Q: 如何保存对话历史？**
+&lt;ul&gt;&lt;li&gt;当前使用 &lt;code&gt;InMemoryMemory&lt;/code&gt;，程序结束后会丢失&lt;/li&gt;
+&lt;li&gt;如需持久化，可参考第三章「消息与会话管理」&lt;/li&gt;
+&lt;/ul&gt;
+---&lt;/p&gt;
+&lt;h2&gt;下一步&lt;/h2&gt;
+&lt;ul&gt;&lt;li&gt;第三章：消息与会话管理 - 学习消息格式、会话管理和消息格式化器&lt;/li&gt;
+&lt;li&gt;第四章：ReAct Agent 详解 - 深入了解 Agent 的配置和生命周期&lt;/li&gt;
+&lt;li&gt;第五章：工具系统 - 为 Agent 添加工具调用能力&lt;/li&gt;&lt;/ul&gt;
+</body>
+</html>

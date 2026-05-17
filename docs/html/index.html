@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentScope Java 教程示例工程</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        h3 { color: #7f8c8d; }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+        }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+        table {
+            border-collapse: collapse;
+            margin: 20px 0;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th { background: #3498db; color: white; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        ul { padding-left: 20px; }
+        li { margin: 5px 0; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            color: #666;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+&lt;h1&gt;AgentScope Java 教程示例工程&lt;/h1&gt;
+&lt;p&gt;&gt; 每个章节对应一个独立可运行的 Spring Boot 项目&lt;/p&gt;
+&lt;h2&gt;技术栈标准&lt;/h2&gt;
+&lt;ul&gt;&lt;li&gt;**Java**: 21&lt;/li&gt;
+&lt;li&gt;**Spring Boot**: 3.x&lt;/li&gt;
+&lt;li&gt;**依赖库**: Lombok, Apache Commons Lang3, Jackson&lt;/li&gt;
+&lt;li&gt;**构建工具**: Maven&lt;/li&gt;
+&lt;li&gt;**数据库**: MySQL 8 (Docker), H2 (开发模式)&lt;/li&gt;
+&lt;li&gt;**缓存**: Redis (Docker)&lt;/li&gt;
+&lt;li&gt;**向量数据库**: Qdrant (Docker, RAG 专用)&lt;/li&gt;
+&lt;li&gt;**消息队列**: RocketMQ (Docker, A2A 章节可选)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;目录结构&lt;/h2&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;tutorial/
+├── docker-compose.yml          # 公共 Docker 服务
+├── chapter01-overview/          # 第一章：概述
+├── chapter02-quickstart/        # 第二章：快速开始
+├── chapter03-message-session/   # 第三章：消息与会话管理
+├── chapter04-react-agent/      # 第四章：ReAct Agent 详解
+├── chapter05-tools/            # 第五章：工具系统
+├── chapter06-model-integration/# 第六章：模型集成
+├── chapter07-memory/           # 第七章：记忆系统
+├── chapter08-multi-agent/      # 第八章：多代理架构模式
+├── chapter09-a2a-protocol/     # 第九章：代理间通信协议
+├── chapter10-rag/              # 第十章：RAG 检索增强生成
+├── chapter11-skills/           # 第十一章：技能系统
+├── chapter12-plan/             # 第十二章：计划与任务分解
+├── chapter13-hook/             # 第十三章：Hook 钩子系统
+├── chapter14-hitl/             # 第十四章：人类在环
+├── chapter15-harness/          # 第十五章：Harness 安全执行环境
+├── chapter16-springboot/       # 第十六章：Spring Boot 集成
+├── chapter17-deployment/       # 第十七章：部署与生产环境
+├── chapter18-other-frameworks/ # 第十八章：其他框架集成
+└── chapter19-comprehensive/    # 第十九章：综合实战案例
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;第十七章：部署与生产环境 (chapter17-deployment)&lt;/h2&gt;
+&lt;p&gt;生产环境完整部署示例，包含：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 进入章节目录
+cd chapter17-deployment
+&lt;h1&gt;Docker 部署&lt;/h1&gt;
+docker build -t agentscope/chapter17-deployment:1.0.0 .
+docker-compose up -d
+&lt;h1&gt;Kubernetes 部署&lt;/h1&gt;
+kubectl apply -f k8s-common.yaml
+kubectl apply -f k8s-deployment.yaml
+kubectl apply -f k8s-hpa.yaml
+&lt;h1&gt;Helm 部署&lt;/h1&gt;
+helm install agentscope ./helm/agentscope -n agentscope --create-namespace
+&lt;h1&gt;访问服务&lt;/h1&gt;
+curl http://localhost:8080/actuator/health
+curl http://localhost:3000/grafana  # Grafana 监控
+curl http://localhost:9090/prometheus # Prometheus
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**包含内容：**
+&lt;ul&gt;&lt;li&gt;多阶段构建 Dockerfile (JRE 优化)&lt;/li&gt;
+&lt;li&gt;docker-compose.yml (MySQL + Redis + Prometheus + Grafana + OTel Collector + Jaeger)&lt;/li&gt;
+&lt;li&gt;Kubernetes 完整配置 (Deployment, Service, ConfigMap, Secret, HPA, PDB, Ingress, NetworkPolicy)&lt;/li&gt;
+&lt;li&gt;Helm Chart 完整模板&lt;/li&gt;
+&lt;li&gt;生产级配置 (优雅关闭、健康检查、监控指标)&lt;/li&gt;
+&lt;/ul&gt;
+---&lt;/p&gt;
+&lt;h2&gt;Docker 服务规划&lt;/h2&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;服务&lt;/th&gt;&lt;th&gt;端口&lt;/th&gt;&lt;th&gt;用途&lt;/th&gt;&lt;th&gt;使用章节&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;MySQL&lt;/td&gt;&lt;td&gt;3306&lt;/td&gt;&lt;td&gt;关系型数据库&lt;/td&gt;&lt;td&gt;大部分章节&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Redis&lt;/td&gt;&lt;td&gt;6379&lt;/td&gt;&lt;td&gt;缓存/Session&lt;/td&gt;&lt;td&gt;7, 11, 16&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Qdrant&lt;/td&gt;&lt;td&gt;6333&lt;/td&gt;&lt;td&gt;向量数据库&lt;/td&gt;&lt;td&gt;10&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Nacos&lt;/td&gt;&lt;td&gt;8848&lt;/td&gt;&lt;td&gt;配置中心&lt;/td&gt;&lt;td&gt;9, 16&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;RocketMQ&lt;/td&gt;&lt;td&gt;9876/10911&lt;/td&gt;&lt;td&gt;消息队列&lt;/td&gt;&lt;td&gt;9&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;h2&gt;运行方式&lt;/h2&gt;
+&lt;p&gt;每个章节示例工程均支持：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 开发模式 (使用 H2)
+./mvnw spring-boot:run
+&lt;h1&gt;生产模式 (使用 MySQL)&lt;/h1&gt;
+docker-compose up -d  # 启动数据库
+./mvnw spring-boot:run -Dspring-profiles=prod
+&lt;/code&gt;&lt;/pre&gt;
+</body>
+</html>

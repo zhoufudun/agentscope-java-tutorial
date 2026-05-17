@@ -1,0 +1,2018 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第十二章：计划与任务分解</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        h3 { color: #7f8c8d; }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+        }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+        table {
+            border-collapse: collapse;
+            margin: 20px 0;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th { background: #3498db; color: white; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        ul { padding-left: 20px; }
+        li { margin: 5px 0; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            color: #666;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+&lt;h1&gt;第十二章：计划与任务分解&lt;/h1&gt;
+&lt;p&gt;在复杂任务的处理过程中，Agent 需要将一个笼统的目标分解为可执行的子任务，并按照计划逐步推进。AgentScope Java 提供了完整的 **计划系统（Plan System）**，通过 &lt;code&gt;PlanNotebook&lt;/code&gt; 实现任务的分解、执行与状态追踪。本章将深入解析这一核心功能。&lt;/p&gt;
+&lt;h2&gt;12.1 计划系统架构&lt;/h2&gt;
+&lt;h3&gt;12.1.1 核心组件&lt;/h3&gt;
+&lt;p&gt;AgentScope Java 的计划系统由以下几个核心组件构成：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;┌─────────────────────────────────────────────────────────────────┐
+│                        PlanNotebook                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐            │
+│  │    Plan     │  │  SubTask[]  │  │ PlanStorage │            │
+│  │  (当前计划)  │  │  (子任务列表) │  │  (存储后端)   │            │
+│  └─────────────┘  └─────────────┘  └─────────────┘            │
+│         │                 │                 │                   │
+│         ▼                 ▼                 ▼                   │
+│  ┌─────────────────────────────────────────────────┐          │
+│  │              PlanToHint (提示生成)                │          │
+│  └─────────────────────────────────────────────────┘          │
+└─────────────────────────────────────────────────────────────────┘
+&lt;/code&gt;&lt;/pre&gt;
+&lt;ul&gt;&lt;li&gt;**PlanNotebook**：计划笔记本，负责管理当前计划、子任务状态、存储和提示生成&lt;/li&gt;
+&lt;li&gt;**Plan**：计划实体，包含名称、描述、子任务列表和执行状态&lt;/li&gt;
+&lt;li&gt;**SubTask**：子任务实体，包含名称、描述、预期结果、实际结果和状态&lt;/li&gt;
+&lt;li&gt;**PlanStorage**：计划存储接口，支持内存、数据库等多种存储后端&lt;/li&gt;
+&lt;li&gt;**PlanToHint**：计划到提示的转换器，根据计划状态生成上下文引导&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;12.1.2 计划状态模型&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;PlanState (计划状态):
+├── TODO         - 计划已创建，未开始执行
+├── IN_PROGRESS  - 计划正在执行中
+├── DONE         - 计划已完成
+└── ABANDONED    - 计划被放弃
+&lt;p&gt;SubTaskState (子任务状态):
+├── TODO         - 子任务待执行
+├── IN_PROGRESS  - 子任务执行中
+├── DONE         - 子任务已完成
+└── ABANDONED    - 子任务被放弃
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;12.1.3 工具函数体系&lt;/h3&gt;
+&lt;p&gt;PlanNotebook 提供了 10 个内置工具函数，Agent 可通过调用这些工具来管理计划：&lt;/p&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;工具函数&lt;/th&gt;&lt;th&gt;功能描述&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;create_plan&lt;/code&gt;&lt;/td&gt;&lt;td&gt;创建新计划&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;update_plan_info&lt;/code&gt;&lt;/td&gt;&lt;td&gt;更新计划信息（名称、描述、预期结果）&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;revise_current_plan&lt;/code&gt;&lt;/td&gt;&lt;td&gt;修订计划（增/删/改子任务）&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;update_subtask_state&lt;/code&gt;&lt;/td&gt;&lt;td&gt;更新子任务状态&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;finish_subtask&lt;/code&gt;&lt;/td&gt;&lt;td&gt;完成子任务并记录结果&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;view_subtasks&lt;/code&gt;&lt;/td&gt;&lt;td&gt;查看子任务详情&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;get_subtask_count&lt;/code&gt;&lt;/td&gt;&lt;td&gt;获取子任务数量统计&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;finish_plan&lt;/code&gt;&lt;/td&gt;&lt;td&gt;完成或放弃计划&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;view_historical_plans&lt;/code&gt;&lt;/td&gt;&lt;td&gt;查看历史计划&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;recover_historical_plan&lt;/code&gt;&lt;/td&gt;&lt;td&gt;恢复历史计划&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;h3&gt;12.1.4 自动提示注入机制&lt;/h3&gt;
+&lt;p&gt;PlanNotebook 通过 Hook 机制在每次推理前自动注入上下文提示，引导 Agent 正确执行计划。提示内容根据计划状态动态生成：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 配置 PlanNotebook，启用自动提示注入
+PlanNotebook planNotebook = PlanNotebook.builder()
+        .planToHint(new DefaultPlanToHint())  // 默认提示生成器
+        .storage(new InMemoryPlanStorage())   // 内存存储
+        .needUserConfirm(true)                 // 需要用户确认
+        .maxSubtasks(10)                       // 最大子任务数
+        .build();
+&lt;p&gt;// 将 PlanNotebook 关联到 Agent
+ReActAgent agent = ReActAgent.builder()
+        .name(&amp;quot;Assistant&amp;quot;)
+        .model(model)
+        .toolkit(toolkit)
+        .planNotebook(planNotebook)
+        .build();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h2&gt;12.2 任务分解策略&lt;/h2&gt;
+&lt;h3&gt;12.2.1 任务分解原则&lt;/h3&gt;
+&lt;p&gt;有效的任务分解应遵循以下原则：&lt;/p&gt;
+&lt;p&gt;1. **原子性**：每个子任务应是一个不可分割的最小执行单元
+2. **可验证性**：子任务应有明确的预期结果，便于验证完成状态
+3. **顺序性**：子任务之间应存在逻辑上的先后依赖关系
+4. **独立性**：子任务应尽量减少相互依赖，降低执行复杂度&lt;/p&gt;
+&lt;h3&gt;12.2.2 创建计划的最佳实践&lt;/h3&gt;
+&lt;p&gt;在创建计划时，应提供清晰的信息：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 创建计划的示例
+String planName = &amp;quot;构建电商网站&amp;quot;;
+String description = &amp;quot;使用 Spring Boot + Vue 构建完整的电商平台，包含用户认证、商品管理、订单处理、支付集成等功能，目标用户为中小型商家&amp;quot;;
+String expectedOutcome = &amp;quot;可部署上线的电商网站，支持商品浏览、购物车、订单生成、支付跳转&amp;quot;;
+&lt;p&gt;List&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; subtasks = List.of(
+        Map.of(
+                &amp;quot;name&amp;quot;, &amp;quot;项目初始化&amp;quot;,
+                &amp;quot;description&amp;quot;, &amp;quot;创建 Spring Boot 项目结构，配置 Maven 依赖、数据库连接、JPA 实体&amp;quot;,
+                &amp;quot;expected_outcome&amp;quot;, &amp;quot;项目可运行，数据库连接成功&amp;quot;
+        ),
+        Map.of(
+                &amp;quot;name&amp;quot;, &amp;quot;用户认证模块&amp;quot;,
+                &amp;quot;description&amp;quot;, &amp;quot;实现用户注册、登录、JWT Token 认证、权限控制&amp;quot;,
+                &amp;quot;expected_outcome&amp;quot;, &amp;quot;用户可完成注册登录，获取有效 Token&amp;quot;
+        ),
+        Map.of(
+                &amp;quot;name&amp;quot;, &amp;quot;商品管理模块&amp;quot;,
+                &amp;quot;description&amp;quot;, &amp;quot;实现商品 CRUD、分类管理、搜索过滤、库存管理&amp;quot;,
+                &amp;quot;expected_outcome&amp;quot;, &amp;quot;支持商品的增删改查，搜索响应时间 &amp;lt; 500ms&amp;quot;
+        )
+);
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;12.2.3 子任务状态转换规则&lt;/h3&gt;
+&lt;p&gt;系统对子任务状态转换有严格的约束：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;TODO ──────► IN_PROGRESS ──────► DONE
+   │                │
+   │                ▼
+   └──────────► ABANDONED
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**状态转换约束**：
+&lt;ul&gt;&lt;li&gt;只有当前子任务（index 最小的非完成子任务）才能标记为 &lt;code&gt;IN_PROGRESS&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;标记子任务为完成时，系统会自动激活下一个待执行子任务&lt;/li&gt;
+&lt;li&gt;只能将状态更新为 &lt;code&gt;TODO&lt;/code&gt;、&lt;code&gt;IN_PROGRESS&lt;/code&gt; 或 &lt;code&gt;ABANDONED&lt;/code&gt;，&lt;code&gt;DONE&lt;/code&gt; 状态必须通过 &lt;code&gt;finish_subtask&lt;/code&gt; 设置&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;12.2.4 计划修订策略&lt;/h3&gt;&lt;/p&gt;
+&lt;p&gt;在计划执行过程中，可能需要修订计划：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 添加子任务
+planNotebook.reviseCurrentPlan(2, &amp;quot;add&amp;quot;,
+        Map.of(&amp;quot;name&amp;quot;, &amp;quot;新子任务&amp;quot;, &amp;quot;description&amp;quot;, &amp;quot;描述&amp;quot;, &amp;quot;expected_outcome&amp;quot;, &amp;quot;结果&amp;quot;));
+&lt;p&gt;// 修改子任务
+planNotebook.reviseCurrentPlan(1, &amp;quot;revise&amp;quot;,
+        Map.of(&amp;quot;name&amp;quot;, &amp;quot;修改后的名称&amp;quot;, &amp;quot;description&amp;quot;, &amp;quot;新描述&amp;quot;, &amp;quot;expected_outcome&amp;quot;, &amp;quot;新结果&amp;quot;));&lt;/p&gt;
+&lt;p&gt;// 删除子任务
+planNotebook.reviseCurrentPlan(1, &amp;quot;delete&amp;quot;, null);
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h2&gt;12.3 计划执行与监控&lt;/h2&gt;
+&lt;h3&gt;12.3.1 执行流程&lt;/h3&gt;
+&lt;p&gt;计划执行的标准流程如下：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;1. 创建计划 (create_plan)
+         │
+         ▼
+2. 用户确认后开始执行
+         │
+         ▼
+3. 标记第一个子任务为 IN_PROGRESS (update_subtask_state)
+         │
+         ▼
+4. 执行子任务 → 调用工具完成实际操作
+         │
+         ▼
+5. 完成子任务 (finish_subtask) → 记录具体结果
+         │
+         ▼
+6. 系统自动激活下一个子任务
+         │
+         ▼
+7. 重复 4-6 直至所有子任务完成
+         │
+         ▼
+8. 完成计划 (finish_plan) → 总结整个过程
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;12.3.2 实时状态监控&lt;/h3&gt;
+&lt;p&gt;通过 Hook 机制可以实时监控计划状态变化：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 注册计划变更监听器
+planNotebook.addChangeHook(&amp;quot;monitor&amp;quot;, (notebook, plan) -&amp;gt; {
+    if (plan != null) {
+        System.out.println(&amp;quot;计划变更: &amp;quot; + plan.getName());
+        System.out.println(&amp;quot;子任务数: &amp;quot; + plan.getSubtasks().size());
+        // 触发前端更新、发送通知等操作
+    }
+});
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;12.3.3 历史计划管理&lt;/h3&gt;
+&lt;p&gt;完成或放弃的计划会自动保存到历史记录：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 查看历史计划
+planNotebook.viewHistoricalPlans()
+        .subscribe(plans -&amp;gt; {
+            for (Plan p : plans) {
+                System.out.println(p.getName() + &amp;quot; - &amp;quot; + p.getState());
+            }
+        });
+&lt;p&gt;// 恢复历史计划
+planNotebook.recoverHistoricalPlan(planId);
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;12.3.4 计划与存储&lt;/h3&gt;
+&lt;p&gt;PlanNotebook 支持多种存储后端实现：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 内存存储（默认）
+PlanStorage memoryStorage = new InMemoryPlanStorage();
+&lt;p&gt;// 自定义数据库存储
+PlanStorage dbStorage = new JdbcPlanStorage(dataSource);
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**实现自定义存储示例**：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;/**
+ * H2 数据库计划存储实现
+ */
+public class JdbcPlanStorage implements PlanStorage {
+    private final DataSource dataSource;
+&lt;p&gt;@Override
+    public Mono&amp;lt;Void&amp;gt; addPlan(Plan plan) {
+        return Mono.fromRunnable(() -&amp;gt; {
+            String sql = &amp;quot;INSERT INTO plans (id, name, data, created_at) VALUES (?, ?, ?, ?)&amp;quot;;
+            try (var conn = dataSource.getConnection();
+                 var stmt = conn.prepareStatement(sql)) {
+                stmt.setString(1, plan.getId());
+                stmt.setString(2, plan.getName());
+                stmt.setString(3, new ObjectMapper().writeValueAsString(plan));
+                stmt.setString(4, plan.getCreatedAt());
+                stmt.executeUpdate();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+    // ... 其他方法实现
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h2&gt;12.4 【案例】自动化任务规划系统&lt;/h2&gt;
+&lt;p&gt;本案例实现一个完整的任务规划系统，包含：
+&lt;ul&gt;&lt;li&gt;Spring Boot 3 + Java 21 Web 服务&lt;/li&gt;
+&lt;li&gt;H2 内存数据库存储计划数据&lt;/li&gt;
+&lt;li&gt;SSE 实时推送计划状态&lt;/li&gt;
+&lt;li&gt;交互式计划管理与执行&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;12.4.1 项目结构&lt;/h3&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;src/main/java/io/agentscope/tutorial/chapter12/
+├── Chapter12Application.java           # Spring Boot 启动类
+├── config/
+│   └── AppConfig.java                 # 应用配置
+├── controller/
+│   ├── ChatController.java            # 对话控制器
+│   └── PlanController.java            # 计划管理控制器
+├── dto/
+│   ├── ChatRequest.java               # 聊天请求 DTO
+│   ├── PlanRequest.java               # 计划请求 DTO
+│   └── SubTaskRequest.java            # 子任务请求 DTO
+├── entity/
+│   └── PlanEntity.java                # JPA 实体（持久化计划）
+├── repository/
+│   └── PlanRepository.java            # JPA 仓库
+├── service/
+│   ├── PlanDbService.java             # 计划数据库服务
+│   └── AgentService.java              # Agent 服务
+└── hook/
+    └── PlanChangeHook.java           # 计划变更监听 Hook
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;12.4.2 Maven 依赖 (pom.xml)&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot;?&amp;gt;
+&amp;lt;project xmlns=&amp;quot;http://maven.apache.org/POM/4.0.0&amp;quot;
+         xmlns:xsi=&amp;quot;http://www.w3.org/2001/XMLSchema-instance&amp;quot;
+         xsi:schemaLocation=&amp;quot;http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd&amp;quot;&amp;gt;
+    &amp;lt;modelVersion&amp;gt;4.0.0&amp;lt;/modelVersion&amp;gt;
+&lt;p&gt;&amp;lt;parent&amp;gt;
+        &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+        &amp;lt;artifactId&amp;gt;agentscope-parent&amp;lt;/artifactId&amp;gt;
+        &amp;lt;version&amp;gt;${revision}&amp;lt;/version&amp;gt;
+    &amp;lt;/parent&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;artifactId&amp;gt;chapter12-plan-tutorial&amp;lt;/artifactId&amp;gt;
+    &amp;lt;packaging&amp;gt;jar&amp;lt;/packaging&amp;gt;
+    &amp;lt;name&amp;gt;Chapter 12 - Plan and Task Decomposition Tutorial&amp;lt;/name&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;dependencies&amp;gt;
+        &amp;lt;!-- Spring Boot Web --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-starter-web&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- Spring Data JPA + H2 --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-starter-data-jpa&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;com.h2database&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;h2&amp;lt;/artifactId&amp;gt;
+            &amp;lt;scope&amp;gt;runtime&amp;lt;/scope&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- AgentScope Core --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-core&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;${revision}&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- Reactor for reactive streams --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;reactor-core&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;reactor-core&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- Jackson for JSON --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;com.fasterxml.jackson.core&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;jackson-databind&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+    &amp;lt;/dependencies&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;build&amp;gt;
+        &amp;lt;plugins&amp;gt;
+            &amp;lt;plugin&amp;gt;
+                &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+                &amp;lt;artifactId&amp;gt;spring-boot-maven-plugin&amp;lt;/artifactId&amp;gt;
+            &amp;lt;/plugin&amp;gt;
+        &amp;lt;/plugins&amp;gt;
+    &amp;lt;/build&amp;gt;
+&amp;lt;/project&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;12.4.3 应用配置文件 (application.yml)&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# 第十二章：计划与任务分解 - 配置文件
+&lt;p&gt;server:
+  port: 8080&lt;/p&gt;
+&lt;p&gt;spring:
+  application:
+    name: chapter12-plan-tutorial&lt;/p&gt;
+&lt;p&gt;# H2 数据库配置
+  datasource:
+    url: jdbc:h2:mem:plan_db           # 内存数据库
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:&lt;/p&gt;
+&lt;p&gt;# JPA 配置
+  jpa:
+    hibernate:
+      ddl-auto: update                  # 自动创建/更新表结构
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect&lt;/p&gt;
+&lt;p&gt;# H2 Console（开发时可选）
+  h2:
+    console:
+      enabled: true
+      path: /h2-console&lt;/p&gt;
+&lt;h1&gt;AgentScope 配置&lt;/h1&gt;
+agentscope:
+  model:
+    api-key: ${DASHSCOPE_API_KEY:your_api_key_here}
+    model-name: qwen-plus
+&lt;p&gt;logging:
+  level:
+    io.agentscope: DEBUG
+    io.agentscope.tutorial.chapter12: INFO
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;12.4.4 Spring Boot 启动类&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter12;
+&lt;p&gt;import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;&lt;/p&gt;
+&lt;p&gt;/**
+ * 第十二章：计划与任务分解 - Spring Boot 启动类
+ *
+ * 本应用展示如何使用 AgentScope Java 实现自动化任务规划系统。
+ *
+ * &amp;lt;p&amp;gt;主要功能：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;与 Agent 进行多轮对话，支持复杂任务的计划创建与执行&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;实时监控计划状态变化，通过 SSE 推送给前端&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;使用 H2 数据库持久化存储计划和历史记录&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;提供 REST API 管理计划（创建、修订、完成）&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * &amp;lt;p&amp;gt;访问地址：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;主页: http://localhost:8080&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;H2 Console: http://localhost:8080/h2-console&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;API 文档: http://localhost:8080/swagger-ui.html (需添加 springdoc 依赖)&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * @author AgentScope Tutorial
+ */
+@SpringBootApplication
+public class Chapter12Application {&lt;/p&gt;
+&lt;p&gt;public static void main(String[] args) {
+        // 打印启动Banner
+        printBanner();
+        SpringApplication.run(Chapter12Application.class, args);
+        printUsage();
+    }&lt;/p&gt;
+&lt;p&gt;private static void printBanner() {
+        System.out.println();
+        System.out.println(&amp;quot;╔═══════════════════════════════════════════════════════════╗&amp;quot;);
+        System.out.println(&amp;quot;║     AgentScope Java - 第十二章：计划与任务分解           ║&amp;quot;);
+        System.out.println(&amp;quot;║     Chapter 12: Plan and Task Decomposition              ║&amp;quot;);
+        System.out.println(&amp;quot;╚═══════════════════════════════════════════════════════════╝&amp;quot;);
+        System.out.println();
+    }&lt;/p&gt;
+&lt;p&gt;private static void printUsage() {
+        System.out.println(&amp;quot;┌──────────────────────────────────────────────────────────┐&amp;quot;);
+        System.out.println(&amp;quot;│                    服务已启动成功                         │&amp;quot;);
+        System.out.println(&amp;quot;└──────────────────────────────────────────────────────────┘&amp;quot;);
+        System.out.println();
+        System.out.println(&amp;quot;  访问地址:&amp;quot;);
+        System.out.println(&amp;quot;    • 首页:     http://localhost:8080&amp;quot;);
+        System.out.println(&amp;quot;    • H2 Console: http://localhost:8080/h2-console&amp;quot;);
+        System.out.println();
+        System.out.println(&amp;quot;  API 接口:&amp;quot;);
+        System.out.println(&amp;quot;    • POST /api/chat          - 与 Agent 对话 (SSE 流式)&amp;quot;);
+        System.out.println(&amp;quot;    • GET  /api/plan          - 获取当前计划&amp;quot;);
+        System.out.println(&amp;quot;    • POST /api/plan          - 创建新计划&amp;quot;);
+        System.out.println(&amp;quot;    • PUT  /api/plan          - 更新计划信息&amp;quot;);
+        System.out.println(&amp;quot;    • DELETE /api/plan/subtasks/{idx} - 删除子任务&amp;quot;);
+        System.out.println(&amp;quot;    • POST /api/plan/finish  - 完成计划&amp;quot;);
+        System.out.println();
+        System.out.println(&amp;quot;  环境变量:&amp;quot;);
+        System.out.println(&amp;quot;    • DASHSCOPE_API_KEY - 阿里云百炼 API Key&amp;quot;);
+        System.out.println();
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;12.4.5 JPA 实体类 (PlanEntity.java)&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter12.entity;
+&lt;p&gt;import jakarta.persistence.*;
+import java.time.LocalDateTime;&lt;/p&gt;
+&lt;p&gt;/**
+ * 计划实体类 - 对应数据库中的 plans 表
+ *
+ * &amp;lt;p&amp;gt;用于将 Plan 对象持久化到 H2 数据库中，支持历史计划的查询和恢复。
+ *
+ * &amp;lt;p&amp;gt;数据库表结构：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;id - UUID 主键&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;name - 计划名称&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;description - 计划描述&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;expected_outcome - 预期结果&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;actual_outcome - 实际完成结果&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;state - 计划状态 (TODO/IN_PROGRESS/DONE/ABANDONED)&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;subtasks_json - 子任务列表的 JSON 序列化&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;created_at - 创建时间&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;finished_at - 完成时间&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * @author AgentScope Tutorial
+ */
+@Entity
+@Table(name = &amp;quot;plans&amp;quot;)
+public class PlanEntity {&lt;/p&gt;
+&lt;p&gt;@Id
+    @Column(name = &amp;quot;id&amp;quot;, length = 36)
+    private String id;&lt;/p&gt;
+&lt;p&gt;@Column(name = &amp;quot;name&amp;quot;, nullable = false)
+    private String name;&lt;/p&gt;
+&lt;p&gt;@Column(name = &amp;quot;description&amp;quot;, length = 2000)
+    private String description;&lt;/p&gt;
+&lt;p&gt;@Column(name = &amp;quot;expected_outcome&amp;quot;, length = 1000)
+    private String expectedOutcome;&lt;/p&gt;
+&lt;p&gt;@Column(name = &amp;quot;actual_outcome&amp;quot;, length = 2000)
+    private String actualOutcome;&lt;/p&gt;
+&lt;p&gt;@Column(name = &amp;quot;state&amp;quot;, length = 20)
+    private String state;&lt;/p&gt;
+&lt;p&gt;@Column(name = &amp;quot;subtasks_json&amp;quot;, length = 10000)
+    private String subtasksJson;&lt;/p&gt;
+&lt;p&gt;@Column(name = &amp;quot;created_at&amp;quot;, nullable = false)
+    private LocalDateTime createdAt;&lt;/p&gt;
+&lt;p&gt;@Column(name = &amp;quot;finished_at&amp;quot;)
+    private LocalDateTime finishedAt;&lt;/p&gt;
+&lt;p&gt;// 构造函数
+    public PlanEntity() {
+        this.createdAt = LocalDateTime.now();
+    }&lt;/p&gt;
+&lt;p&gt;public PlanEntity(String id, String name) {
+        this();
+        this.id = id;
+        this.name = name;
+    }&lt;/p&gt;
+&lt;p&gt;// Getter 和 Setter
+    public String getId() {
+        return id;
+    }&lt;/p&gt;
+&lt;p&gt;public void setId(String id) {
+        this.id = id;
+    }&lt;/p&gt;
+&lt;p&gt;public String getName() {
+        return name;
+    }&lt;/p&gt;
+&lt;p&gt;public void setName(String name) {
+        this.name = name;
+    }&lt;/p&gt;
+&lt;p&gt;public String getDescription() {
+        return description;
+    }&lt;/p&gt;
+&lt;p&gt;public void setDescription(String description) {
+        this.description = description;
+    }&lt;/p&gt;
+&lt;p&gt;public String getExpectedOutcome() {
+        return expectedOutcome;
+    }&lt;/p&gt;
+&lt;p&gt;public void setExpectedOutcome(String expectedOutcome) {
+        this.expectedOutcome = expectedOutcome;
+    }&lt;/p&gt;
+&lt;p&gt;public String getActualOutcome() {
+        return actualOutcome;
+    }&lt;/p&gt;
+&lt;p&gt;public void setActualOutcome(String actualOutcome) {
+        this.actualOutcome = actualOutcome;
+    }&lt;/p&gt;
+&lt;p&gt;public String getState() {
+        return state;
+    }&lt;/p&gt;
+&lt;p&gt;public void setState(String state) {
+        this.state = state;
+    }&lt;/p&gt;
+&lt;p&gt;public String getSubtasksJson() {
+        return subtasksJson;
+    }&lt;/p&gt;
+&lt;p&gt;public void setSubtasksJson(String subtasksJson) {
+        this.subtasksJson = subtasksJson;
+    }&lt;/p&gt;
+&lt;p&gt;public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }&lt;/p&gt;
+&lt;p&gt;public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }&lt;/p&gt;
+&lt;p&gt;public LocalDateTime getFinishedAt() {
+        return finishedAt;
+    }&lt;/p&gt;
+&lt;p&gt;public void setFinishedAt(LocalDateTime finishedAt) {
+        this.finishedAt = finishedAt;
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public String toString() {
+        return &amp;quot;PlanEntity{&amp;quot; +
+                &amp;quot;id='&amp;quot; + id + '\'' +
+                &amp;quot;, name='&amp;quot; + name + '\'' +
+                &amp;quot;, state='&amp;quot; + state + '\'' +
+                &amp;quot;, createdAt=&amp;quot; + createdAt +
+                '}';
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;12.4.6 JPA 仓库接口 (PlanRepository.java)&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter12.repository;
+&lt;p&gt;import io.agentscope.tutorial.chapter12.entity.PlanEntity;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;&lt;/p&gt;
+&lt;p&gt;import java.util.List;&lt;/p&gt;
+&lt;p&gt;/**
+ * 计划数据仓库 - 提供计划的持久化操作
+ *
+ * &amp;lt;p&amp;gt;继承 Spring Data JPA 的 JpaRepository，提供常用的 CRUD 操作。
+ *
+ * @author AgentScope Tutorial
+ */
+@Repository
+public interface PlanRepository extends JpaRepository&amp;lt;PlanEntity, String&amp;gt; {&lt;/p&gt;
+&lt;p&gt;/**
+     * 根据状态查询计划列表
+     *
+     * @param state 计划状态
+     * @return 符合条件的计划列表
+     */
+    List&amp;lt;PlanEntity&amp;gt; findByState(String state);&lt;/p&gt;
+&lt;p&gt;/**
+     * 根据名称模糊查询计划
+     *
+     * @param namePattern 名称匹配模式
+     * @return 符合条件的计划列表
+     */
+    List&amp;lt;PlanEntity&amp;gt; findByNameContaining(String namePattern);&lt;/p&gt;
+&lt;p&gt;/**
+     * 查询所有计划，按创建时间倒序排列
+     *
+     * @return 所有计划列表
+     */
+    List&amp;lt;PlanEntity&amp;gt; findAllByOrderByCreatedAtDesc();&lt;/p&gt;
+&lt;p&gt;/**
+     * 删除指定时间之前创建的计划（清理历史）
+     *
+     * @param beforeTime 删除此时间之前的计划
+     * @return 删除的计划数量
+     */
+    long deleteByCreatedAtBefore(java.time.LocalDateTime beforeTime);
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;12.4.7 计划数据库服务 (PlanDbService.java)&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter12.service;
+&lt;p&gt;import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.agentscope.core.plan.model.Plan;
+import io.agentscope.core.plan.model.PlanState;
+import io.agentscope.core.plan.model.SubTask;
+import io.agentscope.core.plan.model.SubTaskState;
+import io.agentscope.core.plan.storage.PlanStorage;
+import io.agentscope.tutorial.chapter12.entity.PlanEntity;
+import io.agentscope.tutorial.chapter12.repository.PlanRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;&lt;/p&gt;
+&lt;p&gt;import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;&lt;/p&gt;
+&lt;p&gt;/**
+ * 计划数据库服务 - 实现基于 H2 数据库的计划存储
+ *
+ * &amp;lt;p&amp;gt;将 Plan 对象与 PlanEntity 互相转换，并提供持久化操作。
+ * 实现了 PlanStorage 接口，可直接用于 PlanNotebook。
+ *
+ * @author AgentScope Tutorial
+ */
+@Service
+public class PlanDbService implements PlanStorage {&lt;/p&gt;
+&lt;p&gt;private static final Logger log = LoggerFactory.getLogger(PlanDbService.class);&lt;/p&gt;
+&lt;p&gt;private final PlanRepository planRepository;
+    private final ObjectMapper objectMapper;&lt;/p&gt;
+&lt;p&gt;public PlanDbService(PlanRepository planRepository, ObjectMapper objectMapper) {
+        this.planRepository = planRepository;
+        this.objectMapper = objectMapper;
+        log.info(&amp;quot;PlanDbService initialized with H2 database storage&amp;quot;);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 添加计划到数据库
+     *
+     * @param plan 要保存的计划
+     * @return 保存完成的通知
+     */
+    @Override
+    public Mono&amp;lt;Void&amp;gt; addPlan(Plan plan) {
+        return Mono.fromRunnable(() -&amp;gt; {
+            try {
+                PlanEntity entity = toEntity(plan);
+                planRepository.save(entity);
+                log.info(&amp;quot;Plan saved to database: {} (id={})&amp;quot;, plan.getName(), plan.getId());
+            } catch (Exception e) {
+                log.error(&amp;quot;Failed to save plan to database&amp;quot;, e);
+                throw new RuntimeException(&amp;quot;Failed to save plan&amp;quot;, e);
+            }
+        });
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 根据 ID 获取计划
+     *
+     * @param planId 计划 ID
+     * @return 计划对象（如果不存在则返回空）
+     */
+    @Override
+    public Mono&amp;lt;Plan&amp;gt; getPlan(String planId) {
+        return Mono.fromCallable(() -&amp;gt; {
+            Optional&amp;lt;PlanEntity&amp;gt; entity = planRepository.findById(planId);
+            return entity.map(this::toPlan).orElse(null);
+        });
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取所有历史计划
+     *
+     * @return 计划列表
+     */
+    @Override
+    public Mono&amp;lt;List&amp;lt;Plan&amp;gt;&amp;gt; getPlans() {
+        return Mono.fromCallable(() -&amp;gt; {
+            List&amp;lt;PlanEntity&amp;gt; entities = planRepository.findAllByOrderByCreatedAtDesc();
+            List&amp;lt;Plan&amp;gt; plans = new ArrayList&amp;lt;&amp;gt;();
+            for (PlanEntity entity : entities) {
+                plans.add(toPlan(entity));
+            }
+            return plans;
+        });
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 实体转换方法 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 将 Plan 实体转换为 PlanEntity
+     */
+    private PlanEntity toEntity(Plan plan) {
+        PlanEntity entity = new PlanEntity();
+        entity.setId(plan.getId());
+        entity.setName(plan.getName());
+        entity.setDescription(plan.getDescription());
+        entity.setExpectedOutcome(plan.getExpectedOutcome());
+        entity.setActualOutcome(plan.getOutcome());
+        entity.setState(plan.getState().getValue());
+        entity.setCreatedAt(LocalDateTime.now());&lt;/p&gt;
+&lt;p&gt;// 序列化子任务为 JSON
+        if (plan.getSubtasks() != null) {
+            try {
+                List&amp;lt;SubTaskDto&amp;gt; dtos = new ArrayList&amp;lt;&amp;gt;();
+                for (SubTask subtask : plan.getSubtasks()) {
+                    SubTaskDto dto = new SubTaskDto();
+                    dto.name = subtask.getName();
+                    dto.description = subtask.getDescription();
+                    dto.expectedOutcome = subtask.getExpectedOutcome();
+                    dto.outcome = subtask.getOutcome();
+                    dto.state = subtask.getState().getValue();
+                    dto.createdAt = subtask.getCreatedAt();
+                    dto.finishedAt = subtask.getFinishedAt();
+                    dtos.add(dto);
+                }
+                entity.setSubtasksJson(objectMapper.writeValueAsString(dtos));
+            } catch (JsonProcessingException e) {
+                log.error(&amp;quot;Failed to serialize subtasks&amp;quot;, e);
+            }
+        }&lt;/p&gt;
+&lt;p&gt;// 设置完成时间
+        if (plan.getState() == PlanState.DONE || plan.getState() == PlanState.ABANDONED) {
+            entity.setFinishedAt(LocalDateTime.now());
+        }&lt;/p&gt;
+&lt;p&gt;return entity;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 将 PlanEntity 转换为 Plan
+     */
+    private Plan toPlan(PlanEntity entity) {
+        Plan plan = new Plan();
+        plan.setId(entity.getId());
+        plan.setName(entity.getName());
+        plan.setDescription(entity.getDescription());
+        plan.setExpectedOutcome(entity.getExpectedOutcome());
+        plan.setOutcome(entity.getActualOutcome());&lt;/p&gt;
+&lt;p&gt;// 解析状态
+        try {
+            plan.setState(PlanState.valueOf(entity.getState().toUpperCase()));
+        } catch (IllegalArgumentException e) {
+            plan.setState(PlanState.TODO);
+        }&lt;/p&gt;
+&lt;p&gt;// 解析子任务 JSON
+        if (entity.getSubtasksJson() != null &amp;amp;&amp;amp; !entity.getSubtasksJson().isEmpty()) {
+            try {
+                List&amp;lt;SubTaskDto&amp;gt; dtos = objectMapper.readValue(
+                        entity.getSubtasksJson(),
+                        new TypeReference&amp;lt;List&amp;lt;SubTaskDto&amp;gt;&amp;gt;() {}
+                );
+                List&amp;lt;SubTask&amp;gt; subtasks = new ArrayList&amp;lt;&amp;gt;();
+                for (SubTaskDto dto : dtos) {
+                    SubTask subtask = new SubTask(
+                            dto.name != null ? dto.name : &amp;quot;Unnamed&amp;quot;,
+                            dto.description != null ? dto.description : &amp;quot;&amp;quot;,
+                            dto.expectedOutcome != null ? dto.expectedOutcome : &amp;quot;&amp;quot;
+                    );
+                    if (dto.outcome != null) {
+                        subtask.setOutcome(dto.outcome);
+                    }
+                    if (dto.state != null) {
+                        try {
+                            subtask.setState(SubTaskState.valueOf(dto.state.toUpperCase()));
+                        } catch (IllegalArgumentException ignored) {
+                            subtask.setState(SubTaskState.TODO);
+                        }
+                    }
+                    subtask.setCreatedAt(dto.createdAt);
+                    subtask.setFinishedAt(dto.finishedAt);
+                    subtasks.add(subtask);
+                }
+                plan.setSubtasks(subtasks);
+            } catch (JsonProcessingException e) {
+                log.error(&amp;quot;Failed to parse subtasks JSON&amp;quot;, e);
+            }
+        }&lt;/p&gt;
+&lt;p&gt;return plan;
+    }&lt;/p&gt;
+&lt;p&gt;// 内部 DTO 类用于 JSON 序列化
+    private static class SubTaskDto {
+        public String name;
+        public String description;
+        public String expectedOutcome;
+        public String outcome;
+        public String state;
+        public String createdAt;
+        public String finishedAt;
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 额外业务方法 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 保存当前计划（用于状态同步）
+     */
+    public Mono&amp;lt;Void&amp;gt; saveCurrentPlan(Plan plan) {
+        return addPlan(plan);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取最近的 N 条历史计划
+     */
+    public Mono&amp;lt;List&amp;lt;Plan&amp;gt;&amp;gt; getRecentPlans(int limit) {
+        return Mono.fromCallable(() -&amp;gt; {
+            List&amp;lt;PlanEntity&amp;gt; entities = planRepository.findAllByOrderByCreatedAtDesc();
+            List&amp;lt;Plan&amp;gt; plans = new ArrayList&amp;lt;&amp;gt;();
+            int count = 0;
+            for (PlanEntity entity : entities) {
+                if (count++ &amp;gt;= limit) break;
+                plans.add(toPlan(entity));
+            }
+            return plans;
+        });
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取计划统计信息
+     */
+    public Mono&amp;lt;PlanStatistics&amp;gt; getStatistics() {
+        return Mono.fromCallable(() -&amp;gt; {
+            long total = planRepository.count();
+            long done = planRepository.findByState(PlanState.DONE.getValue()).size();
+            long abandoned = planRepository.findByState(PlanState.ABANDONED.getValue()).size();
+            long inProgress = planRepository.findByState(PlanState.IN_PROGRESS.getValue()).size();
+            long todo = planRepository.findByState(PlanState.TODO.getValue()).size();
+            return new PlanStatistics(total, done, abandoned, inProgress, todo);
+        });
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 计划统计信息
+     */
+    public record PlanStatistics(
+            long total,
+            long done,
+            long abandoned,
+            long inProgress,
+            long todo
+    ) {}
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;12.4.8 Agent 服务类 (AgentService.java)&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter12.service;
+&lt;p&gt;import com.fasterxml.jackson.databind.ObjectMapper;
+import io.agentscope.core.ReActAgent;
+import io.agentscope.core.agent.Event;
+import io.agentscope.core.agent.EventType;
+import io.agentscope.core.agent.StreamOptions;
+import io.agentscope.core.formatter.dashscope.DashScopeChatFormatter;
+import io.agentscope.core.hook.Hook;
+import io.agentscope.core.hook.HookEvent;
+import io.agentscope.core.hook.PostActingEvent;
+import io.agentscope.core.hook.PreReasoningEvent;
+import io.agentscope.core.memory.InMemoryMemory;
+import io.agentscope.core.message.*;
+import io.agentscope.core.model.DashScopeChatModel;
+import io.agentscope.core.model.GenerateOptions;
+import io.agentscope.core.plan.PlanNotebook;
+import io.agentscope.core.plan.model.Plan;
+import io.agentscope.core.plan.model.SubTask;
+import io.agentscope.core.tool.Tool;
+import io.agentscope.core.tool.Toolkit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.InitializingBean;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;&lt;/p&gt;
+&lt;p&gt;import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;&lt;/p&gt;
+&lt;p&gt;/**
+ * Agent 服务 - 管理 ReActAgent 和计划执行
+ *
+ * &amp;lt;p&amp;gt;核心职责：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;初始化和配置 ReActAgent&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;提供对话和流式响应能力&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;管理计划状态和变更通知&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;处理用户交互（暂停/恢复/停止）&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * &amp;lt;p&amp;gt;通过 Hook 机制实现：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;计划变更监听 - 实时更新前端&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;工具调用拦截 - 捕获工具输入输出&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;推理上下文捕获 - 调试和问题排查&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * @author AgentScope Tutorial
+ */
+@Service
+public class AgentService implements InitializingBean {&lt;/p&gt;
+&lt;p&gt;private static final Logger log = LoggerFactory.getLogger(AgentService.class);&lt;/p&gt;
+&lt;p&gt;/** SSE 上下文消息最大字符数 */
+    private static final int CTX_FLAT_MAX_CHARS = 48_000;&lt;/p&gt;
+&lt;p&gt;/** SSE 上下文字段最大字符数 */
+    private static final int CTX_FIELD_MAX_CHARS = 8_000;&lt;/p&gt;
+&lt;p&gt;/** 计划工具名称集合（用于暂停检测） */
+    private static final Set&amp;lt;String&amp;gt; PLAN_TOOL_NAMES = Set.of(
+            &amp;quot;create_plan&amp;quot;, &amp;quot;update_plan_info&amp;quot;, &amp;quot;revise_current_plan&amp;quot;,
+            &amp;quot;update_subtask_state&amp;quot;, &amp;quot;finish_subtask&amp;quot;, &amp;quot;get_subtask_count&amp;quot;,
+            &amp;quot;finish_plan&amp;quot;, &amp;quot;view_subtasks&amp;quot;, &amp;quot;view_historical_plans&amp;quot;, &amp;quot;recover_historical_plan&amp;quot;
+    );&lt;/p&gt;
+&lt;p&gt;@Value(&amp;quot;${agentscope.model.api-key}&amp;quot;)
+    private String apiKey;&lt;/p&gt;
+&lt;p&gt;@Value(&amp;quot;${agentscope.model.model-name:qwen-plus}&amp;quot;)
+    private String modelName;&lt;/p&gt;
+&lt;p&gt;private final PlanDbService planDbService;
+    private final ObjectMapper objectMapper;&lt;/p&gt;
+&lt;p&gt;private String dashscopeApiKey;
+    private ReActAgent agent;
+    private PlanNotebook planNotebook;
+    private final AtomicBoolean isPaused = new AtomicBoolean(false);
+    private final AtomicBoolean stopRequested = new AtomicBoolean(false);&lt;/p&gt;
+&lt;p&gt;/** 待处理的工具输入（用于 SSE 展示） */
+    private final ConcurrentLinkedQueue&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; pendingToolInputs = new ConcurrentLinkedQueue&amp;lt;&amp;gt;();&lt;/p&gt;
+&lt;p&gt;/** 待处理的上下文行（用于 SSE 调试） */
+    private final ConcurrentLinkedQueue&amp;lt;String&amp;gt; pendingContextLines = new ConcurrentLinkedQueue&amp;lt;&amp;gt;();
+    private final AtomicInteger contextSeq = new AtomicInteger(0);&lt;/p&gt;
+&lt;p&gt;/** 计划变更通知器 */
+    private final List&amp;lt;Runnable&amp;gt; planChangeListeners = new ArrayList&amp;lt;&amp;gt;();&lt;/p&gt;
+&lt;p&gt;public AgentService(PlanDbService planDbService, ObjectMapper objectMapper) {
+        this.planDbService = planDbService;
+        this.objectMapper = objectMapper;
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public void afterPropertiesSet() throws Exception {
+        // 从环境变量获取 API Key（优先级高于配置）
+        dashscopeApiKey = System.getenv(&amp;quot;DASHSCOPE_API_KEY&amp;quot;);
+        if (dashscopeApiKey == null || dashscopeApiKey.isEmpty()) {
+            dashscopeApiKey = apiKey;
+        }&lt;/p&gt;
+&lt;p&gt;if (dashscopeApiKey == null || dashscopeApiKey.isEmpty() ||
+            dashscopeApiKey.equals(&amp;quot;your_api_key_here&amp;quot;)) {
+            log.warn(&amp;quot;DASHSCOPE_API_KEY not configured, agent will use placeholder&amp;quot;);
+        }&lt;/p&gt;
+&lt;p&gt;initializeAgent();
+        log.info(&amp;quot;AgentService initialized successfully&amp;quot;);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 初始化 Agent
+     */
+    private void initializeAgent() {
+        // 清空待处理状态
+        pendingToolInputs.clear();
+        pendingContextLines.clear();
+        contextSeq.set(0);&lt;/p&gt;
+&lt;p&gt;// 创建内存记忆
+        var memory = new InMemoryMemory();&lt;/p&gt;
+&lt;p&gt;// 创建工具集
+        var toolkit = new Toolkit();
+        toolkit.registerTool(new FileOperationTool());&lt;/p&gt;
+&lt;p&gt;// 创建计划笔记本（使用数据库存储）
+        planNotebook = PlanNotebook.builder()
+                .storage(planDbService)
+                .needUserConfirm(true)
+                .maxSubtasks(15)
+                .build();&lt;/p&gt;
+&lt;p&gt;// 注册计划变更监听器
+        planNotebook.addChangeHook(&amp;quot;dbService&amp;quot;, (notebook, plan) -&amp;gt; {
+            notifyPlanChange(plan);
+        });&lt;/p&gt;
+&lt;p&gt;// 创建计划工具 Hook（用于暂停和状态监控）
+        Hook planToolHook = new Hook() {
+            @Override
+            public &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; onEvent(T event) {
+                if (event instanceof PostActingEvent postActing) {
+                    ToolUseBlock toolUse = postActing.getToolUse();
+                    if (toolUse != null &amp;amp;&amp;amp; toolUse.getInput() != null) {
+                        pendingToolInputs.offer(new LinkedHashMap&amp;lt;&amp;gt;(toolUse.getInput()));
+                    }
+                    if (toolUse != null &amp;amp;&amp;amp; PLAN_TOOL_NAMES.contains(toolUse.getName())) {
+                        if (stopRequested.compareAndSet(true, false)) {
+                            log.info(&amp;quot;Plan tool executed, pausing for user review: {}&amp;quot;, toolUse.getName());
+                            isPaused.set(true);
+                            postActing.stopAgent();
+                        }
+                    }
+                }
+                return Mono.just(event);
+            }
+        };&lt;/p&gt;
+&lt;p&gt;// 创建上下文捕获 Hook（用于调试）
+        Hook promptCaptureHook = new Hook() {
+            @Override
+            public int priority() {
+                return 1000;
+            }&lt;/p&gt;
+&lt;p&gt;@Override
+            public &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; onEvent(T event) {
+                if (event instanceof PreReasoningEvent pre) {
+                    offerContextLine(&amp;quot;reasoning&amp;quot;, pre.getModelName(), pre.getInputMessages());
+                }
+                return Mono.just(event);
+            }
+        };&lt;/p&gt;
+&lt;p&gt;// 构建 Agent
+        agent = ReActAgent.builder()
+                .name(&amp;quot;PlanAssistant&amp;quot;)
+                .sysPrompt(buildSystemPrompt())
+                .model(DashScopeChatModel.builder()
+                        .apiKey(dashscopeApiKey)
+                        .modelName(modelName)
+                        .stream(true)
+                        .enableThinking(true)
+                        .defaultOptions(GenerateOptions.builder()
+                                .thinkingBudget(8192)
+                                .build())
+                        .formatter(new DashScopeChatFormatter())
+                        .build())
+                .memory(memory)
+                .toolkit(toolkit)
+                .maxIters(50)
+                .hook(planToolHook)
+                .hook(promptCaptureHook)
+                .planNotebook(planNotebook)
+                .build();&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;Agent initialized with model: {}&amp;quot;, modelName);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 构建系统提示词
+     */
+    private String buildSystemPrompt() {
+        return &amp;quot;&amp;quot;&amp;quot;
+                你是一个系统性助手，通过结构化计划帮助用户完成复杂任务。&lt;/p&gt;
+&lt;p&gt;核心能力：
+                1. 复杂任务规划：当用户提出复杂请求时（如编程、调研、设计），主动创建计划
+                2. 任务分解：将大任务分解为可执行的小步骤
+                3. 进度追踪：实时更新任务状态，确保按计划执行
+                4. 结果验证：完成每个子任务后，验证是否达成预期结果&lt;/p&gt;
+&lt;p&gt;工作流程：
+                1. 理解用户需求
+                2. 如需要，创建详细计划（使用 create_plan 工具）
+                3. 逐步执行子任务（使用 update_subtask_state 标记进度）
+                4. 完成后记录结果（使用 finish_subtask）
+                5. 计划全部完成后总结（使用 finish_plan）&lt;/p&gt;
+&lt;p&gt;注意事项：
+&lt;ul&gt;&lt;li&gt;每个子任务完成后必须调用 finish_subtask 记录具体结果&lt;/li&gt;
+&lt;li&gt;结果应该是具体的数据、信息或文件路径，而非&amp;quot;已完成&amp;quot;&lt;/li&gt;
+&lt;li&gt;用户可能随时修改计划，需要灵活应对&lt;/li&gt;
+&lt;li&gt;如果用户表示不需要继续执行计划，使用 finish_plan 放弃&lt;/li&gt;
+&lt;/ul&gt;                &amp;quot;&amp;quot;&amp;quot;;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 发送消息并获取流式响应
+     */
+    public Flux&amp;lt;String&amp;gt; chat(String sessionId, String message) {
+        // 重置暂停状态
+        isPaused.set(false);
+        pendingToolInputs.clear();
+        pendingContextLines.clear();
+        contextSeq.set(0);&lt;/p&gt;
+&lt;p&gt;// 构建用户消息
+        Msg userMsg = Msg.builder()
+                .role(MsgRole.USER)
+                .content(TextBlock.builder().text(message).build())
+                .build();&lt;/p&gt;
+&lt;p&gt;// 执行对话并附加上下文
+        return attachPendingContext(
+                agent.stream(userMsg, createStreamOptions())
+                        .subscribeOn(Schedulers.boundedElastic())
+        );
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 恢复暂停中的 Agent
+     */
+    public Flux&amp;lt;String&amp;gt; resume(String sessionId) {
+        if (isPaused.compareAndSet(true, false)) {
+            log.info(&amp;quot;Resuming agent execution&amp;quot;);
+            pendingToolInputs.clear();
+            pendingContextLines.clear();
+            contextSeq.set(0);&lt;/p&gt;
+&lt;p&gt;return attachPendingContext(
+                    agent.stream(createStreamOptions())
+                            .subscribeOn(Schedulers.boundedElastic())
+            );
+        } else {
+            log.warn(&amp;quot;Agent is not paused&amp;quot;);
+            return Flux.just(&amp;quot;Agent is not paused or already resuming.&amp;quot;);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 请求停止 Agent（在下一个计划工具执行后暂停）
+     */
+    public void requestStop() {
+        log.info(&amp;quot;Stop requested - will pause after next plan tool&amp;quot;);
+        stopRequested.set(true);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 检查 Agent 是否暂停
+     */
+    public boolean isPaused() {
+        return isPaused.get();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 重置 Agent
+     */
+    public void reset() {
+        log.info(&amp;quot;Resetting agent&amp;quot;);
+        isPaused.set(false);
+        stopRequested.set(false);
+        initializeAgent();
+        notifyPlanChange(null);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取当前计划
+     */
+    public Plan getCurrentPlan() {
+        return planNotebook != null ? planNotebook.getCurrentPlan() : null;
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 私有辅助方法 ====================&lt;/p&gt;
+&lt;p&gt;private StreamOptions createStreamOptions() {
+        return StreamOptions.builder()
+                .eventTypes(EventType.REASONING, EventType.TOOL_RESULT, EventType.AGENT_RESULT)
+                .incremental(true)
+                .includeActingChunk(false)
+                .build();
+    }&lt;/p&gt;
+&lt;p&gt;private Flux&amp;lt;String&amp;gt; attachPendingContext(Flux&amp;lt;Event&amp;gt; events) {
+        return events.concatMap(event -&amp;gt; {
+            List&amp;lt;String&amp;gt; prefix = drainPendingContextLines();
+            String mapped = mapEventToString(event);
+            boolean hasPrefix = !prefix.isEmpty();
+            boolean hasBody = mapped != null &amp;amp;&amp;amp; !mapped.isEmpty();
+            if (!hasPrefix &amp;amp;&amp;amp; !hasBody) {
+                return Flux.empty();
+            }
+            Flux&amp;lt;String&amp;gt; head = Flux.fromIterable(prefix);
+            return hasBody ? head.concatWith(Flux.just(mapped)) : head;
+        });
+    }&lt;/p&gt;
+&lt;p&gt;private List&amp;lt;String&amp;gt; drainPendingContextLines() {
+        List&amp;lt;String&amp;gt; out = new ArrayList&amp;lt;&amp;gt;();
+        String line;
+        while ((line = pendingContextLines.poll()) != null) {
+            out.add(line);
+        }
+        return out;
+    }&lt;/p&gt;
+&lt;p&gt;private void offerContextLine(String phase, String modelName, List&amp;lt;Msg&amp;gt; messages) {
+        try {
+            int seq = contextSeq.incrementAndGet();
+            Map&amp;lt;String, Object&amp;gt; root = new LinkedHashMap&amp;lt;&amp;gt;();
+            root.put(&amp;quot;t&amp;quot;, &amp;quot;ctx&amp;quot;);
+            root.put(&amp;quot;phase&amp;quot;, phase);
+            root.put(&amp;quot;seq&amp;quot;, seq);
+            root.put(&amp;quot;model&amp;quot;, modelName != null ? modelName : &amp;quot;&amp;quot;);
+            List&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; rows = new ArrayList&amp;lt;&amp;gt;();
+            for (Msg m : messages) {
+                rows.add(msgToDebugRow(m));
+            }
+            root.put(&amp;quot;messages&amp;quot;, rows);
+            String flat = truncateIfNeeded(buildFlatTranscript(messages), CTX_FLAT_MAX_CHARS);
+            root.put(&amp;quot;flat&amp;quot;, flat);
+            pendingContextLines.offer(objectMapper.writeValueAsString(root));
+        } catch (Exception e) {
+            log.warn(&amp;quot;Failed to serialize context for SSE: {}&amp;quot;, e.getMessage());
+        }
+    }&lt;/p&gt;
+&lt;p&gt;private Map&amp;lt;String, Object&amp;gt; msgToDebugRow(Msg m) {
+        Map&amp;lt;String, Object&amp;gt; row = new LinkedHashMap&amp;lt;&amp;gt;();
+        row.put(&amp;quot;role&amp;quot;, m.getRole().name());
+        if (m.getName() != null) {
+            row.put(&amp;quot;name&amp;quot;, m.getName());
+        }
+        List&amp;lt;Object&amp;gt; parts = new ArrayList&amp;lt;&amp;gt;();
+        for (ContentBlock b : m.getContent()) {
+            parts.add(contentBlockToDebugMap(b));
+        }
+        row.put(&amp;quot;content&amp;quot;, parts);
+        return row;
+    }&lt;/p&gt;
+&lt;p&gt;private Object contentBlockToDebugMap(ContentBlock b) {
+        if (b instanceof TextBlock tb) {
+            return Map.of(&amp;quot;type&amp;quot;, &amp;quot;text&amp;quot;, &amp;quot;text&amp;quot;, truncateIfNeeded(tb.getText(), CTX_FIELD_MAX_CHARS));
+        }
+        if (b instanceof ThinkingBlock th) {
+            return Map.of(&amp;quot;type&amp;quot;, &amp;quot;thinking&amp;quot;, &amp;quot;thinking&amp;quot;, truncateIfNeeded(th.getThinking(), CTX_FIELD_MAX_CHARS));
+        }
+        if (b instanceof ToolUseBlock tu) {
+            Map&amp;lt;String, Object&amp;gt; m = new LinkedHashMap&amp;lt;&amp;gt;();
+            m.put(&amp;quot;type&amp;quot;, &amp;quot;tool_use&amp;quot;);
+            m.put(&amp;quot;id&amp;quot;, tu.getId());
+            m.put(&amp;quot;name&amp;quot;, tu.getName());
+            m.put(&amp;quot;input&amp;quot;, tu.getInput() != null ? tu.getInput() : Map.of());
+            return m;
+        }
+        if (b instanceof ToolResultBlock tr) {
+            return Map.of(&amp;quot;type&amp;quot;, &amp;quot;tool_result&amp;quot;, &amp;quot;name&amp;quot;, tr.getName(), &amp;quot;output&amp;quot;,
+                    truncateIfNeeded(flattenToolOutput(tr), CTX_FIELD_MAX_CHARS));
+        }
+        return Map.of(&amp;quot;type&amp;quot;, &amp;quot;other&amp;quot;);
+    }&lt;/p&gt;
+&lt;p&gt;private String buildFlatTranscript(List&amp;lt;Msg&amp;gt; messages) {
+        StringBuilder sb = new StringBuilder();
+        for (Msg m : messages) {
+            sb.append(&amp;quot;--- &amp;quot;).append(m.getRole().name()).append(&amp;quot; ---\n&amp;quot;);
+            for (ContentBlock b : m.getContent()) {
+                appendContentBlockForFlat(sb, b);
+            }
+            sb.append('\n');
+        }
+        return sb.toString();
+    }&lt;/p&gt;
+&lt;p&gt;private void appendContentBlockForFlat(StringBuilder sb, ContentBlock o) {
+        if (o instanceof TextBlock tb) {
+            sb.append(tb.getText() != null ? tb.getText() : &amp;quot;&amp;quot;);
+        } else if (o instanceof ThinkingBlock th) {
+            sb.append(th.getThinking() != null ? th.getThinking() : &amp;quot;&amp;quot;);
+        } else if (o instanceof ToolUseBlock tu) {
+            sb.append(&amp;quot;[tool:&amp;quot;).append(tu.getName()).append(&amp;quot;] &amp;quot;);
+            sb.append(tu.getInput() != null ? tu.getInput().toString() : &amp;quot;{}&amp;quot;);
+        } else if (o instanceof ToolResultBlock tr) {
+            sb.append(&amp;quot;[result:&amp;quot;).append(tr.getName()).append(&amp;quot;] &amp;quot;);
+            sb.append(flattenToolOutput(tr));
+        }
+    }&lt;/p&gt;
+&lt;p&gt;private String mapEventToString(Event event) {
+        try {
+            // 处理暂停状态
+            if (event.getType() == EventType.AGENT_RESULT) {
+                Msg msg = event.getMessage();
+                if (msg != null &amp;amp;&amp;amp; msg.getGenerateReason() == GenerateReason.ACTING_STOP_REQUESTED) {
+                    isPaused.set(true);
+                    return objectMapper.writeValueAsString(Map.of(&amp;quot;t&amp;quot;, &amp;quot;paused&amp;quot;));
+                }
+                return &amp;quot;&amp;quot;;
+            }&lt;/p&gt;
+&lt;p&gt;// 处理工具结果
+            if (event.getType() == EventType.TOOL_RESULT) {
+                Msg msg = event.getMessage();
+                if (msg == null) return &amp;quot;&amp;quot;;
+                List&amp;lt;ToolResultBlock&amp;gt; blocks = msg.getContentBlocks(ToolResultBlock.class);
+                if (blocks.isEmpty()) return &amp;quot;&amp;quot;;
+                ToolResultBlock tr = blocks.get(0);
+                Map&amp;lt;String, Object&amp;gt; payload = new LinkedHashMap&amp;lt;&amp;gt;(4);
+                payload.put(&amp;quot;t&amp;quot;, &amp;quot;tool&amp;quot;);
+                payload.put(&amp;quot;n&amp;quot;, tr.getName() != null ? tr.getName() : &amp;quot;&amp;quot;);
+                payload.put(&amp;quot;d&amp;quot;, flattenToolOutput(tr));
+                Map&amp;lt;String, Object&amp;gt; inputSnapshot = pendingToolInputs.poll();
+                if (inputSnapshot != null &amp;amp;&amp;amp; !inputSnapshot.isEmpty()) {
+                    payload.put(&amp;quot;i&amp;quot;, inputSnapshot);
+                }
+                return objectMapper.writeValueAsString(payload);
+            }&lt;/p&gt;
+&lt;p&gt;if (event.isLast()) return &amp;quot;&amp;quot;;&lt;/p&gt;
+&lt;p&gt;Msg msg = event.getMessage();
+            if (msg == null) return &amp;quot;&amp;quot;;&lt;/p&gt;
+&lt;p&gt;// 处理思维内容
+            List&amp;lt;ThinkingBlock&amp;gt; thinkingBlocks = msg.getContentBlocks(ThinkingBlock.class);
+            if (!thinkingBlocks.isEmpty()) {
+                String delta = thinkingBlocks.get(0).getThinking();
+                if (delta != null &amp;amp;&amp;amp; !delta.isEmpty()) {
+                    return objectMapper.writeValueAsString(Map.of(&amp;quot;t&amp;quot;, &amp;quot;think&amp;quot;, &amp;quot;d&amp;quot;, delta));
+                }
+            }&lt;/p&gt;
+&lt;p&gt;// 处理文本内容
+            List&amp;lt;TextBlock&amp;gt; textBlocks = msg.getContentBlocks(TextBlock.class);
+            if (!textBlocks.isEmpty()) {
+                String delta = textBlocks.get(0).getText();
+                if (delta != null &amp;amp;&amp;amp; !delta.isEmpty()) {
+                    return objectMapper.writeValueAsString(Map.of(&amp;quot;t&amp;quot;, &amp;quot;text&amp;quot;, &amp;quot;d&amp;quot;, delta));
+                }
+            }
+            return &amp;quot;&amp;quot;;
+        } catch (Exception e) {
+            log.warn(&amp;quot;Failed to encode SSE chunk: {}&amp;quot;, e.getMessage());
+            return &amp;quot;&amp;quot;;
+        }
+    }&lt;/p&gt;
+&lt;p&gt;private String flattenToolOutput(ToolResultBlock block) {
+        StringBuilder sb = new StringBuilder();
+        for (ContentBlock o : block.getOutput()) {
+            if (o instanceof TextBlock tb) {
+                sb.append(tb.getText());
+            }
+        }
+        return sb.toString();
+    }&lt;/p&gt;
+&lt;p&gt;private String truncateIfNeeded(String s, int max) {
+        if (s == null) return &amp;quot;&amp;quot;;
+        if (s.length() &amp;lt;= max) return s;
+        return s.substring(0, max) + &amp;quot;\n...(truncated)&amp;quot;;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 通知计划变更
+     */
+    private void notifyPlanChange(Plan plan) {
+        synchronized (planChangeListeners) {
+            for (Runnable listener : planChangeListeners) {
+                try {
+                    listener.run();
+                } catch (Exception e) {
+                    log.error(&amp;quot;Error in plan change listener&amp;quot;, e);
+                }
+            }
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 注册计划变更监听器
+     */
+    public void addPlanChangeListener(Runnable listener) {
+        synchronized (planChangeListeners) {
+            planChangeListeners.add(listener);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 内置工具 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 文件操作工具 - 用于演示计划执行
+     */
+    public static class FileOperationTool {&lt;/p&gt;
+&lt;p&gt;@Tool(name = &amp;quot;write_file&amp;quot;, description = &amp;quot;将内容写入文件&amp;quot;)
+        public Mono&amp;lt;String&amp;gt; writeFile(
+                @ToolParam(name = &amp;quot;filename&amp;quot;, description = &amp;quot;文件名&amp;quot;) String filename,
+                @ToolParam(name = &amp;quot;content&amp;quot;, description = &amp;quot;文件内容&amp;quot;) String content) {
+            log.info(&amp;quot;[write_file] filename={}, content_length={}&amp;quot;, filename, content.length());
+            return Mono.just(&amp;quot;File written successfully: &amp;quot; + filename + &amp;quot; (&amp;quot; + content.length() + &amp;quot; chars)&amp;quot;);
+        }&lt;/p&gt;
+&lt;p&gt;@Tool(name = &amp;quot;read_file&amp;quot;, description = &amp;quot;读取文件内容&amp;quot;)
+        public Mono&amp;lt;String&amp;gt; readFile(
+                @ToolParam(name = &amp;quot;filename&amp;quot;, description = &amp;quot;文件名&amp;quot;) String filename) {
+            log.info(&amp;quot;[read_file] filename={}&amp;quot;, filename);
+            return Mono.just(&amp;quot;File content for: &amp;quot; + filename);
+        }&lt;/p&gt;
+&lt;p&gt;@Tool(name = &amp;quot;calculate&amp;quot;, description = &amp;quot;执行数学计算&amp;quot;)
+        public Mono&amp;lt;String&amp;gt; calculate(
+                @ToolParam(name = &amp;quot;expression&amp;quot;, description = &amp;quot;数学表达式&amp;quot;) String expression) {
+            log.info(&amp;quot;[calculate] {}&amp;quot;, expression);
+            try {
+                double result = evaluateSimpleExpression(expression);
+                return Mono.just(expression + &amp;quot; = &amp;quot; + result);
+            } catch (Exception e) {
+                return Mono.just(&amp;quot;Error: &amp;quot; + e.getMessage());
+            }
+        }&lt;/p&gt;
+&lt;p&gt;private double evaluateSimpleExpression(String expr) {
+            // 简化版表达式计算
+            expr = expr.replaceAll(&amp;quot;\\s+&amp;quot;, &amp;quot;&amp;quot;);
+            String[] tokens = expr.split(&amp;quot;(?=[+\\-*/])|(?&amp;lt;=[+\\-*/])&amp;quot;);
+            double result = 0;
+            String op = &amp;quot;+&amp;quot;;
+            for (String token : tokens) {
+                if (token.matches(&amp;quot;[+\\-*/]&amp;quot;)) {
+                    op = token;
+                } else if (!token.isEmpty()) {
+                    double value = Double.parseDouble(token);
+                    result = switch (op) {
+                        case &amp;quot;+&amp;quot; -&amp;gt; result + value;
+                        case &amp;quot;-&amp;quot; -&amp;gt; result - value;
+                        case &amp;quot;*&amp;quot; -&amp;gt; result * value;
+                        case &amp;quot;/&amp;quot; -&amp;gt; result / value;
+                        default -&amp;gt; result;
+                    };
+                }
+            }
+            return result;
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;12.4.9 计划变更 Hook (PlanChangeHook.java)&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter12.hook;
+&lt;p&gt;import io.agentscope.core.plan.PlanNotebook;
+import io.agentscope.core.plan.model.Plan;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;&lt;/p&gt;
+&lt;p&gt;/**
+ * 计划变更监听 Hook
+ *
+ * &amp;lt;p&amp;gt;监听计划状态变化，执行必要的业务逻辑：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;记录计划变更日志&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;更新缓存&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;触发下游系统更新&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * &amp;lt;p&amp;gt;通过在 PlanNotebook 中注册，可以捕获以下事件：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;创建新计划&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;添加/修改/删除子任务&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;子任务状态变更&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;计划完成或放弃&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * @author AgentScope Tutorial
+ */
+@Component
+public class PlanChangeHook {&lt;/p&gt;
+&lt;p&gt;private static final Logger log = LoggerFactory.getLogger(PlanChangeHook.class);&lt;/p&gt;
+&lt;p&gt;/**
+     * 注册到 PlanNotebook 的变更回调
+     *
+     * @param planNotebook 计划笔记本实例
+     */
+    public void register(PlanNotebook planNotebook) {
+        planNotebook.addChangeHook(&amp;quot;loggingHook&amp;quot;, this::onPlanChanged);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 计划变更处理方法
+     *
+     * @param notebook 计划笔记本实例
+     * @param plan 当前计划（可能为 null 表示计划已清除）
+     */
+    private void onPlanChanged(PlanNotebook notebook, Plan plan) {
+        if (plan == null) {
+            log.info(&amp;quot;Plan cleared&amp;quot;);
+            return;
+        }&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;Plan changed: {} (state={}, subtasks={})&amp;quot;,
+                plan.getName(),
+                plan.getState(),
+                plan.getSubtasks() != null ? plan.getSubtasks().size() : 0);&lt;/p&gt;
+&lt;p&gt;// 打印子任务状态
+        if (plan.getSubtasks() != null) {
+            int idx = 0;
+            for (var subtask : plan.getSubtasks()) {
+                log.debug(&amp;quot;  Subtask[{}] {}: {}&amp;quot;, idx++, subtask.getName(), subtask.getState());
+            }
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建变更日志摘要
+     *
+     * @param plan 计划对象
+     * @return 格式化的日志字符串
+     */
+    public static String createLogSummary(Plan plan) {
+        if (plan == null) {
+            return &amp;quot;No active plan&amp;quot;;
+        }&lt;/p&gt;
+&lt;p&gt;StringBuilder sb = new StringBuilder();
+        sb.append(&amp;quot;Plan: &amp;quot;).append(plan.getName()).append(&amp;quot;\n&amp;quot;);
+        sb.append(&amp;quot;State: &amp;quot;).append(plan.getState()).append(&amp;quot;\n&amp;quot;);
+        sb.append(&amp;quot;Subtasks:\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;if (plan.getSubtasks() != null) {
+            int done = 0, inProgress = 0, todo = 0;
+            for (var subtask : plan.getSubtasks()) {
+                String marker = switch (subtask.getState()) {
+                    case DONE -&amp;gt; &amp;quot;[x]&amp;quot;;
+                    case IN_PROGRESS -&amp;gt; &amp;quot;[&amp;gt;]&amp;quot;;
+                    case ABANDONED -&amp;gt; &amp;quot;[-]&amp;quot;;
+                    default -&amp;gt; &amp;quot;[ ]&amp;quot;;
+                };
+                sb.append(&amp;quot;  &amp;quot;).append(marker).append(&amp;quot; &amp;quot;).append(subtask.getName()).append(&amp;quot;\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;switch (subtask.getState()) {
+                    case DONE -&amp;gt; done++;
+                    case IN_PROGRESS -&amp;gt; inProgress++;
+                    default -&amp;gt; todo++;
+                }
+            }
+            sb.append(&amp;quot;Progress: &amp;quot;).append(done).append(&amp;quot; done, &amp;quot;)
+                    .append(inProgress).append(&amp;quot; in progress, &amp;quot;)
+                    .append(todo).append(&amp;quot; todo&amp;quot;);
+        }&lt;/p&gt;
+&lt;p&gt;return sb.toString();
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;12.4.10 计划管理控制器 (PlanController.java)&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter12.controller;
+&lt;p&gt;import io.agentscope.core.plan.PlanNotebook;
+import io.agentscope.core.plan.model.Plan;
+import io.agentscope.core.plan.model.SubTask;
+import io.agentscope.tutorial.chapter12.dto.PlanRequest;
+import io.agentscope.tutorial.chapter12.dto.SubTaskRequest;
+import io.agentscope.tutorial.chapter12.service.AgentService;
+import io.agentscope.tutorial.chapter12.service.PlanDbService;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;&lt;/p&gt;
+&lt;p&gt;import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;&lt;/p&gt;
+&lt;p&gt;/**
+ * 计划管理控制器 - 提供计划的 CRUD 操作接口
+ *
+ * &amp;lt;p&amp;gt;REST API 端点：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;GET  /api/plan          - 获取当前计划&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;GET  /api/plan/stream   - SSE 流式推送计划状态&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;POST /api/plan          - 创建新计划&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;PUT  /api/plan          - 更新计划基本信息&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;DELETE /api/plan/subtasks/{idx} - 删除子任务&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;PATCH /api/plan/subtasks/{idx}/state - 更新子任务状态&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;POST /api/plan/subtasks/{idx}/finish - 完成子任务&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;POST /api/plan/finish   - 完成计划&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;GET  /api/plan/history   - 获取历史计划列表&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;GET  /api/plan/stats     - 获取计划统计&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * @author AgentScope Tutorial
+ */
+@RestController
+@RequestMapping(&amp;quot;/api/plan&amp;quot;)
+public class PlanController {&lt;/p&gt;
+&lt;p&gt;private final AgentService agentService;
+    private final PlanDbService planDbService;&lt;/p&gt;
+&lt;p&gt;public PlanController(AgentService agentService, PlanDbService planDbService) {
+        this.agentService = agentService;
+        this.planDbService = planDbService;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取当前计划详情
+     */
+    @GetMapping
+    public ResponseEntity&amp;lt;PlanDto&amp;gt; getCurrentPlan() {
+        Plan plan = agentService.getCurrentPlan();
+        if (plan == null) {
+            return ResponseEntity.ok(new PlanDto());
+        }
+        return ResponseEntity.ok(toPlanDto(plan));
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * SSE 流式推送计划状态变化
+     */
+    @GetMapping(path = &amp;quot;/stream&amp;quot;, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux&amp;lt;PlanDto&amp;gt; getPlanStream() {
+        AtomicReference&amp;lt;Plan&amp;gt; lastPlan = new AtomicReference&amp;lt;&amp;gt;();&lt;/p&gt;
+&lt;p&gt;// 注册监听器监听计划变化
+        agentService.addPlanChangeListener(() -&amp;gt; {
+            lastPlan.set(agentService.getCurrentPlan());
+        });&lt;/p&gt;
+&lt;p&gt;// 返回计划状态流
+        return Flux.concat(
+                Mono.fromCallable(() -&amp;gt; {
+                    Plan p = agentService.getCurrentPlan();
+                    return p != null ? toPlanDto(p) : new PlanDto();
+                }),
+                Flux.interval(java.time.Duration.ofMillis(500))
+                        .map(tick -&amp;gt; {
+                            Plan p = agentService.getCurrentPlan();
+                            return p != null ? toPlanDto(p) : new PlanDto();
+                        })
+                        .distinctUntilChanged(dto -&amp;gt; dto.id)
+        );
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建新计划
+     */
+    @PostMapping
+    public Mono&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; createPlan(@RequestBody PlanRequest request) {
+        if (request.getName() == null || request.getName().trim().isEmpty()) {
+            return Mono.error(new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, &amp;quot;Plan name is required&amp;quot;));
+        }&lt;/p&gt;
+&lt;p&gt;Plan plan = agentService.getCurrentPlan();
+        if (plan != null) {
+            // 存在进行中的计划时，先完成再创建新的
+            return planDbService.addPlan(plan)
+                    .then(Mono.defer(() -&amp;gt; createNewPlan(request)));
+        }&lt;/p&gt;
+&lt;p&gt;return createNewPlan(request);
+    }&lt;/p&gt;
+&lt;p&gt;private Mono&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; createNewPlan(PlanRequest request) {
+        List&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; subtasks = new ArrayList&amp;lt;&amp;gt;();
+        if (request.getSubtasks() != null) {
+            for (SubTaskRequest st : request.getSubtasks()) {
+                subtasks.add(Map.of(
+                        &amp;quot;name&amp;quot;, st.getName() != null ? st.getName() : &amp;quot;Unnamed&amp;quot;,
+                        &amp;quot;description&amp;quot;, st.getDescription() != null ? st.getDescription() : &amp;quot;&amp;quot;,
+                        &amp;quot;expected_outcome&amp;quot;, st.getExpectedOutcome() != null ? st.getExpectedOutcome() : &amp;quot;&amp;quot;
+                ));
+            }
+        }&lt;/p&gt;
+&lt;p&gt;Map&amp;lt;String, Object&amp;gt; result = new HashMap&amp;lt;&amp;gt;();
+        result.put(&amp;quot;status&amp;quot;, &amp;quot;ready&amp;quot;);
+        result.put(&amp;quot;message&amp;quot;, &amp;quot;Please use the chat interface to start the plan&amp;quot;);&lt;/p&gt;
+&lt;p&gt;return Mono.just(result);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 更新计划基本信息
+     */
+    @PutMapping
+    public Mono&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; updatePlanInfo(@RequestBody PlanRequest request) {
+        Plan plan = agentService.getCurrentPlan();
+        if (plan == null) {
+            return Mono.just(Map.of(&amp;quot;error&amp;quot;, &amp;quot;No active plan&amp;quot;));
+        }&lt;/p&gt;
+&lt;p&gt;Map&amp;lt;String, Object&amp;gt; result = new HashMap&amp;lt;&amp;gt;();
+        if (request.getName() != null &amp;amp;&amp;amp; !request.getName().isEmpty()) {
+            result.put(&amp;quot;name&amp;quot;, request.getName());
+        }
+        if (request.getDescription() != null) {
+            result.put(&amp;quot;description&amp;quot;, request.getDescription());
+        }
+        if (request.getExpectedOutcome() != null) {
+            result.put(&amp;quot;expectedOutcome&amp;quot;, request.getExpectedOutcome());
+        }&lt;/p&gt;
+&lt;p&gt;result.put(&amp;quot;status&amp;quot;, &amp;quot;updated&amp;quot;);
+        return Mono.just(result);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 删除子任务
+     */
+    @DeleteMapping(&amp;quot;/subtasks/{index}&amp;quot;)
+    public Mono&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; deleteSubtask(@PathVariable int index) {
+        Plan plan = agentService.getCurrentPlan();
+        if (plan == null) {
+            return Mono.just(Map.of(&amp;quot;error&amp;quot;, &amp;quot;No active plan&amp;quot;));
+        }&lt;/p&gt;
+&lt;p&gt;if (index &amp;lt; 0 || index &amp;gt;= plan.getSubtasks().size()) {
+            return Mono.just(Map.of(&amp;quot;error&amp;quot;, &amp;quot;Invalid index&amp;quot;));
+        }&lt;/p&gt;
+&lt;p&gt;SubTask removed = plan.getSubtasks().remove(index);
+        Map&amp;lt;String, Object&amp;gt; result = new HashMap&amp;lt;&amp;gt;();
+        result.put(&amp;quot;status&amp;quot;, &amp;quot;deleted&amp;quot;);
+        result.put(&amp;quot;removedTask&amp;quot;, removed.getName());&lt;/p&gt;
+&lt;p&gt;return Mono.just(result);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 更新子任务状态
+     */
+    @PatchMapping(&amp;quot;/subtasks/{index}/state&amp;quot;)
+    public Mono&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; updateSubtaskState(
+            @PathVariable int index,
+            @RequestBody Map&amp;lt;String, String&amp;gt; body) {
+        Plan plan = agentService.getCurrentPlan();
+        if (plan == null) {
+            return Mono.just(Map.of(&amp;quot;error&amp;quot;, &amp;quot;No active plan&amp;quot;));
+        }&lt;/p&gt;
+&lt;p&gt;String state = body.get(&amp;quot;state&amp;quot;);
+        Map&amp;lt;String, Object&amp;gt; result = new HashMap&amp;lt;&amp;gt;();
+        result.put(&amp;quot;index&amp;quot;, index);
+        result.put(&amp;quot;state&amp;quot;, state);
+        result.put(&amp;quot;status&amp;quot;, &amp;quot;updated&amp;quot;);&lt;/p&gt;
+&lt;p&gt;return Mono.just(result);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 完成子任务
+     */
+    @PostMapping(&amp;quot;/subtasks/{index}/finish&amp;quot;)
+    public Mono&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; finishSubtask(
+            @PathVariable int index,
+            @RequestBody Map&amp;lt;String, String&amp;gt; body) {
+        String outcome = body.get(&amp;quot;outcome&amp;quot;);
+        Map&amp;lt;String, Object&amp;gt; result = new HashMap&amp;lt;&amp;gt;();
+        result.put(&amp;quot;index&amp;quot;, index);
+        result.put(&amp;quot;outcome&amp;quot;, outcome != null ? outcome : &amp;quot;&amp;quot;);
+        result.put(&amp;quot;status&amp;quot;, &amp;quot;finished&amp;quot;);&lt;/p&gt;
+&lt;p&gt;return Mono.just(result);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 完成计划
+     */
+    @PostMapping(&amp;quot;/finish&amp;quot;)
+    public Mono&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; finishPlan(@RequestBody Map&amp;lt;String, String&amp;gt; body) {
+        Map&amp;lt;String, Object&amp;gt; result = new HashMap&amp;lt;&amp;gt;();
+        result.put(&amp;quot;status&amp;quot;, &amp;quot;finished&amp;quot;);
+        result.put(&amp;quot;outcome&amp;quot;, body.get(&amp;quot;outcome&amp;quot;));
+        return Mono.just(result);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取历史计划列表
+     */
+    @GetMapping(&amp;quot;/history&amp;quot;)
+    public Mono&amp;lt;List&amp;lt;PlanDto&amp;gt;&amp;gt; getHistory() {
+        return planDbService.getPlans()
+                .map(plans -&amp;gt; {
+                    List&amp;lt;PlanDto&amp;gt; dtos = new ArrayList&amp;lt;&amp;gt;();
+                    for (Plan p : plans) {
+                        dtos.add(toPlanDto(p));
+                    }
+                    return dtos;
+                });
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取计划统计信息
+     */
+    @GetMapping(&amp;quot;/stats&amp;quot;)
+    public Mono&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; getStatistics() {
+        return planDbService.getStatistics()
+                .map(stats -&amp;gt; {
+                    Map&amp;lt;String, Object&amp;gt; result = new HashMap&amp;lt;&amp;gt;();
+                    result.put(&amp;quot;total&amp;quot;, stats.total());
+                    result.put(&amp;quot;done&amp;quot;, stats.done());
+                    result.put(&amp;quot;abandoned&amp;quot;, stats.abandoned());
+                    result.put(&amp;quot;inProgress&amp;quot;, stats.inProgress());
+                    result.put(&amp;quot;todo&amp;quot;, stats.todo());
+                    return result;
+                });
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== DTO 转换方法 ====================&lt;/p&gt;
+&lt;p&gt;private PlanDto toPlanDto(Plan plan) {
+        PlanDto dto = new PlanDto();
+        dto.id = plan.getId();
+        dto.name = plan.getName();
+        dto.description = plan.getDescription();
+        dto.expectedOutcome = plan.getExpectedOutcome();
+        dto.state = plan.getState().getValue();
+        dto.createdAt = plan.getCreatedAt();
+        dto.finishedAt = plan.getFinishedAt();
+        dto.outcome = plan.getOutcome();&lt;/p&gt;
+&lt;p&gt;if (plan.getSubtasks() != null) {
+            dto.subtasks = new ArrayList&amp;lt;&amp;gt;();
+            for (int i = 0; i &amp;lt; plan.getSubtasks().size(); i++) {
+                SubTask st = plan.getSubtasks().get(i);
+                SubTaskDto std = new SubTaskDto();
+                std.index = i;
+                std.name = st.getName();
+                std.description = st.getDescription();
+                std.expectedOutcome = st.getExpectedOutcome();
+                std.outcome = st.getOutcome();
+                std.state = st.getState().getValue();
+                std.createdAt = st.getCreatedAt();
+                std.finishedAt = st.getFinishedAt();
+                dto.subtasks.add(std);
+            }
+        }&lt;/p&gt;
+&lt;p&gt;return dto;
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== DTO 内部类 ====================&lt;/p&gt;
+&lt;p&gt;public static class PlanDto {
+        public String id;
+        public String name;
+        public String description;
+        public String expectedOutcome;
+        public String state;
+        public String createdAt;
+        public String finishedAt;
+        public String outcome;
+        public List&amp;lt;SubTaskDto&amp;gt; subtasks;&lt;/p&gt;
+&lt;p&gt;public PlanDto() {
+            this.subtasks = new ArrayList&amp;lt;&amp;gt;();
+            this.state = &amp;quot;none&amp;quot;;
+        }
+    }&lt;/p&gt;
+&lt;p&gt;public static class SubTaskDto {
+        public int index;
+        public String name;
+        public String description;
+        public String expectedOutcome;
+        public String outcome;
+        public String state;
+        public String createdAt;
+        public String finishedAt;
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;12.4.11 对话控制器 (ChatController.java)&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter12.controller;
+&lt;p&gt;import io.agentscope.tutorial.chapter12.dto.ChatRequest;
+import io.agentscope.tutorial.chapter12.service.AgentService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;&lt;/p&gt;
+&lt;p&gt;import java.util.Map;&lt;/p&gt;
+&lt;p&gt;/**
+ * 对话控制器 - 处理与 Agent 的交互
+ *
+ * &amp;lt;p&amp;gt;提供对话接口，支持流式响应（SSE）。
+ *
+ * &amp;lt;p&amp;gt;端点：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;POST /api/chat - 发送消息，获取流式响应&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;POST /api/chat/resume - 恢复暂停中的 Agent&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;POST /api/chat/stop - 请求停止 Agent&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;GET  /api/chat/status - 获取 Agent 状态&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;POST /api/reset - 重置 Agent 和计划&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * @author AgentScope Tutorial
+ */
+@RestController
+@RequestMapping(&amp;quot;/api&amp;quot;)
+public class ChatController {&lt;/p&gt;
+&lt;p&gt;private static final Logger log = LoggerFactory.getLogger(ChatController.class);&lt;/p&gt;
+&lt;p&gt;private final AgentService agentService;&lt;/p&gt;
+&lt;p&gt;public ChatController(AgentService agentService) {
+        this.agentService = agentService;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 发送消息并获取流式响应
+     *
+     * &amp;lt;p&amp;gt;返回 Server-Sent Events (SSE) 流，每个事件是一个 JSON 对象：
+     * &amp;lt;ul&amp;gt;
+     *   &amp;lt;li&amp;gt;{&amp;quot;t&amp;quot;:&amp;quot;think&amp;quot;,&amp;quot;d&amp;quot;:&amp;quot;...&amp;quot;} - 思维内容&amp;lt;/li&amp;gt;
+     *   &amp;lt;li&amp;gt;{&amp;quot;t&amp;quot;:&amp;quot;text&amp;quot;,&amp;quot;d&amp;quot;:&amp;quot;...&amp;quot;} - 文本响应&amp;lt;/li&amp;gt;
+     *   &amp;lt;li&amp;gt;{&amp;quot;t&amp;quot;:&amp;quot;tool&amp;quot;,&amp;quot;n&amp;quot;:&amp;quot;...&amp;quot;,&amp;quot;d&amp;quot;:&amp;quot;...&amp;quot;} - 工具结果&amp;lt;/li&amp;gt;
+     *   &amp;lt;li&amp;gt;{&amp;quot;t&amp;quot;:&amp;quot;paused&amp;quot;} - Agent 暂停等待确认&amp;lt;/li&amp;gt;
+     *   &amp;lt;li&amp;gt;{&amp;quot;t&amp;quot;:&amp;quot;ctx&amp;quot;,...} - 调试上下文信息&amp;lt;/li&amp;gt;
+     * &amp;lt;/ul&amp;gt;
+     */
+    @PostMapping(path = &amp;quot;/chat&amp;quot;, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux&amp;lt;String&amp;gt; chat(@RequestBody ChatRequest request, @RequestHeader(value = &amp;quot;X-Session-Id&amp;quot;, required = false) String sessionId) {
+        if (sessionId == null || sessionId.isEmpty()) {
+            sessionId = &amp;quot;default&amp;quot;;
+        }&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;Chat request [session={}]: {}&amp;quot;, sessionId, truncate(request.getMessage(), 100));&lt;/p&gt;
+&lt;p&gt;return agentService.chat(sessionId, request.getMessage());
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 恢复暂停中的 Agent
+     */
+    @PostMapping(path = &amp;quot;/chat/resume&amp;quot;, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux&amp;lt;String&amp;gt; resume(@RequestHeader(value = &amp;quot;X-Session-Id&amp;quot;, defaultValue = &amp;quot;default&amp;quot;) String sessionId) {
+        log.info(&amp;quot;Resume request [session={}]&amp;quot;, sessionId);
+        return agentService.resume(sessionId);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 请求停止 Agent（在下一个计划工具后暂停）
+     */
+    @PostMapping(&amp;quot;/chat/stop&amp;quot;)
+    public Map&amp;lt;String, Object&amp;gt; stop() {
+        log.info(&amp;quot;Stop requested&amp;quot;);
+        agentService.requestStop();
+        return Map.of(&amp;quot;status&amp;quot;, &amp;quot;stop_requested&amp;quot;, &amp;quot;message&amp;quot;, &amp;quot;Agent will pause after next plan tool&amp;quot;);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取 Agent 状态
+     */
+    @GetMapping(&amp;quot;/chat/status&amp;quot;)
+    public Map&amp;lt;String, Object&amp;gt; getStatus() {
+        boolean paused = agentService.isPaused();
+        var plan = agentService.getCurrentPlan();&lt;/p&gt;
+&lt;p&gt;return Map.of(
+                &amp;quot;paused&amp;quot;, paused,
+                &amp;quot;hasPlan&amp;quot;, plan != null,
+                &amp;quot;planName&amp;quot;, plan != null ? plan.getName() : null,
+                &amp;quot;subtaskCount&amp;quot;, plan != null &amp;amp;&amp;amp; plan.getSubtasks() != null ? plan.getSubtasks().size() : 0
+        );
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 重置 Agent 和计划
+     */
+    @PostMapping(&amp;quot;/reset&amp;quot;)
+    public Map&amp;lt;String, Object&amp;gt; reset() {
+        log.info(&amp;quot;Reset requested&amp;quot;);
+        agentService.reset();
+        return Map.of(&amp;quot;status&amp;quot;, &amp;quot;reset&amp;quot;, &amp;quot;message&amp;quot;, &amp;quot;Agent and plan have been reset&amp;quot;);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 健康检查端点
+     */
+    @GetMapping(&amp;quot;/health&amp;quot;)
+    public Map&amp;lt;String, Object&amp;gt; health() {
+        return Map.of(
+                &amp;quot;status&amp;quot;, &amp;quot;UP&amp;quot;,
+                &amp;quot;service&amp;quot;, &amp;quot;chapter12-plan-tutorial&amp;quot;,
+                &amp;quot;version&amp;quot;, &amp;quot;1.0.0&amp;quot;
+        );
+    }&lt;/p&gt;
+&lt;p&gt;private String truncate(String s, int max) {
+        if (s == null) return &amp;quot;&amp;quot;;
+        if (s.length() &amp;lt;= max) return s;
+        return s.substring(0, max) + &amp;quot;...&amp;quot;;
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;12.4.12 请求 DTO 类&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter12.dto;
+&lt;p&gt;import java.util.List;&lt;/p&gt;
+&lt;p&gt;/**
+ * 聊天请求 DTO
+ */
+class ChatRequest {
+    private String message;&lt;/p&gt;
+&lt;p&gt;public ChatRequest() {}&lt;/p&gt;
+&lt;p&gt;public String getMessage() {
+        return message;
+    }&lt;/p&gt;
+&lt;p&gt;public void setMessage(String message) {
+        this.message = message;
+    }
+}&lt;/p&gt;
+&lt;p&gt;/**
+ * 计划请求 DTO
+ */
+class PlanRequest {
+    private String name;
+    private String description;
+    private String expectedOutcome;
+    private List&amp;lt;SubTaskRequest&amp;gt; subtasks;&lt;/p&gt;
+&lt;p&gt;public String getName() {
+        return name;
+    }&lt;/p&gt;
+&lt;p&gt;public void setName(String name) {
+        this.name = name;
+    }&lt;/p&gt;
+&lt;p&gt;public String getDescription() {
+        return description;
+    }&lt;/p&gt;
+&lt;p&gt;public void setDescription(String description) {
+        this.description = description;
+    }&lt;/p&gt;
+&lt;p&gt;public String getExpectedOutcome() {
+        return expectedOutcome;
+    }&lt;/p&gt;
+&lt;p&gt;public void setExpectedOutcome(String expectedOutcome) {
+        this.expectedOutcome = expectedOutcome;
+    }&lt;/p&gt;
+&lt;p&gt;public List&amp;lt;SubTaskRequest&amp;gt; getSubtasks() {
+        return subtasks;
+    }&lt;/p&gt;
+&lt;p&gt;public void setSubtasks(List&amp;lt;SubTaskRequest&amp;gt; subtasks) {
+        this.subtasks = subtasks;
+    }
+}&lt;/p&gt;
+&lt;p&gt;/**
+ * 子任务请求 DTO
+ */
+class SubTaskRequest {
+    private String name;
+    private String description;
+    private String expectedOutcome;&lt;/p&gt;
+&lt;p&gt;public String getName() {
+        return name;
+    }&lt;/p&gt;
+&lt;p&gt;public void setName(String name) {
+        this.name = name;
+    }&lt;/p&gt;
+&lt;p&gt;public String getDescription() {
+        return description;
+    }&lt;/p&gt;
+&lt;p&gt;public void setDescription(String description) {
+        this.description = description;
+    }&lt;/p&gt;
+&lt;p&gt;public String getExpectedOutcome() {
+        return expectedOutcome;
+    }&lt;/p&gt;
+&lt;p&gt;public void setExpectedOutcome(String expectedOutcome) {
+        this.expectedOutcome = expectedOutcome;
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;12.4.13 运行与测试&lt;/h3&gt;
+&lt;p&gt;**1. 启动应用**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 设置环境变量（阿里云百炼 API Key）
+export DASHSCOPE_API_KEY=your_api_key_here
+&lt;h1&gt;进入项目目录&lt;/h1&gt;
+cd agentscope-examples/chapter12-plan-tutorial
+&lt;h1&gt;启动应用&lt;/h1&gt;
+mvn spring-boot:run
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**2. 创建计划并执行**&lt;/p&gt;
+&lt;p&gt;通过 curl 或 Postman 测试：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 1. 发起对话（会自动创建计划）
+curl -X POST http://localhost:8080/api/chat \
+  -H &amp;quot;Content-Type: application/json&amp;quot; \
+  -H &amp;quot;X-Session-Id: test1&amp;quot; \
+  -d '{&amp;quot;message&amp;quot;: &amp;quot;帮我计算 100+200，然后写入 result.txt，再读取验证&amp;quot;}'
+&lt;h1&gt;2. 查看当前计划&lt;/h1&gt;
+curl http://localhost:8080/api/plan
+&lt;h1&gt;3. 获取历史计划&lt;/h1&gt;
+curl http://localhost:8080/api/plan/history
+&lt;h1&gt;4. 获取计划统计&lt;/h1&gt;
+curl http://localhost:8080/api/plan/stats
+&lt;h1&gt;5. 检查 Agent 状态&lt;/h1&gt;
+curl http://localhost:8080/api/chat/status
+&lt;h1&gt;6. 重置 Agent&lt;/h1&gt;
+curl -X POST http://localhost:8080/api/reset
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**3. 预期输出示例**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-json&quot;&gt;{
+  &amp;quot;id&amp;quot;: &amp;quot;550e8400-e29b-41d4-a716-446655440000&amp;quot;,
+  &amp;quot;name&amp;quot;: &amp;quot;计算并保存结果&amp;quot;,
+  &amp;quot;description&amp;quot;: &amp;quot;执行三个步骤：计算 100+200，将结果写入文件，验证文件内容&amp;quot;,
+  &amp;quot;state&amp;quot;: &amp;quot;in_progress&amp;quot;,
+  &amp;quot;subtasks&amp;quot;: [
+    {
+      &amp;quot;index&amp;quot;: 0,
+      &amp;quot;name&amp;quot;: &amp;quot;计算表达式&amp;quot;,
+      &amp;quot;description&amp;quot;: &amp;quot;使用 calculate 工具计算 100+200&amp;quot;,
+      &amp;quot;expectedOutcome&amp;quot;: &amp;quot;结果为 300&amp;quot;,
+      &amp;quot;state&amp;quot;: &amp;quot;done&amp;quot;,
+      &amp;quot;outcome&amp;quot;: &amp;quot;100+200 = 300.0&amp;quot;
+    },
+    {
+      &amp;quot;index&amp;quot;: 1,
+      &amp;quot;name&amp;quot;: &amp;quot;保存结果到文件&amp;quot;,
+      &amp;quot;description&amp;quot;: &amp;quot;使用 write_file 工具写入 result.txt&amp;quot;,
+      &amp;quot;expectedOutcome&amp;quot;: &amp;quot;文件包含 '300'&amp;quot;,
+      &amp;quot;state&amp;quot;: &amp;quot;done&amp;quot;,
+      &amp;quot;outcome&amp;quot;: &amp;quot;File written: result.txt&amp;quot;
+    },
+    {
+      &amp;quot;index&amp;quot;: 2,
+      &amp;quot;name&amp;quot;: &amp;quot;验证文件内容&amp;quot;,
+      &amp;quot;description&amp;quot;: &amp;quot;使用 read_file 读取并确认内容&amp;quot;,
+      &amp;quot;expectedOutcome&amp;quot;: &amp;quot;内容为 '300'&amp;quot;,
+      &amp;quot;state&amp;quot;: &amp;quot;in_progress&amp;quot;,
+      &amp;quot;outcome&amp;quot;: null
+    }
+  ]
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**4. H2 数据库查看**&lt;/p&gt;
+&lt;p&gt;访问 http://localhost:8080/h2-console，使用以下配置：
+&lt;ul&gt;&lt;li&gt;JDBC URL: &lt;code&gt;jdbc:h2:mem:plan_db&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;用户名: &lt;code&gt;sa&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;密码: （空）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;12.5 本章小结&lt;/h2&gt;&lt;/p&gt;
+&lt;p&gt;本章详细介绍了 AgentScope Java 的计划与任务分解系统：&lt;/p&gt;
+&lt;p&gt;**核心要点**：&lt;/p&gt;
+&lt;p&gt;1. **PlanNotebook** 是计划系统的核心，提供创建、修订、完成计划的能力
+2. **自动提示注入** 通过 Hook 机制在每次推理前提供上下文引导
+3. **严格的状态转换** 保证计划执行的有序性和可预测性
+4. **灵活的存储后端** 支持内存、数据库等多种持久化方案
+5. **实时状态监控** 通过 SSE 和监听器实现前端同步更新&lt;/p&gt;
+&lt;p&gt;**最佳实践**：
+&lt;ul&gt;&lt;li&gt;计划创建时应提供清晰、具体、可测量的目标和预期结果&lt;/li&gt;
+&lt;li&gt;子任务应该是原子性的，能够独立验证完成状态&lt;/li&gt;
+&lt;li&gt;使用数据库存储实现计划的历史追溯和恢复能力&lt;/li&gt;
+&lt;li&gt;通过 Hook 机制实现计划变更的实时通知和业务联动&lt;/li&gt;
+&lt;/ul&gt;
+**下一步**：第十三章将介绍 Hook 钩子系统，深入讲解如何通过自定义钩子扩展 Agent 的行为和控制流程。&lt;/p&gt;
+</body>
+</html>

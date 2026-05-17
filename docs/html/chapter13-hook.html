@@ -1,0 +1,2017 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第十三章：Hook 钩子系统</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        h3 { color: #7f8c8d; }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+        }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+        table {
+            border-collapse: collapse;
+            margin: 20px 0;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th { background: #3498db; color: white; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        ul { padding-left: 20px; }
+        li { margin: 5px 0; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            color: #666;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+&lt;h1&gt;第十三章：Hook 钩子系统&lt;/h1&gt;
+&lt;p&gt;AgentScope Java 的 Hook 钩子系统是实现 Agent 运行时可观测性、可干预性和业务扩展的核心机制。通过 Hook，开发者可以在 Agent 执行的关键阶段插入自定义逻辑，实现日志记录、性能监控、安全检查、人工介入等功能，而无需修改核心 Agent 代码。&lt;/p&gt;
+&lt;h2&gt;13.1 生命周期钩子概念&lt;/h2&gt;
+&lt;h3&gt;13.1.1 什么是 Hook&lt;/h3&gt;
+&lt;p&gt;Hook（钩子）是一种事件监听机制。AgentScope Java 将 Agent 的执行过程拆解为一系列生命周期事件，每个事件触发时，所有注册的 Hook 都会被调用。Hook 可以读取事件上下文、修改事件数据、甚至中止 Agent 的执行流程。&lt;/p&gt;
+&lt;p&gt;**核心设计原则：**
+&lt;ul&gt;&lt;li&gt;**统一事件模型**：所有 Hook 事件都通过 &lt;code&gt;onEvent(T event)&lt;/code&gt; 方法处理，使用 Java 17+ 的 pattern matching 进行类型分发&lt;/li&gt;
+&lt;li&gt;**响应式编程**：Hook 返回 &lt;code&gt;Mono&lt;T&gt;&lt;/code&gt;（Project Reactor），支持异步处理和链式调用&lt;/li&gt;
+&lt;li&gt;**优先级机制**：Hook 可设置优先级（0-1000），数值越小优先级越高，优先执行&lt;/li&gt;
+&lt;li&gt;**可修改事件**：部分事件（如 &lt;code&gt;PreReasoningEvent&lt;/code&gt;、&lt;code&gt;PostActingEvent&lt;/code&gt;）提供了 setter 方法，允许 Hook 修改后续处理的数据&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;13.1.2 事件类型体系&lt;/h3&gt;&lt;/p&gt;
+&lt;p&gt;AgentScope Java 定义了完整的生命周期事件类型，存放在 &lt;code&gt;io.agentscope.core.hook&lt;/code&gt; 包中：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;HookEvent (sealed abstract class)
+├── PreCallEvent          - Agent 调用开始前（可修改输入）
+├── PostCallEvent         - Agent 调用完成后（可修改最终输出）
+├── ReasoningEvent (sealed)
+│   ├── PreReasoningEvent    - LLM 推理前（可修改输入消息）
+│   ├── PostReasoningEvent   - LLM 推理后（可修改推理结果，可中止）
+│   └── ReasoningChunkEvent  - 推理流式输出（只读）
+├── ActingEvent (sealed)
+│   ├── PreActingEvent       - 工具执行前（可修改工具参数）
+│   ├── PostActingEvent      - 工具执行后（可修改结果，可中止）
+│   └── ActingChunkEvent     - 工具流式输出（只读）
+├── SummaryEvent (sealed)
+│   ├── PreSummaryEvent      - 摘要生成前
+│   ├── SummaryChunkEvent    - 摘要流式输出
+│   └── PostSummaryEvent     - 摘要生成后
+└── ErrorEvent             - 执行出错（只读）
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;13.1.3 事件流向图&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;┌─────────────────────────────────────────────────────────────────┐
+│                        Agent.call()                             │
+├─────────────────────────────────────────────────────────────────┤
+│  1. PreCallEvent ──► [Hook] ──► Hook ──► ...                   │
+│         ↓                                                        │
+│  2. PreReasoningEvent ──► [Hook] ──► Hook ──► ...               │
+│         ↓                                                        │
+│  3. LLM.stream() ──► ReasoningChunkEvent ──► ...                │
+│         ↓                                                        │
+│  4. PostReasoningEvent ──► [Hook] ──► Hook ──► ...               │
+│         ↓                                                        │
+│  ┌─────────────────────────────────────────┐                   │
+│  │  循环：ToolUseBlock 存在？               │                   │
+│  │    ├─► PreActingEvent ──► [Hook]        │                   │
+│  │    │         ↓                          │                   │
+│  │    │   Tool.execute() ──► ActingChunk   │                   │
+│  │    │         ↓                          │                   │
+│  │    └─► PostActingEvent ──► [Hook]        │                   │
+│  │         ↓                                │                   │
+│  └─────► 回到 PreReasoningEvent             │                   │
+│         ↓                                                        │
+│  5. PreSummaryEvent ──► [Hook]                                   │
+│         ↓                                                        │
+│  6. SummaryChunkEvent ──► ...                                    │
+│         ↓                                                        │
+│  7. PostSummaryEvent ──► ...                                     │
+│         ↓                                                        │
+│  8. PostCallEvent ──► [Hook] ──► 返回最终消息                    │
+└─────────────────────────────────────────────────────────────────┘
+        ↓
+   ErrorEvent （任意阶段出错时触发）
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;13.1.4 Hook 接口详解&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;public interface Hook {
+&lt;p&gt;/**
+     * 处理钩子事件
+     *
+     * @param event 钩子事件
+     * @param &amp;lt;T&amp;gt; 事件具体类型
+     * @return 包含潜在修改后事件的无状态 Mono
+     */
+    &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; onEvent(T event);&lt;/p&gt;
+&lt;p&gt;/**
+     * 可选：随 Hook 一起安装的工具列表
+     * 在 Agent 构建时，这些工具会自动注册到 Agent 的 Toolkit 中
+     *
+     * @return 工具实例列表（默认返回空列表）
+     */
+    default List&amp;lt;Object&amp;gt; tools() {
+        return Collections.emptyList();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 钩子优先级（数值越小越先执行）
+     *
+     * 常见优先级范围：
+     * - 0-50:   系统关键钩子（认证、安全）
+     * - 51-100: 高优先级钩子（验证、预处理）
+     * - 101-500: 普通业务钩子
+     * - 501-1000: 低优先级钩子（日志、监控）
+     *
+     * @return 优先级数值（默认 100）
+     */
+    default int priority() {
+        return 100;
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;13.1.5 事件可修改性&lt;/h3&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;事件类型&lt;/th&gt;&lt;th&gt;可修改&lt;/th&gt;&lt;th&gt;允许的操作&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;PreCallEvent&lt;/td&gt;&lt;td&gt;是&lt;/td&gt;&lt;td&gt;&lt;code&gt;setInputMessages(List&lt;Msg&gt;)&lt;/code&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;PreReasoningEvent&lt;/td&gt;&lt;td&gt;是&lt;/td&gt;&lt;td&gt;&lt;code&gt;setInputMessages(List&lt;Msg&gt;)&lt;/code&gt;, &lt;code&gt;setGenerateOptions(GenerateOptions)&lt;/code&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;PostReasoningEvent&lt;/td&gt;&lt;td&gt;是&lt;/td&gt;&lt;td&gt;&lt;code&gt;setReasoningMessage(Msg)&lt;/code&gt;, &lt;code&gt;stopAgent()&lt;/code&gt;, &lt;code&gt;gotoReasoning()&lt;/code&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;PreActingEvent&lt;/td&gt;&lt;td&gt;是&lt;/td&gt;&lt;td&gt;工具参数修改（通过修改 ToolUseBlock）&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;PostActingEvent&lt;/td&gt;&lt;td&gt;是&lt;/td&gt;&lt;td&gt;&lt;code&gt;setToolResult(ToolResultBlock)&lt;/code&gt;, &lt;code&gt;stopAgent()&lt;/code&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;PostCallEvent&lt;/td&gt;&lt;td&gt;是&lt;/td&gt;&lt;td&gt;&lt;code&gt;setFinalMessage(Msg)&lt;/code&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;ReasoningChunkEvent&lt;/td&gt;&lt;td&gt;否&lt;/td&gt;&lt;td&gt;只读，流式通知&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;ActingChunkEvent&lt;/td&gt;&lt;td&gt;否&lt;/td&gt;&lt;td&gt;只读，流式通知&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;ErrorEvent&lt;/td&gt;&lt;td&gt;否&lt;/td&gt;&lt;td&gt;只读，错误通知&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;h2&gt;13.2 内置钩子实现&lt;/h2&gt;
+&lt;p&gt;AgentScope Java 提供了一系列开箱即用的内置 Hook，满足常见的监控、日志、追踪需求。&lt;/p&gt;
+&lt;h3&gt;13.2.1 JsonlTraceExporter - JSONL 追踪导出器&lt;/h3&gt;
+&lt;p&gt;**位置**：&lt;code&gt;io.agentscope.core.hook.recorder.JsonlTraceExporter&lt;/code&gt;&lt;/p&gt;
+&lt;p&gt;**功能**：将所有 Hook 事件以 JSON Lines 格式写入文件，适用于本地调试、离线排查和 GitHub Issue 附图。&lt;/p&gt;
+&lt;p&gt;**特性**：
+&lt;ul&gt;&lt;li&gt;异步写入，单线程队列保证顺序一致性&lt;/li&gt;
+&lt;li&gt;支持 OpenTelemetry trace_id 和 span_id 注入&lt;/li&gt;
+&lt;li&gt;可配置的事件过滤（默认记录主要事件）&lt;/li&gt;
+&lt;li&gt;best-effort 模式：IO 错误不中断 Agent 执行&lt;/li&gt;
+&lt;/ul&gt;
+**使用示例**：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 创建追踪导出器
+JsonlTraceExporter tracer = JsonlTraceExporter.builder(
+        Path.of(&amp;quot;logs&amp;quot;, &amp;quot;agent-trace.jsonl&amp;quot;))
+    .includeReasoningChunks(true)   // 包含推理流式输出
+    .includeActingChunks(true)      // 包含工具执行流式输出
+    .includeSummary(true)          // 包含摘要事件
+    .priority(900)                 // 低优先级（日志类钩子）
+    .build();
+&lt;p&gt;// 注册到 Agent
+ReActAgent agent = ReActAgent.builder()
+    .name(&amp;quot;TracedAgent&amp;quot;)
+    .hooks(List.of(tracer))         // 可同时注册多个 Hook
+    // ... 其他配置
+    .build();&lt;/p&gt;
+&lt;p&gt;// 使用 try-with-resources 确保正确关闭
+try (tracer) {
+    Msg response = agent.call(userInput);
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;13.2.2 LoggingHook - 通用日志钩子（自定义实现）&lt;/h3&gt;
+&lt;p&gt;以下是一个生产级的日志 Hook 示例，整合了 Spring Boot 的日志框架：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter13;
+&lt;p&gt;import io.agentscope.core.hook.*;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.ToolResultBlock;
+import io.agentscope.core.message.ToolUseBlock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;&lt;/p&gt;
+&lt;p&gt;import java.util.List;&lt;/p&gt;
+&lt;p&gt;/**
+ * 生产级日志钩子：记录所有关键生命周期事件
+ * 使用 SLF4J/Logback 与 Spring Boot 集成
+ */
+public class LoggingHook implements Hook {&lt;/p&gt;
+&lt;p&gt;private static final Logger log = LoggerFactory.getLogger(LoggingHook.class);&lt;/p&gt;
+&lt;p&gt;// 可配置：是否记录流式 chunks（可能产生大量日志）
+    private final boolean logStreamingChunks;&lt;/p&gt;
+&lt;p&gt;public LoggingHook() {
+        this(false);
+    }&lt;/p&gt;
+&lt;p&gt;public LoggingHook(boolean logStreamingChunks) {
+        this.logStreamingChunks = logStreamingChunks;
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public int priority() {
+        return 950; // 低优先级，确保在业务钩子之后执行
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; onEvent(T event) {
+        return switch (event) {
+            case PreCallEvent e -&amp;gt; handlePreCall(e);
+            case PostCallEvent e -&amp;gt; handlePostCall(e);
+            case PreReasoningEvent e -&amp;gt; handlePreReasoning(e);
+            case PostReasoningEvent e -&amp;gt; handlePostReasoning(e);
+            case ReasoningChunkEvent e when logStreamingChunks -&amp;gt; handleReasoningChunk(e);
+            case PreActingEvent e -&amp;gt; handlePreActing(e);
+            case PostActingEvent e -&amp;gt; handlePostActing(e);
+            case ActingChunkEvent e when logStreamingChunks -&amp;gt; handleActingChunk(e);
+            case ErrorEvent e -&amp;gt; handleError(e);
+            default -&amp;gt; Mono.just(event);
+        };
+    }&lt;/p&gt;
+&lt;p&gt;private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePreCall(PreCallEvent e) {
+        log.info(&amp;quot;[{}] Agent 调用开始 - 输入消息数: {}&amp;quot;,
+                e.getAgent().getName(),
+                e.getInputMessages().size());
+        return Mono.just((T) event);
+    }&lt;/p&gt;
+&lt;p&gt;private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePostCall(PostCallEvent e) {
+        Msg finalMsg = e.getFinalMessage();
+        log.info(&amp;quot;[{}] Agent 调用完成 - 响应内容长度: {}&amp;quot;,
+                e.getAgent().getName(),
+                finalMsg != null ? finalMsg.getTextContent().length() : 0);
+        return Mono.just((T) event);
+    }&lt;/p&gt;
+&lt;p&gt;private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePreReasoning(PreReasoningEvent e) {
+        log.debug(&amp;quot;[{}] 准备推理 - 模型: {}, 输入消息数: {}&amp;quot;,
+                e.getAgent().getName(),
+                e.getModelName(),
+                e.getInputMessages().size());
+        return Mono.just((T) event);
+    }&lt;/p&gt;
+&lt;p&gt;private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePostReasoning(PostReasoningEvent e) {
+        Msg reasoningMsg = e.getReasoningMessage();
+        if (reasoningMsg != null) {
+            List&amp;lt;ToolUseBlock&amp;gt; toolCalls = reasoningMsg.getContentBlocks(ToolUseBlock.class);
+            log.info(&amp;quot;[{}] 推理完成 - ToolCalls: {}&amp;quot;,
+                    e.getAgent().getName(),
+                    toolCalls.size());
+        } else {
+            log.info(&amp;quot;[{}] 推理完成 - 无 ToolCall&amp;quot;,
+                    e.getAgent().getName());
+        }
+        return Mono.just((T) event);
+    }&lt;/p&gt;
+&lt;p&gt;private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handleReasoningChunk(ReasoningChunkEvent e) {
+        Msg chunk = e.getIncrementalChunk();
+        String text = chunk != null ? chunk.getTextContent() : &amp;quot;&amp;quot;;
+        log.trace(&amp;quot;[{}] 推理 Chunk: {}&amp;quot;,
+                e.getAgent().getName(),
+                text.length() &amp;gt; 100 ? text.substring(0, 100) + &amp;quot;...&amp;quot; : text);
+        return Mono.just((T) event);
+    }&lt;/p&gt;
+&lt;p&gt;private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePreActing(PreActingEvent e) {
+        ToolUseBlock toolUse = e.getToolUse();
+        log.info(&amp;quot;[{}] 执行工具: {} - 输入: {}&amp;quot;,
+                e.getAgent().getName(),
+                toolUse.getName(),
+                toolUse.getInput());
+        return Mono.just((T) event);
+    }&lt;/p&gt;
+&lt;p&gt;private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePostActing(PostActingEvent e) {
+        ToolResultBlock result = e.getToolResult();
+        String output = result != null &amp;amp;&amp;amp; !result.getOutput().isEmpty()
+                ? result.getOutput().get(0).toString()
+                : &amp;quot;(empty)&amp;quot;;
+        log.info(&amp;quot;[{}] 工具执行完成: {} - 结果: {}&amp;quot;,
+                e.getAgent().getName(),
+                e.getToolUse().getName(),
+                output.length() &amp;gt; 200 ? output.substring(0, 200) + &amp;quot;...&amp;quot; : output);
+        return Mono.just((T) event);
+    }&lt;/p&gt;
+&lt;p&gt;private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handleActingChunk(ActingChunkEvent e) {
+        ToolResultBlock chunk = e.getChunk();
+        log.trace(&amp;quot;[{}] 工具 Chunk: {}&amp;quot;,
+                e.getAgent().getName(),
+                e.getToolUse().getName());
+        return Mono.just((T) event);
+    }&lt;/p&gt;
+&lt;p&gt;private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handleError(ErrorEvent e) {
+        log.error(&amp;quot;[{}] 执行出错: {} - {}&amp;quot;,
+                e.getAgent().getName(),
+                e.getError().getClass().getSimpleName(),
+                e.getError().getMessage(),
+                e.getError());
+        return Mono.just((T) event);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;13.2.3 其他内置 Hook 示例&lt;/h3&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Hook 类&lt;/th&gt;&lt;th&gt;位置&lt;/th&gt;&lt;th&gt;功能&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;TTSHook&lt;/td&gt;&lt;td&gt;&lt;code&gt;io.agentscope.core.hook.TTSHook&lt;/code&gt;&lt;/td&gt;&lt;td&gt;文本转语音流式输出&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;SkillHook&lt;/td&gt;&lt;td&gt;&lt;code&gt;io.agentscope.core.skill.SkillHook&lt;/code&gt;&lt;/td&gt;&lt;td&gt;技能动态注册&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;GenericRAGHook&lt;/td&gt;&lt;td&gt;&lt;code&gt;io.agentscope.core.rag.GenericRAGHook&lt;/code&gt;&lt;/td&gt;&lt;td&gt;RAG 检索增强&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;AutoContextHook&lt;/td&gt;&lt;td&gt;&lt;code&gt;agentscope-extensions-autocontext-memory&lt;/code&gt;&lt;/td&gt;&lt;td&gt;自动上下文记忆&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;StudioMessageHook&lt;/td&gt;&lt;td&gt;&lt;code&gt;agentscope-extensions-studio&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Studio 消息同步&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;h2&gt;13.3 自定义钩子开发&lt;/h2&gt;
+&lt;h3&gt;13.3.1 基本开发模式&lt;/h3&gt;
+&lt;p&gt;自定义 Hook 需要实现 &lt;code&gt;Hook&lt;/code&gt; 接口，核心是重写 &lt;code&gt;onEvent&lt;/code&gt; 方法。使用 Java 17+ 的 pattern matching 进行事件类型匹配：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;public class MyCustomHook implements Hook {
+&lt;p&gt;@Override
+    public &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; onEvent(T event) {
+        // 使用 pattern matching 处理不同事件
+        return switch (event) {
+            case PreCallEvent e -&amp;gt; {
+                // 处理 Agent 开始事件
+                yield Mono.just(event);
+            }
+            case PostCallEvent e -&amp;gt; {
+                // 处理 Agent 完成事件
+                yield Mono.just(event);
+            }
+            default -&amp;gt; Mono.just(event);  // 其他事件保持不变
+        };
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;13.3.2 拦截与修改示例&lt;/h3&gt;
+&lt;p&gt;**示例 1：注入系统提示词**&lt;/p&gt;
+&lt;p&gt;在推理前向消息列表中添加额外的系统指令：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;public class HintInjectionHook implements Hook {
+&lt;p&gt;private final String hintText;&lt;/p&gt;
+&lt;p&gt;public HintInjectionHook(String hintText) {
+        this.hintText = hintText;
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; onEvent(T event) {
+        if (event instanceof PreReasoningEvent e) {
+            // 复制一份消息列表（不可变）
+            List&amp;lt;Msg&amp;gt; modifiedMessages = new ArrayList&amp;lt;&amp;gt;(e.getInputMessages());&lt;/p&gt;
+&lt;p&gt;// 在开头插入提示词
+            modifiedMessages.add(0, Msg.builder()
+                .role(MsgRole.SYSTEM)
+                .name(&amp;quot;hint&amp;quot;)
+                .content(TextBlock.of(hintText))
+                .build());&lt;/p&gt;
+&lt;p&gt;// 应用修改
+            e.setInputMessages(modifiedMessages);
+        }
+        return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public int priority() {
+        return 80; // 高优先级，在推理前尽早注入
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**示例 2：工具调用安全检查**&lt;/p&gt;
+&lt;p&gt;在工具执行前检查并阻止危险操作：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;import io.agentscope.core.hook.*;
+import io.agentscope.core.message.ToolUseBlock;
+import reactor.core.publisher.Mono;
+&lt;p&gt;import java.util.Set;&lt;/p&gt;
+&lt;p&gt;public class SecurityCheckHook implements Hook {&lt;/p&gt;
+&lt;p&gt;private final Set&amp;lt;String&amp;gt; blockedTools;&lt;/p&gt;
+&lt;p&gt;public SecurityCheckHook(Set&amp;lt;String&amp;gt; blockedTools) {
+        this.blockedTools = Set.copyOf(blockedTools);
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; onEvent(T event) {
+        if (event instanceof PreActingEvent e) {
+            ToolUseBlock toolUse = e.getToolUse();
+            if (blockedTools.contains(toolUse.getName())) {
+                // 阻止危险工具执行
+                System.out.println(&amp;quot;[SECURITY] 阻止执行危险工具: &amp;quot; + toolUse.getName());
+                // 通过设置空结果来模拟阻止
+                e.setToolUse(ToolUseBlock.builder()
+                    .name(toolUse.getName())
+                    .input(toolUse.getInput())
+                    .id(toolUse.getId())
+                    .build());
+                // 注意：实际阻止需要更复杂的机制
+            }
+        }
+        return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public int priority() {
+        return 10; // 最高优先级，最先执行
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**示例 3：人工介入钩子（Human-in-the-Loop）**&lt;/p&gt;
+&lt;p&gt;在危险工具执行前暂停，等待人工确认：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;import io.agentscope.core.hook.*;
+import reactor.core.publisher.Mono;
+&lt;p&gt;import java.util.Scanner;
+import java.util.Set;&lt;/p&gt;
+&lt;p&gt;public class HumanConfirmationHook implements Hook {&lt;/p&gt;
+&lt;p&gt;private final Set&amp;lt;String&amp;gt; sensitiveTools;&lt;/p&gt;
+&lt;p&gt;public HumanConfirmationHook(Set&amp;lt;String&amp;gt; sensitiveTools) {
+        this.sensitiveTools = Set.copyOf(sensitiveTools);
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; onEvent(T event) {
+        if (event instanceof PostReasoningEvent e) {
+            // 检查是否有敏感工具被调用
+            var toolCalls = e.getReasoningMessage().getContentBlocks(ToolUseBlock.class);
+            boolean hasSensitiveTool = toolCalls.stream()
+                .anyMatch(t -&amp;gt; sensitiveTools.contains(t.getName()));&lt;/p&gt;
+&lt;p&gt;if (hasSensitiveTool) {
+                System.out.println(&amp;quot;\n[确认] 检测到敏感工具调用，需要人工确认 (y/n): &amp;quot;);
+                Scanner scanner = new Scanner(System.in);
+                String input = scanner.nextLine().trim().toLowerCase();&lt;/p&gt;
+&lt;p&gt;if (!input.equals(&amp;quot;y&amp;quot;) &amp;amp;&amp;amp; !input.equals(&amp;quot;yes&amp;quot;)) {
+                    // 用户拒绝，停止 Agent 执行
+                    e.stopAgent();
+                    System.out.println(&amp;quot;[确认] 用户取消操作&amp;quot;);
+                } else {
+                    System.out.println(&amp;quot;[确认] 用户批准继续&amp;quot;);
+                }
+            }
+        }
+        return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public int priority() {
+        return 50; // 高优先级，尽早拦截
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;13.3.3 钩子优先级设计&lt;/h3&gt;
+&lt;p&gt;合理的优先级设计确保钩子链按预期顺序执行：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 优先级常量定义
+public class HookPriorities {
+    public static final int SYSTEM_CRITICAL = 10;   // 系统关键（认证、安全）
+    public static final int SECURITY_CHECK = 30;   // 安全检查
+    public static final int VALIDATION = 60;       // 数据验证
+    public static final int PREPROCESSING = 80;    // 预处理
+    public static final int NORMAL = 100;          // 默认业务逻辑
+    public static final int POSTPROCESSING = 200;  // 后处理
+    public static final int LOGGING = 900;         // 日志记录
+    public static final int METRICS = 950;         // 指标收集
+}
+&lt;p&gt;// 优先级组配示例
+List&amp;lt;Hook&amp;gt; hooks = List.of(
+    new SecurityCheckHook(blockedTools),     // 10
+    new HumanConfirmationHook(sensitiveTools), // 50
+    new HintInjectionHook(&amp;quot;Think step by step&amp;quot;), // 80
+    new BusinessLogicHook(),                 // 100
+    new PostProcessingHook(),               // 200
+    new LoggingHook(),                      // 900
+    new MetricsHook()                       // 950
+);
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;13.3.4 钩子链执行顺序&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;Agent 执行流程:
+&lt;p&gt;[PreCall]     --&amp;gt; SecurityHook(10) --&amp;gt; ValidationHook(60) --&amp;gt; LoggingHook(900)
+                  ↓
+[PreReasoning] --&amp;gt; HintInjectionHook(80) --&amp;gt; CustomHook(100)
+                  ↓
+[LLM Call]    --&amp;gt; (ReasoningChunk events)
+                  ↓
+[PostReasoning] --&amp;gt; PostProcessHook(200) --&amp;gt; LoggingHook(900)
+                  ↓
+[Loop: Acting] --&amp;gt; SecurityCheck(30) --&amp;gt; BusinessLogic(100) --&amp;gt; Logging(900)
+                  ↓
+[PreSummary]  --&amp;gt; ...
+                  ↓
+[PostSummary] --&amp;gt; ...
+                  ↓
+[PostCall]    --&amp;gt; FinalProcessingHook(300) --&amp;gt; Logging(900)
+                  ↓
+               --&amp;gt; Agent 返回最终消息
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h2&gt;13.4 【案例】日志与监控钩子实战&lt;/h2&gt;
+&lt;h3&gt;13.4.1 项目概述&lt;/h3&gt;
+&lt;p&gt;本案例实现一个完整的 Spring Boot 3 + Java 21 应用，演示如何：&lt;/p&gt;
+&lt;p&gt;1. 配置内置 &lt;code&gt;JsonlTraceExporter&lt;/code&gt; 实现调用追踪
+2. 自定义 &lt;code&gt;LoggingHook&lt;/code&gt; 记录结构化日志
+3. 自定义 &lt;code&gt;MetricsHook&lt;/code&gt; 收集性能指标
+4. 自定义 &lt;code&gt;ToolAuditHook&lt;/code&gt; 审计工具调用
+5. 配置钩子优先级链&lt;/p&gt;
+&lt;h3&gt;13.4.2 项目结构&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;src/main/java/io/agentscope/tutorial/chapter13/
+├── Chapter13Application.java          # Spring Boot 启动类
+├── config/
+│   └── AgentConfig.java               # Agent 配置类
+├── hook/
+│   ├── LoggingHook.java              # 自定义日志钩子
+│   ├── MetricsHook.java             # 自定义监控钩子
+│   └── ToolAuditHook.java           # 工具审计钩子
+├── service/
+│   └── AgentService.java            # Agent 服务层
+└── controller/
+    └── AgentController.java         # REST 控制器
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;13.4.3 完整代码实现&lt;/h3&gt;
+&lt;p&gt;**pom.xml 依赖配置：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot;?&amp;gt;
+&amp;lt;project xmlns=&amp;quot;http://maven.apache.org/POM/4.0.0&amp;quot;
+         xmlns:xsi=&amp;quot;http://www.w3.org/2001/XMLSchema-instance&amp;quot;
+         xsi:schemaLocation=&amp;quot;http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd&amp;quot;&amp;gt;
+    &amp;lt;modelVersion&amp;gt;4.0.0&amp;lt;/modelVersion&amp;gt;
+&lt;p&gt;&amp;lt;parent&amp;gt;
+        &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+        &amp;lt;artifactId&amp;gt;spring-boot-starter-parent&amp;lt;/artifactId&amp;gt;
+        &amp;lt;version&amp;gt;3.3.0&amp;lt;/version&amp;gt;
+        &amp;lt;relativePath/&amp;gt;
+    &amp;lt;/parent&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;groupId&amp;gt;io.agentscope.tutorial&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;chapter13-hook&amp;lt;/artifactId&amp;gt;
+    &amp;lt;version&amp;gt;1.0.0&amp;lt;/version&amp;gt;
+    &amp;lt;name&amp;gt;Chapter 13 - Hook System&amp;lt;/name&amp;gt;
+    &amp;lt;description&amp;gt;AgentScope Java Hook System Tutorial&amp;lt;/description&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;properties&amp;gt;
+        &amp;lt;java.version&amp;gt;21&amp;lt;/java.version&amp;gt;
+        &amp;lt;maven.compiler.source&amp;gt;21&amp;lt;/maven.compiler.source&amp;gt;
+        &amp;lt;maven.compiler.target&amp;gt;21&amp;lt;/maven.compiler.target&amp;gt;
+        &amp;lt;project.build.sourceEncoding&amp;gt;UTF-8&amp;lt;/project.build.sourceEncoding&amp;gt;
+    &amp;lt;/properties&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;dependencies&amp;gt;
+        &amp;lt;!-- Spring Boot Web --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-starter-web&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- AgentScope Core --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-core&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;${agentscope.version}&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- AgentScope DashScope Model (for demo) --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-model-dashscope&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;${agentscope.version}&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- Lombok (optional, for reducing boilerplate) --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.projectlombok&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;lombok&amp;lt;/artifactId&amp;gt;
+            &amp;lt;optional&amp;gt;true&amp;lt;/optional&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- Test --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-starter-test&amp;lt;/artifactId&amp;gt;
+            &amp;lt;scope&amp;gt;test&amp;lt;/scope&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+    &amp;lt;/dependencies&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;dependencyManagement&amp;gt;
+        &amp;lt;dependencies&amp;gt;
+            &amp;lt;dependency&amp;gt;
+                &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+                &amp;lt;artifactId&amp;gt;agentscope-bom&amp;lt;/artifactId&amp;gt;
+                &amp;lt;version&amp;gt;${agentscope.version}&amp;lt;/version&amp;gt;
+                &amp;lt;type&amp;gt;pom&amp;lt;/type&amp;gt;
+                &amp;lt;scope&amp;gt;import&amp;lt;/scope&amp;gt;
+            &amp;lt;/dependency&amp;gt;
+        &amp;lt;/dependencies&amp;gt;
+    &amp;lt;/dependencyManagement&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;build&amp;gt;
+        &amp;lt;plugins&amp;gt;
+            &amp;lt;plugin&amp;gt;
+                &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+                &amp;lt;artifactId&amp;gt;spring-boot-maven-plugin&amp;lt;/artifactId&amp;gt;
+            &amp;lt;/plugin&amp;gt;
+        &amp;lt;/plugins&amp;gt;
+    &amp;lt;/build&amp;gt;
+&amp;lt;/project&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**application.yml 配置：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;spring:
+  application:
+    name: agentscope-chapter13
+&lt;h1&gt;AgentScope 配置&lt;/h1&gt;
+agentscope:
+  api-key: ${DASHSCOPE_API_KEY:your-api-key-here}
+  model:
+    default: qwen-plus
+    thinking:
+      enabled: true
+&lt;h1&gt;日志配置&lt;/h1&gt;
+logging:
+  level:
+    io.agentscope: DEBUG
+    io.agentscope.tutorial: INFO
+  pattern:
+    console: &amp;quot;%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n&amp;quot;
+  file:
+    name: logs/agentscope.log
+&lt;p&gt;server:
+  port: 8080
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**Chapter13Application.java - Spring Boot 启动类：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter13;
+&lt;p&gt;import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;&lt;/p&gt;
+&lt;p&gt;/**
+ * AgentScope Hook 系统教程 - Spring Boot 启动类
+ *
+ * 本案例演示如何通过 Spring Boot 3 + Java 21 集成 AgentScope Java 的 Hook 机制，
+ * 实现日志记录、性能监控和工具调用审计。
+ *
+ * @author AgentScope Tutorial
+ */
+@SpringBootApplication
+public class Chapter13Application {&lt;/p&gt;
+&lt;p&gt;public static void main(String[] args) {
+        SpringApplication.run(Chapter13Application.class, args);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**config/AgentConfig.java - Agent 配置与 Bean 定义：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter13.config;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.formatter.dashscope.DashScopeChatFormatter;
+import io.agentscope.core.hook.Hook;
+import io.agentscope.core.hook.recorder.JsonlTraceExporter;
+import io.agentscope.core.memory.InMemoryMemory;
+import io.agentscope.core.model.DashScopeChatModel;
+import io.agentscope.core.tool.Tool;
+import io.agentscope.core.tool.Toolkit;
+import io.agentscope.tutorial.chapter13.hook.LoggingHook;
+import io.agentscope.tutorial.chapter13.hook.MetricsHook;
+import io.agentscope.tutorial.chapter13.hook.ToolAuditHook;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;&lt;/p&gt;
+&lt;p&gt;import java.nio.file.Path;
+import java.util.List;
+import java.util.Set;&lt;/p&gt;
+&lt;p&gt;/**
+ * Agent 配置类 - 集中管理 Agent 实例的创建和钩子配置
+ *
+ * 通过 Spring 的依赖注入机制，确保：
+ * 1. 所有钩子只创建一次（单例）
+ * 2. Agent 及其钩子链在应用启动时完成初始化
+ * 3. 便于测试时替换模拟实现
+ */
+@Configuration
+public class AgentConfig {&lt;/p&gt;
+&lt;p&gt;@Value(&amp;quot;${agentscope.api-key}&amp;quot;)
+    private String apiKey;&lt;/p&gt;
+&lt;p&gt;@Value(&amp;quot;${agentscope.model.default:qwen-plus}&amp;quot;)
+    private String defaultModel;&lt;/p&gt;
+&lt;p&gt;/**
+     * 配置日志钩子 - 记录所有关键生命周期事件
+     * 优先级 900：低优先级，确保在业务逻辑之后执行
+     */
+    @Bean
+    public LoggingHook loggingHook() {
+        return new LoggingHook(false); // 不记录流式 chunks 以减少日志量
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 配置监控钩子 - 收集性能指标
+     * 优先级 950：最低优先级，专注于指标收集
+     */
+    @Bean
+    public MetricsHook metricsHook() {
+        return new MetricsHook();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 配置工具审计钩子 - 记录工具调用的详细信息
+     * 优先级 60：高优先级，尽早拦截工具调用
+     */
+    @Bean
+    public ToolAuditHook toolAuditHook() {
+        // 审计所有工具调用
+        return new ToolAuditHook(Set.of());
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 配置 JSONL 追踪导出器 - 将所有事件写入文件
+     * 优先级 900：与日志钩子同级别
+     */
+    @Bean
+    public JsonlTraceExporter traceExporter() {
+        return JsonlTraceExporter.builder(Path.of(&amp;quot;logs&amp;quot;, &amp;quot;agent-trace.jsonl&amp;quot;))
+                .includeReasoningChunks(true)
+                .includeActingChunks(true)
+                .includeSummary(true)
+                .priority(900)
+                .build();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 配置钩子列表 - 按优先级排序
+     *
+     * 执行顺序：
+     * 1. ToolAuditHook(60)   - 工具审计
+     * 2. MetricsHook(950)    - 指标收集
+     * 3. LoggingHook(900)   - 日志记录
+     * 4. TraceExporter(900)  - 追踪导出
+     */
+    @Bean
+    public List&amp;lt;Hook&amp;gt; hooks(LoggingHook loggingHook,
+                            MetricsHook metricsHook,
+                            ToolAuditHook toolAuditHook,
+                            JsonlTraceExporter traceExporter) {
+        return List.of(
+                toolAuditHook,   // 优先级 60
+                metricsHook,     // 优先级 950
+                loggingHook,     // 优先级 900
+                traceExporter    // 优先级 900
+        );
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建示例工具集
+     */
+    @Bean
+    public Toolkit agentToolkit() {
+        Toolkit toolkit = new Toolkit();
+        toolkit.registerTool(new DemoTools());
+        return toolkit;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建 ReActAgent 实例
+     *
+     * 配置说明：
+     * - name: Agent 标识名称
+     * - sysPrompt: 系统提示词，定义 Agent 行为
+     * - model: 使用 DashScope 阿里云模型
+     * - toolkit: 注册的工具集合
+     * - memory: 内存管理（InMemoryMemory 仅用于演示，生产环境建议使用持久化方案）
+     * - hooks: 钩子链配置
+     */
+    @Bean
+    public ReActAgent tutorialAgent(List&amp;lt;Hook&amp;gt; hooks, Toolkit agentToolkit) {
+        return ReActAgent.builder()
+                .name(&amp;quot;TutorialAgent&amp;quot;)
+                .sysPrompt(&amp;quot;&amp;quot;&amp;quot;
+                    You are a helpful assistant with access to several tools.&lt;/p&gt;
+&lt;p&gt;Available tools:
+&lt;ul&gt;&lt;li&gt;calculate: Perform mathematical calculations&lt;/li&gt;
+&lt;li&gt;get_weather: Get weather information for a city&lt;/li&gt;
+&lt;li&gt;search_info: Search for information on the internet&lt;/li&gt;
+&lt;/ul&gt;
+                    Use tools when needed to answer user questions accurately.
+                    Always explain your reasoning process.
+                    &amp;quot;&amp;quot;&amp;quot;)
+                .model(DashScopeChatModel.builder()
+                        .apiKey(apiKey)
+                        .modelName(defaultModel)
+                        .stream(true)
+                        .enableThinking(true)
+                        .formatter(new DashScopeChatFormatter())
+                        .build())
+                .toolkit(agentToolkit)
+                .memory(new InMemoryMemory())
+                .hooks(hooks)
+                .build();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 示例工具类 - 演示如何在 Hook 中观察工具调用
+     */
+    public static class DemoTools {&lt;/p&gt;
+&lt;p&gt;@Tool(name = &amp;quot;calculate&amp;quot;, description = &amp;quot;Perform a mathematical calculation&amp;quot;)
+        public String calculate(
+                @ToolParam(name = &amp;quot;expression&amp;quot;, description = &amp;quot;Mathematical expression to evaluate&amp;quot;)
+                String expression) {
+            try {
+                // 安全评估：仅支持基本数学运算
+                double result = evaluateExpression(expression);
+                return String.format(&amp;quot;%.2f&amp;quot;, result);
+            } catch (Exception e) {
+                return &amp;quot;Error: &amp;quot; + e.getMessage();
+            }
+        }&lt;/p&gt;
+&lt;p&gt;@Tool(name = &amp;quot;get_weather&amp;quot;, description = &amp;quot;Get weather for a city&amp;quot;)
+        public String getWeather(
+                @ToolParam(name = &amp;quot;city&amp;quot;, description = &amp;quot;City name&amp;quot;)
+                String city) {
+            // 模拟天气查询
+            return String.format(&amp;quot;Weather in %s: Sunny, 25°C&amp;quot;, city);
+        }&lt;/p&gt;
+&lt;p&gt;@Tool(name = &amp;quot;search_info&amp;quot;, description = &amp;quot;Search information online&amp;quot;)
+        public String searchInfo(
+                @ToolParam(name = &amp;quot;query&amp;quot;, description = &amp;quot;Search query&amp;quot;)
+                String query) {
+            // 模拟搜索
+            return String.format(&amp;quot;Search results for '%s': Found 100 results&amp;quot;, query);
+        }&lt;/p&gt;
+&lt;p&gt;/**
+         * 安全评估数学表达式（仅用于演示，生产环境请使用专业表达式求值库）
+         */
+        private double evaluateExpression(String expr) {
+            // 移除空格
+            expr = expr.replaceAll(&amp;quot;\\s+&amp;quot;, &amp;quot;&amp;quot;);
+            // 使用简单的正则表达式验证安全性
+            if (!expr.matches(&amp;quot;^[0-9+\\-*/().]+$&amp;quot;)) {
+                throw new IllegalArgumentException(&amp;quot;Invalid expression&amp;quot;);
+            }
+            // 使用 ScriptEngine 进行计算
+            try {
+                return new javax.script.ScriptEngineManager()
+                        .getEngineByName(&amp;quot;JavaScript&amp;quot;)
+                        .eval(expr)
+                        .toString()
+                        .matches(&amp;quot;-?\\d+(\\.\\d+)?&amp;quot;)
+                        ? Double.parseDouble(new javax.script.ScriptEngineManager()
+                                .getEngineByName(&amp;quot;JavaScript&amp;quot;)
+                                .eval(expr).toString())
+                        : 0;
+            } catch (Exception e) {
+                throw new RuntimeException(&amp;quot;Calculation error: &amp;quot; + e.getMessage());
+            }
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**hook/LoggingHook.java - 自定义日志钩子：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter13.hook;
+&lt;p&gt;import io.agentscope.core.hook.*;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.ToolResultBlock;
+import io.agentscope.core.message.ToolUseBlock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;&lt;/p&gt;
+&lt;p&gt;import java.util.List;&lt;/p&gt;
+&lt;p&gt;/**
+ * 自定义日志钩子 - 记录 Agent 执行的关键生命周期事件
+ *
+ * 功能特点：
+ * 1. 实现完整的生命周期事件监听
+ * 2. 使用 SLF4J 与 Spring Boot 日志框架集成
+ * 3. 可配置是否记录流式 chunks
+ * 4. 结构化日志输出，便于日志分析
+ *
+ * @author AgentScope Tutorial
+ */
+public class LoggingHook implements Hook {&lt;/p&gt;
+&lt;p&gt;private static final Logger log = LoggerFactory.getLogger(LoggingHook.class);&lt;/p&gt;
+&lt;p&gt;/** 是否记录流式 chunks（可能产生大量日志） */
+    private final boolean logStreamingChunks;&lt;/p&gt;
+&lt;p&gt;public LoggingHook() {
+        this(false);
+    }&lt;/p&gt;
+&lt;p&gt;public LoggingHook(boolean logStreamingChunks) {
+        this.logStreamingChunks = logStreamingChunks;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 钩子优先级：900（低优先级）
+     * 确保在业务逻辑之后执行，专注于日志记录
+     */
+    @Override
+    public int priority() {
+        return 900;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 统一事件处理入口
+     * 使用 pattern matching 分发到具体处理器
+     */
+    @Override
+    public &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; onEvent(T event) {
+        return switch (event) {
+            case PreCallEvent e -&amp;gt; handlePreCall(e);
+            case PostCallEvent e -&amp;gt; handlePostCall(e);
+            case PreReasoningEvent e -&amp;gt; handlePreReasoning(e);
+            case PostReasoningEvent e -&amp;gt; handlePostReasoning(e);
+            case ReasoningChunkEvent e when logStreamingChunks -&amp;gt; handleReasoningChunk(e);
+            case PreActingEvent e -&amp;gt; handlePreActing(e);
+            case PostActingEvent e -&amp;gt; handlePostActing(e);
+            case ActingChunkEvent e when logStreamingChunks -&amp;gt; handleActingChunk(e);
+            case PreSummaryEvent e -&amp;gt; handlePreSummary(e);
+            case PostSummaryEvent e -&amp;gt; handlePostSummary(e);
+            case ErrorEvent e -&amp;gt; handleError(e);
+            default -&amp;gt; Mono.just(event);
+        };
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理 Agent 调用开始事件
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePreCall(PreCallEvent e) {
+        List&amp;lt;Msg&amp;gt; messages = e.getInputMessages();
+        log.info(&amp;quot;[{}] Agent 调用开始 | 输入消息数: {}&amp;quot;,
+                e.getAgent().getName(),
+                messages.size());&lt;/p&gt;
+&lt;p&gt;// 记录前 3 条消息的摘要
+        for (int i = 0; i &amp;lt; Math.min(3, messages.size()); i++) {
+            Msg msg = messages.get(i);
+            String preview = truncate(msg.getTextContent(), 50);
+            log.debug(&amp;quot;  消息[{}]: {} - {}&amp;quot;,
+                    i, msg.getRole(), preview);
+        }&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理 Agent 调用完成事件
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePostCall(PostCallEvent e) {
+        Msg finalMsg = e.getFinalMessage();
+        String content = finalMsg != null ? finalMsg.getTextContent() : &amp;quot;&amp;quot;;
+        log.info(&amp;quot;[{}] Agent 调用完成 | 响应长度: {} 字符&amp;quot;,
+                e.getAgent().getName(),
+                content.length());&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理推理开始事件
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePreReasoning(PreReasoningEvent e) {
+        log.debug(&amp;quot;[{}] 推理开始 | 模型: {} | 输入消息数: {}&amp;quot;,
+                e.getAgent().getName(),
+                e.getModelName(),
+                e.getInputMessages().size());&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理推理完成事件
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePostReasoning(PostReasoningEvent e) {
+        Msg reasoningMsg = e.getReasoningMessage();&lt;/p&gt;
+&lt;p&gt;if (reasoningMsg != null) {
+            List&amp;lt;ToolUseBlock&amp;gt; toolCalls = reasoningMsg.getContentBlocks(ToolUseBlock.class);
+            String reasoningPreview = truncate(reasoningMsg.getTextContent(), 100);&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;[{}] 推理完成 | 推理内容预览: {}... | ToolCalls: {}&amp;quot;,
+                    e.getAgent().getName(),
+                    reasoningPreview,
+                    toolCalls.size());&lt;/p&gt;
+&lt;p&gt;// 记录每个 ToolCall 的详情
+            for (ToolUseBlock tool : toolCalls) {
+                log.debug(&amp;quot;  ToolCall: name={}, input={}&amp;quot;,
+                        tool.getName(),
+                        truncate(tool.getInput().toString(), 80));
+            }&lt;/p&gt;
+&lt;p&gt;// 检查是否请求停止
+            if (e.isStopRequested()) {
+                log.info(&amp;quot;[{}] 推理阶段请求停止 Agent&amp;quot;, e.getAgent().getName());
+            }&lt;/p&gt;
+&lt;p&gt;// 检查是否请求返回推理
+            if (e.isGotoReasoningRequested()) {
+                log.info(&amp;quot;[{}] 推理阶段请求返回推理&amp;quot;, e.getAgent().getName());
+            }
+        } else {
+            log.info(&amp;quot;[{}] 推理完成 | 无推理消息（直接返回）&amp;quot;,
+                    e.getAgent().getName());
+        }&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理推理流式输出事件
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handleReasoningChunk(ReasoningChunkEvent e) {
+        Msg chunk = e.getIncrementalChunk();
+        String text = chunk != null ? chunk.getTextContent() : &amp;quot;&amp;quot;;&lt;/p&gt;
+&lt;p&gt;log.trace(&amp;quot;[{}] 推理 Chunk | 内容: {}&amp;quot;,
+                e.getAgent().getName(),
+                truncate(text, 200));&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理工具执行开始事件
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePreActing(PreActingEvent e) {
+        ToolUseBlock toolUse = e.getToolUse();&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;[{}] 工具执行开始 | 工具: {} | 输入: {}&amp;quot;,
+                e.getAgent().getName(),
+                toolUse.getName(),
+                truncate(toolUse.getInput().toString(), 100));&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理工具执行完成事件
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePostActing(PostActingEvent e) {
+        ToolUseBlock toolUse = e.getToolUse();
+        ToolResultBlock result = e.getToolResult();&lt;/p&gt;
+&lt;p&gt;String output = extractResultText(result);
+        log.info(&amp;quot;[{}] 工具执行完成 | 工具: {} | 结果: {}&amp;quot;,
+                e.getAgent().getName(),
+                toolUse.getName(),
+                truncate(output, 150));&lt;/p&gt;
+&lt;p&gt;// 检查是否请求停止
+        if (e.isStopRequested()) {
+            log.info(&amp;quot;[{}] 工具执行后请求停止 Agent&amp;quot;, e.getAgent().getName());
+        }&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理工具流式输出事件
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handleActingChunk(ActingChunkEvent e) {
+        ToolResultBlock chunk = e.getChunk();
+        String text = extractResultText(chunk);&lt;/p&gt;
+&lt;p&gt;log.trace(&amp;quot;[{}] 工具 Chunk | 工具: {} | 内容: {}&amp;quot;,
+                e.getAgent().getName(),
+                e.getToolUse().getName(),
+                truncate(text, 100));&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理摘要生成开始事件
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePreSummary(PreSummaryEvent e) {
+        log.info(&amp;quot;[{}] 摘要生成开始 | 迭代次数: {}/{} | 模型: {}&amp;quot;,
+                e.getAgent().getName(),
+                e.getCurrentIteration(),
+                e.getMaxIterations(),
+                e.getModelName());&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理摘要生成完成事件
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePostSummary(PostSummaryEvent e) {
+        Msg summaryMsg = e.getSummaryMessage();
+        String content = summaryMsg != null ? summaryMsg.getTextContent() : &amp;quot;&amp;quot;;&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;[{}] 摘要生成完成 | 摘要长度: {} 字符&amp;quot;,
+                e.getAgent().getName(),
+                content.length());&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理错误事件
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handleError(ErrorEvent e) {
+        Throwable error = e.getError();&lt;/p&gt;
+&lt;p&gt;log.error(&amp;quot;[{}] 执行出错 | 类型: {} | 消息: {}&amp;quot;,
+                e.getAgent().getName(),
+                error.getClass().getSimpleName(),
+                error.getMessage());&lt;/p&gt;
+&lt;p&gt;// 记录堆栈跟踪的前几行
+        StackTraceElement[] stackTrace = error.getStackTrace();
+        if (stackTrace.length &amp;gt; 0) {
+            log.error(&amp;quot;  发生在: {}:{}&amp;quot;,
+                    stackTrace[0].getFileName(),
+                    stackTrace[0].getLineNumber());
+        }&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 从 ToolResultBlock 提取文本结果
+     */
+    private String extractResultText(ToolResultBlock result) {
+        if (result == null || result.getOutput().isEmpty()) {
+            return &amp;quot;(empty)&amp;quot;;
+        }
+        return result.getOutput().get(0).toString();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 截断过长文本
+     */
+    private String truncate(String text, int maxLength) {
+        if (text == null) return &amp;quot;(null)&amp;quot;;
+        if (text.length() &amp;lt;= maxLength) return text;
+        return text.substring(0, maxLength) + &amp;quot;...&amp;quot;;
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**hook/MetricsHook.java - 自定义监控钩子：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter13.hook;
+&lt;p&gt;import io.agentscope.core.hook.*;
+import io.agentscope.core.message.ToolUseBlock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;&lt;/p&gt;
+&lt;p&gt;import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;&lt;/p&gt;
+&lt;p&gt;/**
+ * 自定义监控钩子 - 收集 Agent 执行性能指标
+ *
+ * 收集的指标：
+ * 1. 调用次数和总耗时
+ * 2. 推理次数和耗时
+ * 3. 工具调用统计（按工具名称分类）
+ * 4. 错误统计
+ * 5. 推理/摘要切换次数
+ *
+ * @author AgentScope Tutorial
+ */
+public class MetricsHook implements Hook {&lt;/p&gt;
+&lt;p&gt;private static final Logger log = LoggerFactory.getLogger(MetricsHook.class);&lt;/p&gt;
+&lt;p&gt;/** 调用计数 */
+    private final AtomicInteger callCount = new AtomicInteger(0);&lt;/p&gt;
+&lt;p&gt;/** 总调用耗时（毫秒） */
+    private final AtomicLong totalCallTimeMs = new AtomicLong(0);&lt;/p&gt;
+&lt;p&gt;/** 推理次数 */
+    private final AtomicInteger reasoningCount = new AtomicInteger(0);&lt;/p&gt;
+&lt;p&gt;/** 工具调用统计 */
+    private final ConcurrentMap&amp;lt;String, AtomicInteger&amp;gt; toolCallCounts = new ConcurrentHashMap&amp;lt;&amp;gt;();&lt;/p&gt;
+&lt;p&gt;/** 错误计数 */
+    private final AtomicInteger errorCount = new AtomicInteger(0);&lt;/p&gt;
+&lt;p&gt;/** 当前调用的开始时间 */
+    private Instant currentCallStart;&lt;/p&gt;
+&lt;p&gt;/** 当前调用的推理开始时间 */
+    private Instant currentReasoningStart;&lt;/p&gt;
+&lt;p&gt;/** 当前调用内的迭代计数 */
+    private int currentIterationCount = 0;&lt;/p&gt;
+&lt;p&gt;public MetricsHook() {
+        log.info(&amp;quot;MetricsHook initialized&amp;quot;);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 钩子优先级：950（最低优先级）
+     * 确保在所有业务逻辑之后执行，最后进行指标收集
+     */
+    @Override
+    public int priority() {
+        return 950;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 统一事件处理入口
+     */
+    @Override
+    public &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; onEvent(T event) {
+        return switch (event) {
+            case PreCallEvent e -&amp;gt; handlePreCall(e);
+            case PostCallEvent e -&amp;gt; handlePostCall(e);
+            case PreReasoningEvent e -&amp;gt; handlePreReasoning(e);
+            case PostReasoningEvent e -&amp;gt; handlePostReasoning(e);
+            case PreActingEvent e -&amp;gt; handlePreActing(e);
+            case ErrorEvent e -&amp;gt; handleError(e);
+            default -&amp;gt; Mono.just(event);
+        };
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理 Agent 调用开始
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePreCall(PreCallEvent e) {
+        currentCallStart = Instant.now();
+        currentIterationCount = 0;
+        callCount.incrementAndGet();&lt;/p&gt;
+&lt;p&gt;log.debug(&amp;quot;[{}] 指标收集 - Agent 调用开始 #{}&amp;quot;,
+                e.getAgent().getName(),
+                callCount.get());&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理 Agent 调用完成
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePostCall(PostCallEvent e) {
+        if (currentCallStart != null) {
+            long durationMs = Duration.between(currentCallStart, Instant.now()).toMillis();
+            totalCallTimeMs.addAndGet(durationMs);&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;=== Agent 调用指标 #{} ===&amp;quot;, callCount.get());
+            log.info(&amp;quot;  总耗时: {} ms&amp;quot;, durationMs);
+            log.info(&amp;quot;  迭代次数: {}&amp;quot;, currentIterationCount);
+            log.info(&amp;quot;  推理次数: {}&amp;quot;, reasoningCount.get());
+            log.info(&amp;quot;  错误数: {}&amp;quot;, errorCount.get());&lt;/p&gt;
+&lt;p&gt;// 输出工具调用统计
+            if (!toolCallCounts.isEmpty()) {
+                log.info(&amp;quot;  工具调用统计:&amp;quot;);
+                toolCallCounts.forEach((tool, count) -&amp;gt;
+                    log.info(&amp;quot;    - {}: {} 次&amp;quot;, tool, count.get()));
+            }&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;  平均耗时: {} ms&amp;quot;, getAverageCallTimeMs());
+            log.info(&amp;quot;===================================&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 重置状态
+            currentCallStart = null;
+            reasoningCount.set(0);
+            toolCallCounts.clear();
+            errorCount.set(0);
+        }&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理推理开始
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePreReasoning(PreReasoningEvent e) {
+        currentReasoningStart = Instant.now();
+        currentIterationCount++;
+        reasoningCount.incrementAndGet();&lt;/p&gt;
+&lt;p&gt;log.debug(&amp;quot;[{}] 指标收集 - 推理开始 #{} (迭代 #{})&amp;quot;,
+                e.getAgent().getName(),
+                reasoningCount.get(),
+                currentIterationCount);&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理推理完成
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePostReasoning(PostReasoningEvent e) {
+        if (currentReasoningStart != null) {
+            long durationMs = Duration.between(currentReasoningStart, Instant.now()).toMillis();&lt;/p&gt;
+&lt;p&gt;// 统计 ToolCalls
+            if (e.getReasoningMessage() != null) {
+                List&amp;lt;ToolUseBlock&amp;gt; toolCalls =
+                    e.getReasoningMessage().getContentBlocks(ToolUseBlock.class);
+                for (ToolUseBlock tool : toolCalls) {
+                    toolCallCounts.computeIfAbsent(tool.getName(), k -&amp;gt; new AtomicInteger())
+                            .incrementAndGet();
+                }
+            }&lt;/p&gt;
+&lt;p&gt;log.debug(&amp;quot;[{}] 指标收集 - 推理完成 #{}, 耗时: {} ms&amp;quot;,
+                    e.getAgent().getName(),
+                    reasoningCount.get(),
+                    durationMs);&lt;/p&gt;
+&lt;p&gt;currentReasoningStart = null;
+        }&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理工具执行开始
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePreActing(PreActingEvent e) {
+        ToolUseBlock toolUse = e.getToolUse();&lt;/p&gt;
+&lt;p&gt;log.debug(&amp;quot;[{}] 指标收集 - 工具执行: {}&amp;quot;,
+                e.getAgent().getName(),
+                toolUse.getName());&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理错误
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handleError(ErrorEvent e) {
+        errorCount.incrementAndGet();&lt;/p&gt;
+&lt;p&gt;log.warn(&amp;quot;[{}] 指标收集 - 执行错误 #{}: {}&amp;quot;,
+                e.getAgent().getName(),
+                errorCount.get(),
+                e.getError().getMessage());&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取平均调用耗时（毫秒）
+     */
+    public long getAverageCallTimeMs() {
+        int count = callCount.get();
+        if (count == 0) return 0;
+        return totalCallTimeMs.get() / count;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取总调用次数
+     */
+    public int getTotalCallCount() {
+        return callCount.get();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取总调用耗时（毫秒）
+     */
+    public long getTotalCallTimeMs() {
+        return totalCallTimeMs.get();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取错误总数
+     */
+    public int getTotalErrorCount() {
+        return errorCount.get();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取工具调用统计
+     */
+    public Map&amp;lt;String, Integer&amp;gt; getToolCallStats() {
+        return Map.copyOf(toolCallCounts.entrySet().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        Map.Entry::getKey,
+                        e -&amp;gt; e.getValue().get()
+                )));
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 重置所有指标
+     */
+    public void reset() {
+        callCount.set(0);
+        totalCallTimeMs.set(0);
+        reasoningCount.set(0);
+        toolCallCounts.clear();
+        errorCount.set(0);
+        currentCallStart = null;
+        currentReasoningStart = null;
+        currentIterationCount = 0;&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;指标已重置&amp;quot;);
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public String toString() {
+        return String.format(
+                &amp;quot;MetricsHook{totalCalls=%d, avgTime=%dms, errors=%d, tools=%s}&amp;quot;,
+                callCount.get(),
+                getAverageCallTimeMs(),
+                errorCount.get(),
+                toolCallCounts);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**hook/ToolAuditHook.java - 工具审计钩子：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter13.hook;
+&lt;p&gt;import io.agentscope.core.hook.*;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.ToolResultBlock;
+import io.agentscope.core.message.ToolUseBlock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;&lt;/p&gt;
+&lt;p&gt;import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;&lt;/p&gt;
+&lt;p&gt;/**
+ * 工具审计钩子 - 记录所有工具调用的详细信息
+ *
+ * 功能特点：
+ * 1. 高优先级执行，确保尽早拦截工具调用
+ * 2. 记录完整的工具调用上下文（参数、结果、时间）
+ * 3. 支持指定敏感工具进行额外关注
+ * 4. 可配置阻止特定工具的执行
+ * 5. 提供审计历史查询接口
+ *
+ * @author AgentScope Tutorial
+ */
+public class ToolAuditHook implements Hook {&lt;/p&gt;
+&lt;p&gt;private static final Logger auditLog = LoggerFactory.getLogger(&amp;quot;AuditLog&amp;quot;);&lt;/p&gt;
+&lt;p&gt;/** 需要特别关注的敏感工具集合 */
+    private final Set&amp;lt;String&amp;gt; sensitiveTools;&lt;/p&gt;
+&lt;p&gt;/** 工具调用审计记录（线程安全） */
+    private final List&amp;lt;ToolAuditRecord&amp;gt; auditRecords = new CopyOnWriteArrayList&amp;lt;&amp;gt;();&lt;/p&gt;
+&lt;p&gt;/** 当前调用的审计记录列表 */
+    private final ThreadLocal&amp;lt;List&amp;lt;ToolAuditRecord&amp;gt;&amp;gt; currentCallRecords = ThreadLocal.withInitial(ArrayList::new);&lt;/p&gt;
+&lt;p&gt;/** 是否启用严格模式（阻止未授权工具） */
+    private final boolean strictMode;&lt;/p&gt;
+&lt;p&gt;/** 允许的工具集合（空表示全部允许） */
+    private final Set&amp;lt;String&amp;gt; allowedTools;&lt;/p&gt;
+&lt;p&gt;/** 日期时间格式化器 */
+    private static final DateTimeFormatter DT_FORMATTER =
+            DateTimeFormatter.ofPattern(&amp;quot;yyyy-MM-dd HH:mm:ss.SSS&amp;quot;);&lt;/p&gt;
+&lt;p&gt;/**
+     * 内部类：工具审计记录
+     */
+    public record ToolAuditRecord(
+            String agentName,
+            String toolName,
+            String input,
+            String output,
+            long startTime,
+            long durationMs,
+            boolean sensitive,
+            boolean blocked
+    ) {
+        public String getStartTimeFormatted() {
+            return LocalDateTime.ofInstant(
+                    Instant.ofEpochMilli(startTime),
+                    java.time.ZoneId.systemDefault()
+            ).format(DT_FORMATTER);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 默认构造函数 - 记录所有工具调用
+     */
+    public ToolAuditHook() {
+        this(Set.of(), false, Set.of());
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 指定敏感工具的构造函数
+     *
+     * @param sensitiveTools 需要特别关注的工具集合
+     */
+    public ToolAuditHook(Set&amp;lt;String&amp;gt; sensitiveTools) {
+        this(sensitiveTools, false, Set.of());
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 完整配置构造函数
+     *
+     * @param sensitiveTools 需要特别关注的工具集合
+     * @param strictMode 是否启用严格模式
+     * @param allowedTools 允许的工具集合（空表示全部允许）
+     */
+    public ToolAuditHook(Set&amp;lt;String&amp;gt; sensitiveTools, boolean strictMode, Set&amp;lt;String&amp;gt; allowedTools) {
+        this.sensitiveTools = Set.copyOf(sensitiveTools);
+        this.strictMode = strictMode;
+        this.allowedTools = Set.copyOf(allowedTools);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 钩子优先级：60（高优先级）
+     * 确保在工具执行前尽早进行审计检查
+     */
+    @Override
+    public int priority() {
+        return 60;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 统一事件处理入口
+     */
+    @Override
+    public &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; onEvent(T event) {
+        return switch (event) {
+            case PreCallEvent e -&amp;gt; handlePreCall(e);
+            case PreActingEvent e -&amp;gt; handlePreActing(e);
+            case PostActingEvent e -&amp;gt; handlePostActing(e);
+            case PostCallEvent e -&amp;gt; handlePostCall(e);
+            default -&amp;gt; Mono.just(event);
+        };
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理 Agent 调用开始
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePreCall(PreCallEvent e) {
+        // 清空当前线程的记录列表
+        currentCallRecords.get().clear();&lt;/p&gt;
+&lt;p&gt;auditLog.info(&amp;quot;[AUDIT] Agent '{}' 调用开始&amp;quot;, e.getAgent().getName());&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理工具执行开始
+     * 进行安全检查和权限验证
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePreActing(PreActingEvent e) {
+        ToolUseBlock toolUse = e.getToolUse();
+        String toolName = toolUse.getName();
+        boolean isSensitive = sensitiveTools.contains(toolName);&lt;/p&gt;
+&lt;p&gt;// 权限检查
+        boolean isAllowed = allowedTools.isEmpty() || allowedTools.contains(toolName);&lt;/p&gt;
+&lt;p&gt;if (!isAllowed) {
+            auditLog.warn(&amp;quot;[AUDIT] 工具 '{}' 未授权 - Agent: '{}'&amp;quot;,
+                    toolName, e.getAgent().getName());&lt;/p&gt;
+&lt;p&gt;if (strictMode) {
+                auditLog.error(&amp;quot;[AUDIT] 严格模式：阻止未授权工具 '{}'&amp;quot;, toolName);
+                // 注意：实际阻止需要更复杂的机制，这里仅记录
+            }
+        }&lt;/p&gt;
+&lt;p&gt;// 敏感工具标记
+        if (isSensitive) {
+            auditLog.warn(&amp;quot;[AUDIT] 敏感工具 '{}' 即将执行 - Agent: '{}', 输入: {}&amp;quot;,
+                    toolName,
+                    e.getAgent().getName(),
+                    truncate(toolUse.getInput().toString(), 200));
+        } else {
+            auditLog.info(&amp;quot;[AUDIT] 工具 '{}' 即将执行 - Agent: '{}'&amp;quot;,
+                    toolName, e.getAgent().getName());
+        }&lt;/p&gt;
+&lt;p&gt;// 创建审计记录
+        ToolAuditRecord record = new ToolAuditRecord(
+                e.getAgent().getName(),
+                toolName,
+                toolUse.getInput().toString(),
+                null,  // 结果尚未生成
+                System.currentTimeMillis(),
+                0,     // 耗时尚未计算
+                isSensitive,
+                !isAllowed
+        );
+        currentCallRecords.get().add(record);&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理工具执行完成
+     * 记录完整的执行结果
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePostActing(PostActingEvent e) {
+        ToolUseBlock toolUse = e.getToolUse();
+        ToolResultBlock result = e.getToolResult();
+        String output = extractResultText(result);&lt;/p&gt;
+&lt;p&gt;// 更新审计记录
+        List&amp;lt;ToolAuditRecord&amp;gt; records = currentCallRecords.get();
+        if (!records.isEmpty()) {
+            // 找到对应的记录（按工具名称匹配最后一个）
+            ToolAuditRecord existingRecord = null;
+            for (int i = records.size() - 1; i &amp;gt;= 0; i--) {
+                if (records.get(i).toolName().equals(toolUse.getName())) {
+                    existingRecord = records.get(i);
+                    break;
+                }
+            }&lt;/p&gt;
+&lt;p&gt;if (existingRecord != null) {
+                long duration = System.currentTimeMillis() - existingRecord.startTime();&lt;/p&gt;
+&lt;p&gt;// 创建更新后的记录
+                ToolAuditRecord updatedRecord = new ToolAuditRecord(
+                        existingRecord.agentName(),
+                        existingRecord.toolName(),
+                        existingRecord.input(),
+                        output,
+                        existingRecord.startTime(),
+                        duration,
+                        existingRecord.sensitive(),
+                        existingRecord.blocked()
+                );&lt;/p&gt;
+&lt;p&gt;// 移除旧记录，添加新记录
+                records.remove(existingRecord);
+                records.add(updatedRecord);&lt;/p&gt;
+&lt;p&gt;// 输出审计日志
+                if (existingRecord.sensitive()) {
+                    auditLog.warn(&amp;quot;[AUDIT] 敏感工具 '{}' 执行完成 | 耗时: {}ms | 结果: {}&amp;quot;,
+                            toolUse.getName(),
+                            duration,
+                            truncate(output, 200));
+                } else {
+                    auditLog.info(&amp;quot;[AUDIT] 工具 '{}' 执行完成 | 耗时: {}ms&amp;quot;,
+                            toolUse.getName(),
+                            duration);
+                }
+            }
+        }&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理 Agent 调用完成
+     * 保存本次调用的所有审计记录
+     */
+    private &amp;lt;T extends HookEvent&amp;gt; Mono&amp;lt;T&amp;gt; handlePostCall(PostCallEvent e) {
+        List&amp;lt;ToolAuditRecord&amp;gt; records = currentCallRecords.get();&lt;/p&gt;
+&lt;p&gt;if (!records.isEmpty()) {
+            auditLog.info(&amp;quot;[AUDIT] Agent '{}' 调用完成 | 工具调用数: {}&amp;quot;,
+                    e.getAgent().getName(),
+                    records.size());&lt;/p&gt;
+&lt;p&gt;// 复制记录到永久存储
+            auditRecords.addAll(records);&lt;/p&gt;
+&lt;p&gt;// 打印本次调用的工具统计
+            long totalDuration = records.stream()
+                    .mapToLong(ToolAuditRecord::durationMs)
+                    .sum();
+            auditLog.info(&amp;quot;  总工具调用耗时: {}ms&amp;quot;, totalDuration);&lt;/p&gt;
+&lt;p&gt;// 检查是否有被阻止的工具
+            long blockedCount = records.stream()
+                    .filter(ToolAuditRecord::blocked)
+                    .count();
+            if (blockedCount &amp;gt; 0) {
+                auditLog.warn(&amp;quot;  被阻止的工具调用数: {}&amp;quot;, blockedCount);
+            }
+        }&lt;/p&gt;
+&lt;p&gt;// 清空当前线程记录
+        currentCallRecords.remove();&lt;/p&gt;
+&lt;p&gt;return Mono.just(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 从 ToolResultBlock 提取文本结果
+     */
+    private String extractResultText(ToolResultBlock result) {
+        if (result == null || result.getOutput().isEmpty()) {
+            return &amp;quot;(empty)&amp;quot;;
+        }
+        return result.getOutput().get(0).toString();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 截断过长文本
+     */
+    private String truncate(String text, int maxLength) {
+        if (text == null) return &amp;quot;(null)&amp;quot;;
+        if (text.length() &amp;lt;= maxLength) return text;
+        return text.substring(0, maxLength) + &amp;quot;...&amp;quot;;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取所有审计记录
+     */
+    public List&amp;lt;ToolAuditRecord&amp;gt; getAuditRecords() {
+        return List.copyOf(auditRecords);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取指定 Agent 的审计记录
+     */
+    public List&amp;lt;ToolAuditRecord&amp;gt; getAuditRecordsByAgent(String agentName) {
+        return auditRecords.stream()
+                .filter(r -&amp;gt; r.agentName().equals(agentName))
+                .toList();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取指定工具的审计记录
+     */
+    public List&amp;lt;ToolAuditRecord&amp;gt; getAuditRecordsByTool(String toolName) {
+        return auditRecords.stream()
+                .filter(r -&amp;gt; r.toolName().equals(toolName))
+                .toList();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取敏感工具的审计记录
+     */
+    public List&amp;lt;ToolAuditRecord&amp;gt; getSensitiveToolRecords() {
+        return auditRecords.stream()
+                .filter(ToolAuditRecord::sensitive)
+                .toList();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 清空审计记录
+     */
+    public void clearRecords() {
+        auditRecords.clear();
+        auditLog.info(&amp;quot;[AUDIT] 审计记录已清空&amp;quot;);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 添加敏感工具
+     */
+    public void addSensitiveTool(String toolName) {
+        ((java.util.HashSet&amp;lt;String&amp;gt;) sensitiveTools).add(toolName);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 移除敏感工具
+     */
+    public void removeSensitiveTool(String toolName) {
+        ((java.util.HashSet&amp;lt;String&amp;gt;) sensitiveTools).remove(toolName);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**service/AgentService.java - Agent 服务层：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter13.service;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.hook.Hook;
+import io.agentscope.core.hook.recorder.JsonlTraceExporter;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.MsgRole;
+import io.agentscope.tutorial.chapter13.hook.LoggingHook;
+import io.agentscope.tutorial.chapter13.hook.MetricsHook;
+import io.agentscope.tutorial.chapter13.hook.ToolAuditHook;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Service;&lt;/p&gt;
+&lt;p&gt;import java.util.List;&lt;/p&gt;
+&lt;p&gt;/**
+ * Agent 服务层 - 封装 Agent 的调用逻辑
+ *
+ * 提供：
+ * 1. 同步调用接口
+ * 2. 异步调用接口（使用 Project Reactor）
+ * 3. Agent 状态查询
+ * 4. 钩子链管理
+ *
+ * @author AgentScope Tutorial
+ */
+@Service
+public class AgentService {&lt;/p&gt;
+&lt;p&gt;private static final Logger log = LoggerFactory.getLogger(AgentService.class);&lt;/p&gt;
+&lt;p&gt;/** 注入的 Agent 实例 */
+    private final ReActAgent agent;&lt;/p&gt;
+&lt;p&gt;/** 注入的日志钩子 */
+    private final LoggingHook loggingHook;&lt;/p&gt;
+&lt;p&gt;/** 注入的监控钩子 */
+    private final MetricsHook metricsHook;&lt;/p&gt;
+&lt;p&gt;/** 注入的工具审计钩子 */
+    private final ToolAuditHook toolAuditHook;&lt;/p&gt;
+&lt;p&gt;/** 注入的追踪导出器 */
+    private final JsonlTraceExporter traceExporter;&lt;/p&gt;
+&lt;p&gt;public AgentService(
+            @Qualifier(&amp;quot;tutorialAgent&amp;quot;) ReActAgent agent,
+            LoggingHook loggingHook,
+            MetricsHook metricsHook,
+            ToolAuditHook toolAuditHook,
+            JsonlTraceExporter traceExporter) {
+        this.agent = agent;
+        this.loggingHook = loggingHook;
+        this.metricsHook = metricsHook;
+        this.toolAuditHook = toolAuditHook;
+        this.traceExporter = traceExporter;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 同步调用 Agent
+     *
+     * @param userInput 用户输入
+     * @return Agent 响应消息
+     */
+    public Msg call(String userInput) {
+        log.info(&amp;quot;调用 Agent，输入: {}&amp;quot;, truncate(userInput, 100));&lt;/p&gt;
+&lt;p&gt;try {
+            Msg response = agent.call(
+                    Msg.user().content(userInput).build()
+            );&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;Agent 响应: {}&amp;quot;, truncate(response.getTextContent(), 200));
+            return response;&lt;/p&gt;
+&lt;p&gt;} catch (Exception e) {
+            log.error(&amp;quot;Agent 调用失败: {}&amp;quot;, e.getMessage(), e);
+            throw new RuntimeException(&amp;quot;Agent 调用失败&amp;quot;, e);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 异步调用 Agent（返回 Mono）
+     *
+     * @param userInput 用户输入
+     * @return 包含响应消息的 Mono
+     */
+    public reactor.core.publisher.Mono&amp;lt;Msg&amp;gt; callAsync(String userInput) {
+        log.info(&amp;quot;异步调用 Agent，输入: {}&amp;quot;, truncate(userInput, 100));&lt;/p&gt;
+&lt;p&gt;return reactor.core.publisher.Mono.fromCallable(() -&amp;gt; {
+                    Msg response = agent.call(
+                            Msg.user().content(userInput).build()
+                    );
+                    log.info(&amp;quot;异步调用完成: {}&amp;quot;, truncate(response.getTextContent(), 200));
+                    return response;
+                })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                .doOnError(e -&amp;gt; log.error(&amp;quot;异步 Agent 调用失败: {}&amp;quot;, e.getMessage(), e));
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取性能指标
+     */
+    public MetricsHook getMetrics() {
+        return metricsHook;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取工具审计记录
+     */
+    public List&amp;lt;ToolAuditHook.ToolAuditRecord&amp;gt; getAuditRecords() {
+        return toolAuditHook.getAuditRecords();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取工具审计记录（按工具过滤）
+     */
+    public List&amp;lt;ToolAuditHook.ToolAuditRecord&amp;gt; getAuditRecordsByTool(String toolName) {
+        return toolAuditHook.getAuditRecordsByTool(toolName);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 重置性能指标
+     */
+    public void resetMetrics() {
+        metricsHook.reset();
+        log.info(&amp;quot;性能指标已重置&amp;quot;);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 清空审计记录
+     */
+    public void clearAuditRecords() {
+        toolAuditHook.clearRecords();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取 Agent 名称
+     */
+    public String getAgentName() {
+        return agent.getName();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 检查 Agent 是否健康
+     */
+    public boolean isHealthy() {
+        try {
+            // 简单的健康检查：执行一个空调用
+            agent.call(Msg.user().content(&amp;quot;health check&amp;quot;).build());
+            return true;
+        } catch (Exception e) {
+            log.warn(&amp;quot;Agent 健康检查失败: {}&amp;quot;, e.getMessage());
+            return false;
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取已注册的钩子列表信息
+     */
+    public String getHookInfo() {
+        return String.format(&amp;quot;&amp;quot;&amp;quot;
+                Hook 链信息:
+&lt;ul&gt;&lt;li&gt;LoggingHook: priority=%d&lt;/li&gt;
+&lt;li&gt;MetricsHook: priority=%d, totalCalls=%d, avgTime=%dms&lt;/li&gt;
+&lt;li&gt;ToolAuditHook: priority=%d, records=%d&lt;/li&gt;
+&lt;li&gt;JsonlTraceExporter: priority=%d&lt;/li&gt;
+&lt;/ul&gt;                &amp;quot;&amp;quot;&amp;quot;,
+                loggingHook.priority(),
+                metricsHook.priority(),
+                metricsHook.getTotalCallCount(),
+                metricsHook.getAverageCallTimeMs(),
+                toolAuditHook.priority(),
+                toolAuditHook.getAuditRecords().size(),
+                traceExporter.priority());
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 截断过长文本
+     */
+    private String truncate(String text, int maxLength) {
+        if (text == null) return &amp;quot;(null)&amp;quot;;
+        if (text.length() &amp;lt;= maxLength) return text;
+        return text.substring(0, maxLength) + &amp;quot;...&amp;quot;;
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**controller/AgentController.java - REST 控制器：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter13.controller;
+&lt;p&gt;import io.agentscope.core.message.Msg;
+import io.agentscope.tutorial.chapter13.hook.MetricsHook;
+import io.agentscope.tutorial.chapter13.hook.ToolAuditHook;
+import io.agentscope.tutorial.chapter13.service.AgentService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;&lt;/p&gt;
+&lt;p&gt;import java.util.List;
+import java.util.Map;&lt;/p&gt;
+&lt;p&gt;/**
+ * Agent REST 控制器
+ *
+ * 提供以下 API 端点：
+ * - POST /api/agent/call - 调用 Agent
+ * - POST /api/agent/call-async - 异步调用 Agent
+ * - GET /api/agent/metrics - 获取性能指标
+ * - GET /api/agent/audit - 获取审计记录
+ * - GET /api/agent/info - 获取 Agent 信息
+ * - POST /api/agent/reset - 重置指标
+ *
+ * @author AgentScope Tutorial
+ */
+@RestController
+@RequestMapping(&amp;quot;/api/agent&amp;quot;)
+public class AgentController {&lt;/p&gt;
+&lt;p&gt;private final AgentService agentService;&lt;/p&gt;
+&lt;p&gt;public AgentController(AgentService agentService) {
+        this.agentService = agentService;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 同步调用 Agent
+     *
+     * @param request 请求体，包含 &amp;quot;input&amp;quot; 字段
+     * @return Agent 响应
+     */
+    @PostMapping(&amp;quot;/call&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; callAgent(@RequestBody Map&amp;lt;String, String&amp;gt; request) {
+        String input = request.get(&amp;quot;input&amp;quot;);
+        if (input == null || input.isBlank()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of(&amp;quot;error&amp;quot;, &amp;quot;input is required&amp;quot;));
+        }&lt;/p&gt;
+&lt;p&gt;try {
+            long startTime = System.currentTimeMillis();
+            Msg response = agentService.call(input);
+            long duration = System.currentTimeMillis() - startTime;&lt;/p&gt;
+&lt;p&gt;return ResponseEntity.ok(Map.of(
+                    &amp;quot;success&amp;quot;, true,
+                    &amp;quot;response&amp;quot;, response.getTextContent(),
+                    &amp;quot;agent&amp;quot;, agentService.getAgentName(),
+                    &amp;quot;durationMs&amp;quot;, duration
+            ));&lt;/p&gt;
+&lt;p&gt;} catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body(Map.of(
+                            &amp;quot;success&amp;quot;, false,
+                            &amp;quot;error&amp;quot;, e.getMessage()
+                    ));
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 异步调用 Agent
+     *
+     * @param request 请求体，包含 &amp;quot;input&amp;quot; 字段
+     * @return 202 Accepted，异步处理中
+     */
+    @PostMapping(&amp;quot;/call-async&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; callAgentAsync(@RequestBody Map&amp;lt;String, String&amp;gt; request) {
+        String input = request.get(&amp;quot;input&amp;quot;);
+        if (input == null || input.isBlank()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of(&amp;quot;error&amp;quot;, &amp;quot;input is required&amp;quot;));
+        }&lt;/p&gt;
+&lt;p&gt;return ResponseEntity.accepted()
+                .body(Map.of(
+                        &amp;quot;message&amp;quot;, &amp;quot;异步调用已接受&amp;quot;,
+                        &amp;quot;input&amp;quot;, truncate(input, 100)
+                ));
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取性能指标
+     */
+    @GetMapping(&amp;quot;/metrics&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; getMetrics() {
+        MetricsHook metrics = agentService.getMetrics();&lt;/p&gt;
+&lt;p&gt;return ResponseEntity.ok(Map.of(
+                &amp;quot;totalCalls&amp;quot;, metrics.getTotalCallCount(),
+                &amp;quot;totalTimeMs&amp;quot;, metrics.getTotalCallTimeMs(),
+                &amp;quot;averageTimeMs&amp;quot;, metrics.getAverageCallTimeMs(),
+                &amp;quot;totalErrors&amp;quot;, metrics.getTotalErrorCount(),
+                &amp;quot;toolStats&amp;quot;, metrics.getToolCallStats()
+        ));
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取工具审计记录
+     */
+    @GetMapping(&amp;quot;/audit&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; getAuditRecords(
+            @RequestParam(required = false) String tool) {&lt;/p&gt;
+&lt;p&gt;List&amp;lt;ToolAuditHook.ToolAuditRecord&amp;gt; records;
+        if (tool != null &amp;amp;&amp;amp; !tool.isBlank()) {
+            records = agentService.getAuditRecordsByTool(tool);
+        } else {
+            records = agentService.getAuditRecords();
+        }&lt;/p&gt;
+&lt;p&gt;return ResponseEntity.ok(Map.of(
+                &amp;quot;count&amp;quot;, records.size(),
+                &amp;quot;records&amp;quot;, records.stream()
+                        .map(r -&amp;gt; Map.of(
+                                &amp;quot;agent&amp;quot;, r.agentName(),
+                                &amp;quot;tool&amp;quot;, r.toolName(),
+                                &amp;quot;sensitive&amp;quot;, r.sensitive(),
+                                &amp;quot;blocked&amp;quot;, r.blocked(),
+                                &amp;quot;durationMs&amp;quot;, r.durationMs(),
+                                &amp;quot;startTime&amp;quot;, r.getStartTimeFormatted()
+                        ))
+                        .toList()
+        ));
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取 Agent 信息
+     */
+    @GetMapping(&amp;quot;/info&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; getAgentInfo() {
+        return ResponseEntity.ok(Map.of(
+                &amp;quot;name&amp;quot;, agentService.getAgentName(),
+                &amp;quot;healthy&amp;quot;, agentService.isHealthy(),
+                &amp;quot;hookInfo&amp;quot;, agentService.getHookInfo()
+        ));
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 重置性能指标
+     */
+    @PostMapping(&amp;quot;/reset&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; resetMetrics() {
+        agentService.resetMetrics();
+        return ResponseEntity.ok(Map.of(
+                &amp;quot;success&amp;quot;, true,
+                &amp;quot;message&amp;quot;, &amp;quot;指标已重置&amp;quot;
+        ));
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 清空审计记录
+     */
+    @DeleteMapping(&amp;quot;/audit&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; clearAuditRecords() {
+        agentService.clearAuditRecords();
+        return ResponseEntity.ok(Map.of(
+                &amp;quot;success&amp;quot;, true,
+                &amp;quot;message&amp;quot;, &amp;quot;审计记录已清空&amp;quot;
+        ));
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 健康检查端点
+     */
+    @GetMapping(&amp;quot;/health&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; health() {
+        boolean healthy = agentService.isHealthy();
+        return ResponseEntity.ok(Map.of(
+                &amp;quot;status&amp;quot;, healthy ? &amp;quot;UP&amp;quot; : &amp;quot;DOWN&amp;quot;,
+                &amp;quot;agent&amp;quot;, agentService.getAgentName()
+        ));
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 截断过长文本
+     */
+    private String truncate(String text, int maxLength) {
+        if (text == null) return &amp;quot;&amp;quot;;
+        if (text.length() &amp;lt;= maxLength) return text;
+        return text.substring(0, maxLength) + &amp;quot;...&amp;quot;;
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;13.4.4 运行测试&lt;/h3&gt;
+&lt;p&gt;**启动应用：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 设置 API Key
+export DASHSCOPE_API_KEY=your-api-key
+&lt;h1&gt;启动 Spring Boot 应用&lt;/h1&gt;
+cd chapter13-hook
+mvn spring-boot:run
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**调用示例：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 调用 Agent
+curl -X POST http://localhost:8080/api/agent/call \
+  -H &amp;quot;Content-Type: application/json&amp;quot; \
+  -d '{&amp;quot;input&amp;quot;: &amp;quot;Calculate 123 + 456&amp;quot;}'
+&lt;h1&gt;查看性能指标&lt;/h1&gt;
+curl http://localhost:8080/api/agent/metrics
+&lt;h1&gt;查看工具审计记录&lt;/h1&gt;
+curl http://localhost:8080/api/agent/audit
+&lt;h1&gt;查看 Agent 信息&lt;/h1&gt;
+curl http://localhost:8080/api/agent/info
+&lt;h1&gt;健康检查&lt;/h1&gt;
+curl http://localhost:8080/api/agent/health
+&lt;h1&gt;重置指标&lt;/h1&gt;
+curl -X POST http://localhost:8080/api/agent/reset
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**预期输出（日志）：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;2026-05-17 10:30:00.001 [http-nio-8080-exec-1] INFO  AgentService - 调用 Agent，输入: Calculate 123 + 456
+&lt;p&gt;2026-05-17 10:30:00.050 [boundedElastic-1] INFO  LoggingHook - [TutorialAgent] Agent 调用开始 | 输入消息数: 1&lt;/p&gt;
+&lt;p&gt;2026-05-17 10:30:00.100 [boundedElastic-1] INFO  AuditLog - [AUDIT] Agent 'TutorialAgent' 调用开始&lt;/p&gt;
+&lt;p&gt;2026-05-17 10:30:00.150 [boundedElastic-1] INFO  AuditLog - [AUDIT] 工具 'calculate' 即将执行 - Agent: 'TutorialAgent'&lt;/p&gt;
+&lt;p&gt;2026-05-17 10:30:00.200 [boundedElastic-1] INFO  LoggingHook - [TutorialAgent] 工具执行开始 | 工具: calculate | 输入: {expression=123 + 456}&lt;/p&gt;
+&lt;p&gt;2026-05-17 10:30:00.250 [boundedElastic-1] INFO  LoggingHook - [TutorialAgent] 工具执行完成 | 工具: calculate | 结果: 579.00&lt;/p&gt;
+&lt;p&gt;2026-05-17 10:30:00.300 [boundedElastic-1] INFO  AuditLog - [AUDIT] 工具 'calculate' 执行完成 | 耗时: 50ms&lt;/p&gt;
+&lt;p&gt;2026-05-17 10:30:00.350 [boundedElastic-1] INFO  LoggingHook - [TutorialAgent] Agent 调用完成 | 响应长度: 85 字符&lt;/p&gt;
+&lt;p&gt;2026-05-17 10:30:00.400 [boundedElastic-1] INFO  MetricsHook - === Agent 调用指标 #1 ===
+2026-05-17 10:30:00.400 [boundedElastic-1] INFO  MetricsHook -   总耗时: 350 ms
+2026-05-17 10:30:00.400 [boundedElastic-1] INFO  MetricsHook -   迭代次数: 2
+2026-05-17 10:30:00.400 [boundedElastic-1] INFO  MetricsHook -   工具调用统计:
+2026-05-17 10:30:00.400 [boundedElastic-1] INFO  MetricsHook -     - calculate: 1 次
+2026-05-17 10:30:00.400 [boundedElastic-1] INFO  MetricsHook -   平均耗时: 350 ms
+2026-05-17 10:30:00.400 [boundedElastic-1] INFO  MetricsHook - ==================================&lt;/p&gt;
+&lt;p&gt;2026-05-17 10:30:00.450 [boundedElastic-1] INFO  AgentService - Agent 响应: 计算结果为 579.00
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h2&gt;13.5 本章小结&lt;/h2&gt;
+&lt;h3&gt;核心要点&lt;/h3&gt;
+&lt;p&gt;1. **Hook 是 AgentScope Java 的核心扩展机制**
+&lt;ul&gt;&lt;li&gt;通过统一的事件模型拦截 Agent 执行的全生命周期&lt;/li&gt;
+&lt;li&gt;支持同步修改（PreCall、PreReasoning、PreActing 等）和中止控制（PostReasoning.stopAgent()）&lt;/li&gt;
+&lt;/ul&gt;
+2. **事件类型体系清晰**
+&lt;ul&gt;&lt;li&gt;&lt;code&gt;HookEvent&lt;/code&gt; 是所有事件的基类，采用 sealed class 设计&lt;/li&gt;
+&lt;li&gt;12 种事件类型覆盖推理、工具执行、摘要、错误等场景&lt;/li&gt;
+&lt;li&gt;部分事件可修改（带 setter），部分仅通知（只读）&lt;/li&gt;
+&lt;/ul&gt;
+3. **优先级决定执行顺序**
+&lt;ul&gt;&lt;li&gt;数值越小优先级越高，范围 0-1000&lt;/li&gt;
+&lt;li&gt;建议分层设计：系统关键(0-50) → 业务逻辑(51-500) → 监控日志(501-1000)&lt;/li&gt;
+&lt;/ul&gt;
+4. **内置 Hook 开箱即用**
+&lt;ul&gt;&lt;li&gt;&lt;code&gt;JsonlTraceExporter&lt;/code&gt; 提供完整的调用追踪&lt;/li&gt;
+&lt;li&gt;复杂场景可组合多个内置 Hook&lt;/li&gt;
+&lt;/ul&gt;
+5. **自定义 Hook 简单灵活**
+&lt;ul&gt;&lt;li&gt;实现 &lt;code&gt;Hook&lt;/code&gt; 接口，重写 &lt;code&gt;onEvent&lt;/code&gt; 方法&lt;/li&gt;
+&lt;li&gt;使用 pattern matching 分发事件处理&lt;/li&gt;
+&lt;li&gt;返回 &lt;code&gt;Mono.just(event)&lt;/code&gt; 保持事件链继续&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;实践建议&lt;/h3&gt;
+&lt;ul&gt;&lt;li&gt;**生产环境**：组合使用 LoggingHook + MetricsHook + JsonlTraceExporter&lt;/li&gt;
+&lt;li&gt;**安全敏感场景**：使用 ToolAuditHook 进行权限控制和审计&lt;/li&gt;
+&lt;li&gt;**人工介入场景**：在 PostReasoningEvent 或 PostActingEvent 中调用 &lt;code&gt;stopAgent()&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;**性能优化**：避免在 Hook 中执行耗时操作，使用异步队列处理日志和指标&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;后续章节预告&lt;/h3&gt;
+&lt;ul&gt;&lt;li&gt;**第十四章：Memory 记忆系统** - 深入学习 AgentScope Java 的记忆管理机制&lt;/li&gt;
+&lt;li&gt;**第十五章：Tool 工具开发** - 掌握自定义工具的开发模式和最佳实践&lt;/li&gt;
+&lt;li&gt;**第十六章：Multi-Agent 编排** - 学习多 Agent 协作的通信与协调机制&lt;/li&gt;&lt;/ul&gt;&lt;/p&gt;
+</body>
+</html>

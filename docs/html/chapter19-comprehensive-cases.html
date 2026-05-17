@@ -1,0 +1,2542 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第十九章：综合实战案例</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        h3 { color: #7f8c8d; }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+        }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+        table {
+            border-collapse: collapse;
+            margin: 20px 0;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th { background: #3498db; color: white; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        ul { padding-left: 20px; }
+        li { margin: 5px 0; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            color: #666;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+&lt;h1&gt;第十九章：综合实战案例&lt;/h1&gt;
+&lt;p&gt;本章通过三个完整的实战案例，展示 AgentScope Java 在不同场景下的应用。每个案例都包含完整的架构说明、核心代码实现、关键配置和运行说明。所有案例均基于 Java 21、Spring Boot 3 和 H2 嵌入式数据库，可以直接运行。&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;19.1 【案例】奶茶店多代理系统&lt;/h2&gt;
+&lt;h3&gt;19.1.1 系统概述&lt;/h3&gt;
+&lt;p&gt;奶茶店多代理系统（boba-tea-shop）是一个完整的多代理协作系统，模拟奶茶店从点单、制作到配送的全流程。系统采用 supervisor-agent（监督者代理）作为核心调度节点，负责协调多个子代理（业务代理、咨询代理）完成复杂任务。&lt;/p&gt;
+&lt;p&gt;**系统架构图：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;┌─────────────────────────────────────────────────────────────────┐
+│                     客户端（Web/移动端）                          │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │ HTTP/SSE
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Supervisor Agent（监督者代理）                       │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  核心调度：任务分发 / 结果聚合 / 异常处理                  │   │
+│  │  A2A协议：与子代理通信                                    │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└───────────┬─────────────────────────────────────┬───────────────┘
+            │ A2A 协议                             │ A2A 协议
+            ▼                                     ▼
+┌─────────────────────┐             ┌─────────────────────────────┐
+│  Business Agent     │             │   Consult Agent             │
+│  (业务代理)          │             │   (咨询代理)                 │
+│  - 订单管理          │             │   - 产品推荐                │
+│  - 库存检查          │             │   - FAQ 问答               │
+│  - 投诉处理          │             │   - 知识库检索               │
+└─────────┬───────────┘             └──────────────┬──────────────┘
+          │ MCP 协议                             │ MCP 协议
+          ▼                                      ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Business MCP Server（业务服务）                      │
+│  ┌──────────┬──────────┬──────────┬──────────┐                 │
+│  │ 订单服务  │ 产品服务  │ 用户服务  │ 反馈服务  │                 │
+│  └──────────┴──────────┴──────────┴──────────┘                 │
+│                     H2 嵌入式数据库                             │
+└─────────────────────────────────────────────────────────────────┘
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;19.1.2 项目结构&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;boba-tea-shop/
+├── supervisor-agent/          # 监督者代理主服务
+│   └── src/main/java/
+│       └── io/agentscope/examples/bobatea/supervisor/
+│           ├── SupervisorAgentApplication.java
+│           ├── agent/SupervisorAgent.java
+│           ├── config/
+│           │   ├── SupervisorAgentConfig.java
+│           │   ├── SupervisorAgentPromptConfig.java
+│           │   └── A2aAgentConfiguration.java
+│           ├── controller/SupervisorAgentController.java
+│           └── tools/
+│               ├── A2aAgentTools.java
+│               └── ScheduleAgentTools.java
+├── business-sub-agent/         # 业务子代理
+├── consult-sub-agent/         # 咨询子代理
+└── business-mcp-server/       # 业务MCP服务
+    └── src/main/java/
+        └── io/agentscope/examples/bobatea/business/
+            ├── service/
+            │   ├── OrderService.java
+            │   └── FeedbackService.java
+            └── controller/OrderController.java
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;19.1.3 核心实现&lt;/h3&gt;
+#### 1. SupervisorAgent 主代理
+&lt;p&gt;SupervisorAgent 是整个系统的核心，负责接收用户请求并协调各子代理完成任务。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 文件：SupervisorAgent.java
+package io.agentscope.tutorial.chapter19.bobatea;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.agent.Event;
+import io.agentscope.core.memory.Memory;
+import io.agentscope.core.memory.autocontext.AutoContextConfig;
+import io.agentscope.core.memory.autocontext.AutoContextMemory;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.model.Model;
+import io.agentscope.core.session.mysql.MysqlSession;
+import io.agentscope.core.tool.Toolkit;
+import io.agentscope.tutorial.chapter19.bobatea.tools.A2aAgentTools;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import javax.sql.DataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import reactor.core.publisher.Flux;&lt;/p&gt;
+&lt;p&gt;/**
+ * 奶茶店监督者代理
+ *
+ * 职责：
+ * 1. 接收用户自然语言输入
+ * 2. 调用 A2A 工具与业务代理、咨询代理通信
+ * 3. 聚合子代理返回的结果
+ * 4. 将最终回答返回给用户
+ */
+public class SupervisorAgent {&lt;/p&gt;
+&lt;p&gt;private static final Logger logger = LoggerFactory.getLogger(SupervisorAgent.class);&lt;/p&gt;
+&lt;p&gt;private final Model model;
+    private final A2aAgentTools tools;
+    private final String sysPrompt;
+    private final Path sessionPath;&lt;/p&gt;
+&lt;p&gt;@Autowired
+    private DataSource dataSource;&lt;/p&gt;
+&lt;p&gt;public SupervisorAgent(Model model, A2aAgentTools tools, String sysPrompt) {
+        this.model = model;
+        this.tools = tools;
+        this.sysPrompt = sysPrompt;
+        // 会话持久化路径
+        this.sessionPath = Paths.get(
+                System.getProperty(&amp;quot;java.io.tmpdir&amp;quot;),
+                &amp;quot;.agentscope&amp;quot;, &amp;quot;examples&amp;quot;, &amp;quot;sessions&amp;quot;);
+        logger.info(&amp;quot;SupervisorAgent 初始化，会话路径: {}&amp;quot;, sessionPath);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理用户消息
+     *
+     * @param msg 用户消息
+     * @param sessionId 会话ID，用于会话持久化
+     * @param userId 用户ID
+     * @return 事件流，包含代理的思考和回答过程
+     */
+    public Flux&amp;lt;Event&amp;gt; stream(Msg msg, String sessionId, String userId) {
+        // 创建工具集
+        Toolkit toolkit = new Toolkit();
+        toolkit.registerTool(tools);&lt;/p&gt;
+&lt;p&gt;// 自动上下文压缩配置：当 token 占比超过 40% 时压缩，保留最近 10 条消息
+        AutoContextConfig autoContextConfig = AutoContextConfig.builder()
+                .tokenRatio(0.4)
+                .lastKeep(10)
+                .build();&lt;/p&gt;
+&lt;p&gt;// 使用自动上下文内存，支持长对话
+        AutoContextMemory memory = new AutoContextMemory(autoContextConfig, model);&lt;/p&gt;
+&lt;p&gt;// MySQL 会话持久化
+        MysqlSession mysqlSession = new MysqlSession(
+                dataSource,
+                System.getenv(&amp;quot;DB_NAME&amp;quot;),
+                null,
+                true);&lt;/p&gt;
+&lt;p&gt;// 为每个请求创建新的代理实例，保证请求隔离
+        ReActAgent agent = createAgent(toolkit, memory);
+        agent.loadIfExists(mysqlSession, sessionId);&lt;/p&gt;
+&lt;p&gt;return agent.stream(msg)
+                .doFinally(signalType -&amp;gt; {
+                    logger.info(&amp;quot;流式结束，信号: {}，保存会话: {}&amp;quot;, signalType, sessionId);
+                    agent.saveTo(mysqlSession, sessionId);
+                });
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建新的 ReActAgent 实例
+     */
+    private ReActAgent createAgent(Toolkit toolkit, Memory memory) {
+        return ReActAgent.builder()
+                .name(&amp;quot;supervisor_agent&amp;quot;)
+                .sysPrompt(sysPrompt)
+                .toolkit(toolkit)
+                .hook(new MonitoringHook())  // 监控钩子
+                .model(model)
+                .memory(memory)
+                .build();
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+#### 2. A2A 代理通信工具
+&lt;p&gt;A2A（Agent-to-Agent）协议允许代理之间相互通信，协调完成复杂任务。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 文件：A2aAgentTools.java
+package io.agentscope.tutorial.chapter19.bobatea.tools;
+&lt;p&gt;import io.agentscope.core.tool.ToolResult;
+import io.agentscope.core.tool.ToolSpec;
+import java.util.List;&lt;/p&gt;
+&lt;p&gt;/**
+ * A2A 代理通信工具类
+ *
+ * 提供与业务代理、咨询代理通信的能力
+ */
+public class A2aAgentTools {&lt;/p&gt;
+&lt;p&gt;// 子代理的服务URL
+    private static final String BUSINESS_AGENT_URL = &amp;quot;http://localhost:8081&amp;quot;;
+    private static final String CONSULT_AGENT_URL = &amp;quot;http://localhost:8082&amp;quot;;&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取工具规格列表
+     */
+    public static List&amp;lt;ToolSpec&amp;gt; getToolSpecs() {
+        return List.of(
+                // 调用业务代理处理订单相关请求
+                ToolSpec.builder()
+                        .name(&amp;quot;call_business_agent&amp;quot;)
+                        .description(&amp;quot;调用业务代理处理订单、库存、投诉等业务请求&amp;quot;)
+                        .paramSpec(&amp;quot;&amp;quot;&amp;quot;
+                                {
+                                    &amp;quot;type&amp;quot;: &amp;quot;object&amp;quot;,
+                                    &amp;quot;properties&amp;quot;: {
+                                        &amp;quot;task&amp;quot;: {
+                                            &amp;quot;type&amp;quot;: &amp;quot;string&amp;quot;,
+                                            &amp;quot;description&amp;quot;: &amp;quot;业务任务描述&amp;quot;
+                                        },
+                                        &amp;quot;parameters&amp;quot;: {
+                                            &amp;quot;type&amp;quot;: &amp;quot;object&amp;quot;,
+                                            &amp;quot;description&amp;quot;: &amp;quot;任务参数（如订单ID、产品ID等）&amp;quot;
+                                        }
+                                    },
+                                    &amp;quot;required&amp;quot;: [&amp;quot;task&amp;quot;]
+                                }
+                                &amp;quot;&amp;quot;&amp;quot;)
+                        .build(),&lt;/p&gt;
+&lt;p&gt;// 调用咨询代理处理产品咨询
+                ToolSpec.builder()
+                        .name(&amp;quot;call_consult_agent&amp;quot;)
+                        .description(&amp;quot;调用咨询代理处理产品推荐、FAQ等咨询请求&amp;quot;)
+                        .paramSpec(&amp;quot;&amp;quot;&amp;quot;
+                                {
+                                    &amp;quot;type&amp;quot;: &amp;quot;object&amp;quot;,
+                                    &amp;quot;properties&amp;quot;: {
+                                        &amp;quot;query&amp;quot;: {
+                                            &amp;quot;type&amp;quot;: &amp;quot;string&amp;quot;,
+                                            &amp;quot;description&amp;quot;: &amp;quot;用户咨询内容&amp;quot;
+                                        },
+                                        &amp;quot;context&amp;quot;: {
+                                            &amp;quot;type&amp;quot;: &amp;quot;object&amp;quot;,
+                                            &amp;quot;description&amp;quot;: &amp;quot;上下文信息（如用户偏好、历史订单等）&amp;quot;
+                                        }
+                                    },
+                                    &amp;quot;required&amp;quot;: [&amp;quot;query&amp;quot;]
+                                }
+                                &amp;quot;&amp;quot;&amp;quot;)
+                        .build()
+        );
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 调用业务代理
+     *
+     * @param task 业务任务描述
+     * @param parameters 任务参数
+     * @return 业务代理的处理结果
+     */
+    public ToolResult callBusinessAgent(String task, Object parameters) {
+        try {
+            // 通过 HTTP 调用业务代理的 A2A 接口
+            String url = BUSINESS_AGENT_URL + &amp;quot;/a2a/call&amp;quot;;
+            // 实际实现中会使用 HTTP 客户端发送请求
+            String response = sendA2ARequest(url, task, parameters);&lt;/p&gt;
+&lt;p&gt;return ToolResult.success(&amp;quot;业务代理处理完成&amp;quot;, response);
+        } catch (Exception e) {
+            return ToolResult.failure(&amp;quot;调用业务代理失败: &amp;quot; + e.getMessage());
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 调用咨询代理
+     *
+     * @param query 咨询内容
+     * @param context 上下文信息
+     * @return 咨询代理的处理结果
+     */
+    public ToolResult callConsultAgent(String query, Object context) {
+        try {
+            String url = CONSULT_AGENT_URL + &amp;quot;/a2a/call&amp;quot;;
+            String response = sendA2ARequest(url, query, context);&lt;/p&gt;
+&lt;p&gt;return ToolResult.success(&amp;quot;咨询代理处理完成&amp;quot;, response);
+        } catch (Exception e) {
+            return ToolResult.failure(&amp;quot;调用咨询代理失败: &amp;quot; + e.getMessage());
+        }
+    }&lt;/p&gt;
+&lt;p&gt;// 模拟 A2A 请求发送
+    private String sendA2ARequest(String url, String task, Object params) {
+        // 实际实现中需要使用 HTTP 客户端（如 RestTemplate、WebClient）
+        // 此处为简化示例
+        return &amp;quot;{\&amp;quot;status\&amp;quot;:\&amp;quot;success\&amp;quot;,\&amp;quot;result\&amp;quot;:\&amp;quot;处理完成\&amp;quot;}&amp;quot;;
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+#### 3. 订单服务实现
+&lt;p&gt;业务 MCP Server 中的核心服务，处理订单相关业务。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 文件：OrderService.java
+package io.agentscope.tutorial.chapter19.bobatea.service;
+&lt;p&gt;import io.agentscope.tutorial.chapter19.bobatea.entity.Order;
+import io.agentscope.tutorial.chapter19.bobatea.mapper.OrderMapper;
+import org.springframework.stereotype.Service;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;&lt;/p&gt;
+&lt;p&gt;/**
+ * 订单服务
+ *
+ * 核心功能：
+ * - 创建订单
+ * - 查询订单
+ * - 修改订单备注
+ * - 处理订单投诉
+ */
+@Service
+public class OrderService {&lt;/p&gt;
+&lt;p&gt;private final OrderMapper orderMapper;&lt;/p&gt;
+&lt;p&gt;public OrderService(OrderMapper orderMapper) {
+        this.orderMapper = orderMapper;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建新订单
+     *
+     * @param userId 用户ID
+     * @param productId 产品ID
+     * @param productName 产品名称
+     * @param sweetness 甜度（1-5）
+     * @param iceLevel 冰度（1-5）
+     * @param quantity 数量
+     * @param remark 备注
+     * @return 创建的订单
+     */
+    public Order createOrder(Long userId, Long productId, String productName,
+                            Integer sweetness, Integer iceLevel,
+                            Integer quantity, String remark) {
+        // 生成唯一订单号
+        String orderId = generateOrderId();&lt;/p&gt;
+&lt;p&gt;// 计算价格（假设单价从产品服务获取，此处简化）
+        BigDecimal unitPrice = new BigDecimal(&amp;quot;18.00&amp;quot;);
+        BigDecimal totalPrice = unitPrice.multiply(new BigDecimal(quantity));&lt;/p&gt;
+&lt;p&gt;// 构建订单对象
+        Order order = new Order(
+                orderId, userId, productId, productName,
+                sweetness, iceLevel, quantity,
+                unitPrice, totalPrice, remark);&lt;/p&gt;
+&lt;p&gt;order.onCreate();&lt;/p&gt;
+&lt;p&gt;// 插入数据库
+        orderMapper.insert(order);&lt;/p&gt;
+&lt;p&gt;return order;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 根据用户ID查询订单列表
+     */
+    public List&amp;lt;Order&amp;gt; getOrdersByUserId(Long userId) {
+        return orderMapper.findByUserId(userId);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 根据订单号查询订单
+     */
+    public Optional&amp;lt;Order&amp;gt; getOrderByOrderId(String orderId) {
+        Order order = orderMapper.findByOrderId(orderId);
+        return Optional.ofNullable(order);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 更新订单备注
+     */
+    public boolean updateRemark(String orderId, String newRemark) {
+        Optional&amp;lt;Order&amp;gt; orderOpt = getOrderByOrderId(orderId);
+        if (orderOpt.isEmpty()) {
+            return false;
+        }&lt;/p&gt;
+&lt;p&gt;Order order = orderOpt.get();
+        order.setRemark(newRemark);
+        order.onUpdate();&lt;/p&gt;
+&lt;p&gt;return orderMapper.update(order) &amp;gt; 0;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 取消订单
+     */
+    public boolean cancelOrder(String orderId) {
+        Optional&amp;lt;Order&amp;gt; orderOpt = getOrderByOrderId(orderId);
+        if (orderOpt.isEmpty()) {
+            return false;
+        }&lt;/p&gt;
+&lt;p&gt;Order order = orderOpt.get();
+        // 只有未制作的订单可以取消
+        if (&amp;quot;PENDING&amp;quot;.equals(order.getStatus())) {
+            order.setStatus(&amp;quot;CANCELLED&amp;quot;);
+            order.onUpdate();
+            return orderMapper.update(order) &amp;gt; 0;
+        }&lt;/p&gt;
+&lt;p&gt;return false;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 生成唯一订单号
+     */
+    private String generateOrderId() {
+        return &amp;quot;BOBA&amp;quot; + System.currentTimeMillis()
+                + UUID.randomUUID().toString().substring(0, 4).toUpperCase();
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;19.1.4 关键配置文件&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# application.yml - supervisor-agent 配置
+server:
+  port: 8080
+&lt;p&gt;spring:
+  application:
+    name: supervisor-agent&lt;/p&gt;
+&lt;p&gt;datasource:
+    url: jdbc:h2:mem:bobatea;DB_CLOSE_DELAY=-1;MODE=MySQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:&lt;/p&gt;
+&lt;h1&gt;AgentScope 配置&lt;/h1&gt;
+agentscope:
+  a2a:
+    enabled: true
+    port: 8080
+&lt;h1&gt;代理提示词配置&lt;/h1&gt;
+agent:
+  prompts:
+    supervisor-agent-instruction: |
+      你是一位奶茶店智能助手，负责协调多个子代理完成用户请求。
+      可用工具：
+&lt;ul&gt;&lt;li&gt;call_business_agent: 处理订单、库存等业务请求&lt;/li&gt;
+&lt;li&gt;call_consult_agent: 处理产品咨询、推荐等咨询请求&lt;/li&gt;
+&lt;/ul&gt;
+      工作流程：
+      1. 理解用户意图
+      2. 判断需要调用的子代理
+      3. 调用相应子代理获取结果
+      4. 汇总结果返回给用户
+&lt;p&gt;如果用户请求涉及多个领域，可以并行调用多个子代理。
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;19.1.5 运行说明&lt;/h3&gt;
+&lt;p&gt;**1. 环境准备**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 确保已安装 Java 21 和 Maven
+java -version  # 应该显示 21.x
+mvn -version
+&lt;h1&gt;设置必要的环境变量&lt;/h1&gt;
+export DASHSCOPE_API_KEY=your_api_key_here
+export DB_NAME=bobatea
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**2. 启动服务**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 启动业务 MCP Server
+cd business-mcp-server
+mvn spring-boot:run
+&lt;h1&gt;启动业务子代理（新终端）&lt;/h1&gt;
+cd business-sub-agent
+mvn spring-boot:run
+&lt;h1&gt;启动咨询子代理（新终端）&lt;/h1&gt;
+cd consult-sub-agent
+mvn spring-boot:run
+&lt;h1&gt;启动监督者代理（新终端）&lt;/h1&gt;
+cd supervisor-agent
+mvn spring-boot:run
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**3. 测试接口**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 测试聊天接口
+curl -X GET &amp;quot;http://localhost:8080/api/assistant/chat?chat_id=test001&amp;amp;user_query=我想点一杯珍珠奶茶&amp;amp;user_id=user001&amp;quot;
+&lt;h1&gt;查询报告列表&lt;/h1&gt;
+curl -X GET &amp;quot;http://localhost:8080/api/assistant/reports&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;19.2 【案例】狼人杀游戏 Agent&lt;/h2&gt;
+&lt;h3&gt;19.2.1 系统概述&lt;/h3&gt;
+&lt;p&gt;狼人杀游戏是一个经典的社交推理游戏。在本案例中，我们使用 AgentScope Java 构建了一个完整的多 Agent 狼人杀游戏系统。每个玩家角色都由一个独立的 ReActAgent 控制，Agent 之间通过 MsgHub 进行讨论和投票。&lt;/p&gt;
+&lt;p&gt;**游戏角色配置：**&lt;/p&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;角色&lt;/th&gt;&lt;th&gt;数量&lt;/th&gt;&lt;th&gt;阵营&lt;/th&gt;&lt;th&gt;特殊能力&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;村民&lt;/td&gt;&lt;td&gt;3&lt;/td&gt;&lt;td&gt;好人&lt;/td&gt;&lt;td&gt;无&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;狼人&lt;/td&gt;&lt;td&gt;3&lt;/td&gt;&lt;td&gt;狼人&lt;/td&gt;&lt;td&gt;每晚可击杀一名玩家&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;预言家&lt;/td&gt;&lt;td&gt;1&lt;/td&gt;&lt;td&gt;好人&lt;/td&gt;&lt;td&gt;每晚可查验一名玩家身份&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;女巫&lt;/td&gt;&lt;td&gt;1&lt;/td&gt;&lt;td&gt;好人&lt;/td&gt;&lt;td&gt;拥有一瓶解药和一瓶毒药&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;猎人&lt;/td&gt;&lt;td&gt;1&lt;/td&gt;&lt;td&gt;好人&lt;/td&gt;&lt;td&gt;死亡时可带走一名玩家&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;**游戏流程图：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;┌─────────────────────────────────────────────────────────────────┐
+│                        游戏主流程                                │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌─────────┐   夜晚阶段      ┌─────────┐   白天阶段     ┌───────┐│
+│  │ 狼人讨论 │──▶击杀目标 ──▶│ 女巫救人 │──▶查验目标 ──▶│ 预言家 ││
+│  └─────────┘               └─────────┘                └───────┘│
+│       │                         │                           │     │
+│       ▼                         ▼                           ▼     │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │                     结算夜晚结果                             ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                              │                                   │
+│                              ▼                                   │
+│  ┌────────────┐    ┌──────────────┐    ┌─────────────────────┐  │
+│  │  猎人开枪   │───▶│  自由讨论    │───▶│   投票放逐           │  │
+│  └────────────┘    └──────────────┘    └─────────────────────┘  │
+│                              │                                   │
+│                              ▼                                   │
+│                    ┌─────────────────┐                          │
+│                    │   检查胜负条件   │                          │
+│                    └─────────────────┘                          │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;19.2.2 项目结构&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;werewolf/
+├── src/main/java/io/agentscope/examples/werewolf/
+│   ├── WerewolfWebApplication.java     # Spring Boot 入口
+│   ├── WerewolfGameConfig.java         # 游戏配置常量
+│   ├── WerewolfUtils.java              # 工具类
+│   ├── entity/
+│   │   ├── GameState.java              # 游戏状态管理
+│   │   ├── Player.java                 # 玩家实体
+│   │   └── Role.java                   # 角色枚举
+│   ├── model/
+│   │   ├── VoteModel.java              # 投票数据模型
+│   │   ├── SeerCheckModel.java         # 预言家查验模型
+│   │   ├── WitchHealModel.java         # 女巫救人模型
+│   │   ├── WitchPoisonModel.java       # 女巫毒人模型
+│   │   └── HunterShootModel.java       # 猎人开枪模型
+│   ├── localization/
+│   │   ├── GameMessages.java            # 游戏消息接口
+│   │   ├── LocalizationBundle.java     # 本地化包
+│   │   └── LanguageConfig.java         # 语言配置
+│   └── web/
+│       ├── WerewolfWebController.java  # Web 控制器
+│       ├── WerewolfWebGame.java         # Web 游戏实现
+│       └── GameEventEmitter.java        # 事件发射器
+└── src/main/resources/
+    └── templates/                       # 前端模板
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;19.2.3 核心实现&lt;/h3&gt;
+#### 1. 游戏状态管理
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 文件：GameState.java
+package io.agentscope.tutorial.chapter19.werewolf.entity;
+&lt;p&gt;import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;&lt;/p&gt;
+&lt;p&gt;/**
+ * 游戏状态管理类
+ *
+ * 负责：
+ * - 维护所有玩家状态
+ * - 管理夜晚行动结果
+ * - 判断游戏胜负
+ */
+public class GameState {&lt;/p&gt;
+&lt;p&gt;private final List&amp;lt;Player&amp;gt; allPlayers;  // 所有玩家
+    private final Player seer;              // 预言家
+    private final Player witch;             // 女巫
+    private final Player hunter;            // 猎人&lt;/p&gt;
+&lt;p&gt;private int currentRound;               // 当前回合
+    private Player lastNightVictim;         // 昨夜被击杀玩家
+    private Player lastPoisonedVictim;      // 被毒杀玩家
+    private boolean lastVictimResurrected;  // 是否被救活&lt;/p&gt;
+&lt;p&gt;public GameState(List&amp;lt;Player&amp;gt; allPlayers) {
+        this.allPlayers = new ArrayList&amp;lt;&amp;gt;(allPlayers);
+        this.currentRound = 0;&lt;/p&gt;
+&lt;p&gt;// 初始化特殊角色
+        this.seer = findPlayerByRole(Role.SEER);
+        this.witch = findPlayerByRole(Role.WITCH);
+        this.hunter = findPlayerByRole(Role.HUNTER);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取存活的玩家列表
+     */
+    public List&amp;lt;Player&amp;gt; getAlivePlayers() {
+        return allPlayers.stream()
+                .filter(Player::isAlive)
+                .collect(Collectors.toList());
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取存活的狼人列表
+     */
+    public List&amp;lt;Player&amp;gt; getAliveWerewolves() {
+        return getAlivePlayers().stream()
+                .filter(p -&amp;gt; p.getRole() == Role.WEREWOLF)
+                .collect(Collectors.toList());
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取存活的村民阵营玩家
+     */
+    public List&amp;lt;Player&amp;gt; getAliveVillagers() {
+        return getAlivePlayers().stream()
+                .filter(p -&amp;gt; p.getRole().isVillagerCamp())
+                .collect(Collectors.toList());
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 检查狼人是否胜利
+     * 条件：狼人数量 &amp;gt;= 村民数量
+     */
+    public boolean checkWerewolvesWin() {
+        int aliveWerewolves = getAliveWerewolves().size();
+        int aliveVillagers = getAliveVillagers().size();
+        return aliveWerewolves &amp;gt; 0 &amp;amp;&amp;amp; aliveWerewolves &amp;gt;= aliveVillagers;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 检查村民是否胜利
+     * 条件：狼人全部死亡
+     */
+    public boolean checkVillagersWin() {
+        return getAliveWerewolves().isEmpty();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 根据玩家名称查找玩家
+     */
+    public Player findPlayerByName(String name) {
+        return allPlayers.stream()
+                .filter(p -&amp;gt; p.getName().equalsIgnoreCase(name))
+                .findFirst()
+                .orElse(null);
+    }&lt;/p&gt;
+&lt;p&gt;// Getter 和 Setter 方法
+    public Player getSeer() { return seer; }
+    public Player getWitch() { return witch; }
+    public Player getHunter() { return hunter; }
+    public int getCurrentRound() { return currentRound; }
+    public Player getLastNightVictim() { return lastNightVictim; }
+    public Player getLastPoisonedVictim() { return lastPoisonedVictim; }
+    public boolean isLastVictimResurrected() { return lastVictimResurrected; }&lt;/p&gt;
+&lt;p&gt;public void nextRound() { this.currentRound++; }
+    public void setLastNightVictim(Player victim) { this.lastNightVictim = victim; }
+    public void setLastPoisonedVictim(Player victim) { this.lastPoisonedVictim = victim; }
+    public void setLastVictimResurrected(boolean resurrected) { this.lastVictimResurrected = resurrected; }
+    public void clearNightResults() {
+        this.lastNightVictim = null;
+        this.lastPoisonedVictim = null;
+        this.lastVictimResurrected = false;
+    }&lt;/p&gt;
+&lt;p&gt;private Player findPlayerByRole(Role role) {
+        return allPlayers.stream().filter(p -&amp;gt; p.getRole() == role).findFirst().orElse(null);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+#### 2. 玩家实体
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 文件：Player.java
+package io.agentscope.tutorial.chapter19.werewolf.entity;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.agent.AgentBase;&lt;/p&gt;
+&lt;p&gt;/**
+ * 玩家实体
+ *
+ * 每个玩家都关联一个 ReActAgent，负责与 AI 模型交互做出决策
+ */
+public class Player {&lt;/p&gt;
+&lt;p&gt;private String name;                    // 玩家名称
+    private Role role;                     // 角色
+    private boolean alive;                  // 是否存活
+    private boolean witchHasHealPotion;     // 女巫是否有解药
+    private boolean witchHasPoisonPotion;   // 女巫是否有毒药
+    private boolean voted;                  // 是否已投票
+    private AgentBase agent;                // 关联的 Agent&lt;/p&gt;
+&lt;p&gt;private Player(Builder builder) {
+        this.name = builder.name;
+        this.role = builder.role;
+        this.alive = true;
+        this.witchHasHealPotion = (builder.role == Role.WITCH);
+        this.witchHasPoisonPotion = (builder.role == Role.WITCH);
+        this.agent = builder.agent;
+    }&lt;/p&gt;
+&lt;p&gt;public static Builder builder() {
+        return new Builder();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 玩家死亡
+     */
+    public void kill() {
+        this.alive = false;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 玩家复活（如女巫救人）
+     */
+    public void resurrect() {
+        this.alive = true;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 女巫使用解药
+     */
+    public void useHealPotion() {
+        this.witchHasHealPotion = false;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 女巫使用毒药
+     */
+    public void usePoisonPotion() {
+        this.witchHasPoisonPotion = false;
+    }&lt;/p&gt;
+&lt;p&gt;// Getter 方法
+    public String getName() { return name; }
+    public Role getRole() { return role; }
+    public boolean isAlive() { return alive; }
+    public boolean isWitchHasHealPotion() { return witchHasHealPotion; }
+    public boolean isWitchHasPoisonPotion() { return witchHasPoisonPotion; }
+    public AgentBase getAgent() { return agent; }&lt;/p&gt;
+&lt;p&gt;public static class Builder {
+        private String name;
+        private Role role;
+        private AgentBase agent;&lt;/p&gt;
+&lt;p&gt;public Builder name(String name) { this.name = name; return this; }
+        public Builder role(Role role) { this.role = role; return this; }
+        public Builder agent(AgentBase agent) { this.agent = agent; return this; }
+        public Player build() { return new Player(this); }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+#### 3. Web 游戏控制器
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 文件：WerewolfWebController.java
+package io.agentscope.tutorial.chapter19.werewolf.web;
+&lt;p&gt;import io.agentscope.examples.werewolf.localization.LocalizationBundle;
+import io.agentscope.examples.werewolf.localization.LocalizationFactory;
+import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;&lt;/p&gt;
+&lt;p&gt;/**
+ * 狼人杀游戏 Web 控制器
+ *
+ * 提供 SSE（Server-Sent Events）接口，支持实时游戏进程推送
+ */
+@RestController
+@RequestMapping(&amp;quot;/api/game&amp;quot;)
+@CrossOrigin(origins = &amp;quot;*&amp;quot;)
+public class WerewolfWebController {&lt;/p&gt;
+&lt;p&gt;private final LocalizationFactory localizationFactory;&lt;/p&gt;
+&lt;p&gt;public WerewolfWebController(LocalizationFactory localizationFactory) {
+        this.localizationFactory = localizationFactory;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 开始新游戏
+     *
+     * @param lang 语言配置（默认中文）
+     * @return SSE 事件流，包含游戏进程
+     */
+    @PostMapping(value = &amp;quot;/start&amp;quot;, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux&amp;lt;ServerSentEvent&amp;lt;GameEvent&amp;gt;&amp;gt; startGame(
+            @RequestParam(name = &amp;quot;lang&amp;quot;, defaultValue = &amp;quot;zh-CN&amp;quot;) String lang) {&lt;/p&gt;
+&lt;p&gt;// 创建本地化消息包
+        LocalizationBundle bundle = localizationFactory.createBundle(lang);
+        GameEventEmitter emitter = new GameEventEmitter();&lt;/p&gt;
+&lt;p&gt;// 创建 Web 游戏实例
+        WerewolfWebGame game = new WerewolfWebGame(emitter, bundle);&lt;/p&gt;
+&lt;p&gt;// 异步执行游戏逻辑
+        Mono.fromRunnable(() -&amp;gt; {
+            try {
+                game.start();
+            } catch (Exception e) {
+                emitter.emitError(&amp;quot;游戏错误: &amp;quot; + e.getMessage());
+            } finally {
+                emitter.complete();
+            }
+        })
+        .subscribeOn(Schedulers.boundedElastic())
+        .subscribe();&lt;/p&gt;
+&lt;p&gt;// 返回 SSE 事件流
+        return emitter.getEventStream()
+                .map(event -&amp;gt; ServerSentEvent.&amp;lt;GameEvent&amp;gt;builder()
+                        .event(event.getType().name().toLowerCase())
+                        .data(event)
+                        .build());
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+#### 4. 游戏事件发射器
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 文件：GameEventEmitter.java
+package io.agentscope.tutorial.chapter19.werewolf.web;
+&lt;p&gt;import reactor.core.publisher.Sinks;&lt;/p&gt;
+&lt;p&gt;/**
+ * 游戏事件发射器
+ *
+ * 负责将游戏中的各种事件通过 SSE 推送给前端
+ */
+public class GameEventEmitter {&lt;/p&gt;
+&lt;p&gt;private final Sinks.Many&amp;lt;GameEvent&amp;gt; sink;&lt;/p&gt;
+&lt;p&gt;public GameEventEmitter() {
+        this.sink = Sinks.many().multicast().onBackpressureBuffer();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取事件流
+     */
+    public Flux&amp;lt;GameEvent&amp;gt; getEventStream() {
+        return sink.asFlux();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 发射游戏初始化事件
+     */
+    public void emitGameInit(java.util.List&amp;lt;java.util.Map&amp;lt;String, Object&amp;gt;&amp;gt; playersInfo) {
+        GameEvent event = new GameEvent(GameEventType.GAME_INIT);
+        event.setPlayersInfo(playersInfo);
+        sink.tryEmitNext(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 发射阶段变化事件
+     */
+    public void emitPhaseChange(int round, String phase) {
+        GameEvent event = new GameEvent(GameEventType.PHASE_CHANGE);
+        event.setRound(round);
+        event.setPhase(phase);
+        sink.tryEmitNext(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 发射玩家发言事件
+     */
+    public void emitPlayerSpeak(String playerName, String content, String type) {
+        GameEvent event = new GameEvent(GameEventType.PLAYER_SPEAK);
+        event.setPlayerName(playerName);
+        event.setContent(content);
+        event.setSpeakType(type);
+        sink.tryEmitNext(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 发射玩家投票事件
+     */
+    public void emitPlayerVote(String playerName, String targetPlayer, String reason) {
+        GameEvent event = new GameEvent(GameEventType.PLAYER_VOTE);
+        event.setPlayerName(playerName);
+        event.setTargetPlayer(targetPlayer);
+        event.setContent(reason);
+        sink.tryEmitNext(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 发射玩家死亡事件
+     */
+    public void emitPlayerEliminated(String playerName, String roleDisplay, String cause) {
+        GameEvent event = new GameEvent(GameEventType.PLAYER_ELIMINATED);
+        event.setPlayerName(playerName);
+        event.setRoleDisplay(roleDisplay);
+        event.setEliminateCause(cause);
+        sink.tryEmitNext(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 发射玩家复活事件
+     */
+    public void emitPlayerResurrected(String playerName) {
+        GameEvent event = new GameEvent(GameEventType.PLAYER_RESURRECTED);
+        event.setPlayerName(playerName);
+        sink.tryEmitNext(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 发射系统消息
+     */
+    public void emitSystemMessage(String message) {
+        GameEvent event = new GameEvent(GameEventType.SYSTEM_MESSAGE);
+        event.setContent(message);
+        sink.tryEmitNext(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 发射玩家动作事件
+     */
+    public void emitPlayerAction(String playerName, String roleDisplay,
+                                 String action, String target, String result) {
+        GameEvent event = new GameEvent(GameEventType.PLAYER_ACTION);
+        event.setPlayerName(playerName);
+        event.setRoleDisplay(roleDisplay);
+        event.setAction(action);
+        event.setTargetPlayer(target);
+        event.setContent(result);
+        sink.tryEmitNext(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 发射统计数据更新
+     */
+    public void emitStatsUpdate(int aliveCount, int werewolfCount, int villagerCount) {
+        GameEvent event = new GameEvent(GameEventType.STATS_UPDATE);
+        event.setAliveCount(aliveCount);
+        event.setWerewolfCount(werewolfCount);
+        event.setVillagerCount(villagerCount);
+        sink.tryEmitNext(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 发射游戏结束事件
+     */
+    public void emitGameEnd(String winner, String explanation) {
+        GameEvent event = new GameEvent(GameEventType.GAME_END);
+        event.setWinner(winner);
+        event.setContent(explanation);
+        sink.tryEmitNext(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 发射错误事件
+     */
+    public void emitError(String error) {
+        GameEvent event = new GameEvent(GameEventType.ERROR);
+        event.setContent(error);
+        sink.tryEmitNext(event);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 完成事件流
+     */
+    public void complete() {
+        sink.tryEmitComplete();
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+#### 5. Web 游戏主逻辑
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 文件：WerewolfWebGame.java
+package io.agentscope.tutorial.chapter19.werewolf.web;
+&lt;p&gt;import static io.agentscope.examples.werewolf.WerewolfGameConfig.*;&lt;/p&gt;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.agent.AgentBase;
+import io.agentscope.core.formatter.dashscope.DashScopeMultiAgentFormatter;
+import io.agentscope.core.memory.InMemoryMemory;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.model.DashScopeChatModel;
+import io.agentscope.core.pipeline.FanoutPipeline;
+import io.agentscope.core.pipeline.MsgHub;
+import io.agentscope.core.tool.Toolkit;
+import io.agentscope.tutorial.chapter19.werewolf.entity.GameState;
+import io.agentscope.tutorial.chapter19.werewolf.entity.Player;
+import io.agentscope.tutorial.chapter19.werewolf.entity.Role;
+import io.agentscope.tutorial.chapter19.werewolf.localization.PromptProvider;
+import io.agentscope.tutorial.chapter19.werewolf.model.HunterShootModel;
+import io.agentscope.tutorial.chapter19.werewolf.model.SeerCheckModel;
+import io.agentscope.tutorial.chapter19.werewolf.model.VoteModel;
+import io.agentscope.tutorial.chapter19.werewolf.model.WitchHealModel;
+import io.agentscope.tutorial.chapter19.werewolf.model.WitchPoisonModel;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;&lt;/p&gt;
+&lt;p&gt;/**
+ * 狼人杀 Web 游戏实现
+ *
+ * 核心流程：
+ * 1. 初始化游戏，创建 9 个玩家 Agent
+ * 2. 夜晚阶段：狼人讨论投票、女巫救人/毒人、预言家查验
+ * 3. 白天阶段：公布死讯、猎人开枪、自由讨论、投票放逐
+ * 4. 检查胜负条件，循环直到游戏结束
+ */
+public class WerewolfWebGame {&lt;/p&gt;
+&lt;p&gt;private final GameEventEmitter emitter;
+    private final PromptProvider prompts;
+    private final WerewolfUtils utils;&lt;/p&gt;
+&lt;p&gt;private DashScopeChatModel model;
+    private GameState gameState;&lt;/p&gt;
+&lt;p&gt;public WerewolfWebGame(GameEventEmitter emitter, LocalizationBundle bundle) {
+        this.emitter = emitter;
+        this.prompts = bundle.prompts();
+        this.utils = new WerewolfUtils(bundle.messages());
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 开始游戏
+     */
+    public void start() throws Exception {
+        emitter.emitSystemMessage(&amp;quot;正在初始化游戏...&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 初始化 AI 模型
+        String apiKey = System.getenv(&amp;quot;DASHSCOPE_API_KEY&amp;quot;);
+        model = DashScopeChatModel.builder()
+                .apiKey(apiKey)
+                .modelName(DEFAULT_MODEL)
+                .formatter(new DashScopeMultiAgentFormatter())
+                .stream(false)
+                .build();&lt;/p&gt;
+&lt;p&gt;// 初始化游戏状态
+        gameState = initializeGame();
+        emitStatsUpdate();&lt;/p&gt;
+&lt;p&gt;// 主游戏循环
+        for (int round = 1; round &amp;lt;= MAX_ROUNDS; round++) {
+            gameState.nextRound();&lt;/p&gt;
+&lt;p&gt;// 夜晚阶段
+            emitter.emitPhaseChange(round, &amp;quot;night&amp;quot;);
+            nightPhase();
+            if (checkGameEnd()) break;&lt;/p&gt;
+&lt;p&gt;// 白天阶段
+            emitter.emitPhaseChange(round, &amp;quot;day&amp;quot;);
+            dayPhase();
+            if (checkGameEnd()) break;
+        }&lt;/p&gt;
+&lt;p&gt;// 宣布结果
+        announceWinner();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 初始化游戏，创建所有玩家
+     */
+    private GameState initializeGame() {
+        // 创建角色列表
+        List&amp;lt;Role&amp;gt; roles = new ArrayList&amp;lt;&amp;gt;();
+        for (int i = 0; i &amp;lt; VILLAGER_COUNT; i++) roles.add(Role.VILLAGER);
+        for (int i = 0; i &amp;lt; WEREWOLF_COUNT; i++) roles.add(Role.WEREWOLF);
+        for (int i = 0; i &amp;lt; SEER_COUNT; i++) roles.add(Role.SEER);
+        for (int i = 0; i &amp;lt; WITCH_COUNT; i++) roles.add(Role.WITCH);
+        for (int i = 0; i &amp;lt; HUNTER_COUNT; i++) roles.add(Role.HUNTER);
+        Collections.shuffle(roles);&lt;/p&gt;
+&lt;p&gt;// 创建玩家和 Agent
+        List&amp;lt;Player&amp;gt; players = new ArrayList&amp;lt;&amp;gt;();
+        List&amp;lt;String&amp;gt; playerNames = langConfig.getPlayerNames();&lt;/p&gt;
+&lt;p&gt;for (int i = 0; i &amp;lt; roles.size(); i++) {
+            String name = playerNames.get(i);
+            Role role = roles.get(i);&lt;/p&gt;
+&lt;p&gt;// 为每个玩家创建 ReActAgent
+            ReActAgent agent = ReActAgent.builder()
+                    .name(name)
+                    .sysPrompt(prompts.getSystemPrompt(role, name))
+                    .model(model)
+                    .memory(new InMemoryMemory())
+                    .toolkit(new Toolkit())
+                    .build();&lt;/p&gt;
+&lt;p&gt;players.add(Player.builder()
+                    .name(name)
+                    .role(role)
+                    .agent(agent)
+                    .build());
+        }&lt;/p&gt;
+&lt;p&gt;// 发射初始化事件
+        emitter.emitGameInit(playersInfo);&lt;/p&gt;
+&lt;p&gt;return new GameState(players);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 夜晚阶段
+     */
+    private void nightPhase() {
+        emitter.emitSystemMessage(&amp;quot;夜幕降临，请所有玩家闭眼...&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 1. 狼人讨论和击杀
+        Player victim = werewolvesKill();
+        if (victim != null) {
+            gameState.setLastNightVictim(victim);
+            victim.kill();
+            emitter.emitPlayerEliminated(victim.getName(),
+                    messages.getRoleDisplayName(victim.getRole()), &amp;quot;killed&amp;quot;);
+        }&lt;/p&gt;
+&lt;p&gt;// 2. 女巫行动
+        if (gameState.getWitch() != null &amp;amp;&amp;amp; gameState.getWitch().isAlive()) {
+            witchActions();
+        }&lt;/p&gt;
+&lt;p&gt;// 3. 预言家查验
+        if (gameState.getSeer() != null &amp;amp;&amp;amp; gameState.getSeer().isAlive()) {
+            seerCheck();
+        }&lt;/p&gt;
+&lt;p&gt;// 处理夜晚真正的死亡（未被救活的情况）
+        Player nightVictim = gameState.getLastNightVictim();
+        if (nightVictim != null &amp;amp;&amp;amp; !gameState.isLastVictimResurrected()) {
+            emitter.emitPlayerEliminated(nightVictim.getName(),
+                    messages.getRoleDisplayName(nightVictim.getRole()), &amp;quot;killed&amp;quot;);
+        }&lt;/p&gt;
+&lt;p&gt;emitStatsUpdate();
+        emitter.emitSystemMessage(&amp;quot;天亮了，请所有玩家睁眼。&amp;quot;);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 狼人击杀阶段
+     */
+    private Player werewolvesKill() {
+        List&amp;lt;Player&amp;gt; werewolves = gameState.getAliveWerewolves();
+        if (werewolves.isEmpty()) return null;&lt;/p&gt;
+&lt;p&gt;emitter.emitSystemMessage(&amp;quot;狼人请睁眼，请讨论并决定今晚击杀目标。&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 创建狼人讨论组
+        try (MsgHub werewolfHub = MsgHub.builder()
+                .name(&amp;quot;WerewolfDiscussion&amp;quot;)
+                .participants(werewolves.stream()
+                        .map(Player::getAgent)
+                        .toArray(ReActAgent[]::new))
+                .announcement(prompts.createWerewolfDiscussionPrompt(gameState))
+                .enableAutoBroadcast(true)
+                .build()) {&lt;/p&gt;
+&lt;p&gt;werewolfHub.enter().block();&lt;/p&gt;
+&lt;p&gt;// 狼人讨论 2 轮
+            for (int i = 0; i &amp;lt; 2; i++) {
+                for (Player werewolf : werewolves) {
+                    Msg response = werewolf.getAgent().call().block();
+                    String content = utils.extractTextContent(response);
+                    emitter.emitPlayerSpeak(werewolf.getName(), content, &amp;quot;werewolf_discussion&amp;quot;);
+                }
+            }&lt;/p&gt;
+&lt;p&gt;// 并行投票
+            FanoutPipeline votingPipeline = FanoutPipeline.builder()
+                    .addAgents(werewolves.stream()
+                            .map(p -&amp;gt; (AgentBase) p.getAgent()).toList())
+                    .concurrent()
+                    .build();&lt;/p&gt;
+&lt;p&gt;List&amp;lt;Msg&amp;gt; votes = votingPipeline.execute(
+                    prompts.createWerewolfVotingPrompt(gameState),
+                    VoteModel.class).block();&lt;/p&gt;
+&lt;p&gt;// 统计票数
+            return utils.countVotes(votes, gameState);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 女巫行动阶段
+     */
+    private void witchActions() {
+        Player witch = gameState.getWitch();
+        Player victim = gameState.getLastNightVictim();&lt;/p&gt;
+&lt;p&gt;// 解药使用
+        if (witch.isWitchHasHealPotion() &amp;amp;&amp;amp; victim != null) {
+            emitter.emitSystemMessage(
+                    messages.getSystemWitchSeesVictim(victim.getName()));&lt;/p&gt;
+&lt;p&gt;Msg healDecision = witch.getAgent()
+                    .call(prompts.createWitchHealPrompt(victim), WitchHealModel.class)
+                    .block();&lt;/p&gt;
+&lt;p&gt;WitchHealModel healModel = healDecision.getStructuredData(WitchHealModel.class);
+            if (Boolean.TRUE.equals(healModel.useHealPotion)) {
+                victim.resurrect();
+                witch.useHealPotion();
+                gameState.setLastVictimResurrected(true);
+                emitter.emitPlayerAction(
+                        witch.getName(),
+                        messages.getRoleDisplayName(Role.WITCH),
+                        &amp;quot;使用解药&amp;quot;,
+                        victim.getName(),
+                        &amp;quot;救活了 &amp;quot; + victim.getName());
+            }
+        }&lt;/p&gt;
+&lt;p&gt;// 毒药使用
+        if (witch.isWitchHasPoisonPotion()) {
+            Msg poisonDecision = witch.getAgent()
+                    .call(prompts.createWitchPoisonPrompt(gameState, false),
+                            WitchPoisonModel.class)
+                    .block();&lt;/p&gt;
+&lt;p&gt;WitchPoisonModel poisonModel =
+                    poisonDecision.getStructuredData(WitchPoisonModel.class);&lt;/p&gt;
+&lt;p&gt;if (Boolean.TRUE.equals(poisonModel.usePoisonPotion)
+                    &amp;amp;&amp;amp; poisonModel.targetPlayer != null) {
+                Player target = gameState.findPlayerByName(poisonModel.targetPlayer);
+                if (target != null &amp;amp;&amp;amp; target.isAlive()) {
+                    target.kill();
+                    witch.usePoisonPotion();
+                    emitter.emitPlayerEliminated(
+                            target.getName(),
+                            messages.getRoleDisplayName(target.getRole()),
+                            &amp;quot;poisoned&amp;quot;);
+                }
+            }
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 预言家查验阶段
+     */
+    private void seerCheck() {
+        Player seer = gameState.getSeer();&lt;/p&gt;
+&lt;p&gt;emitter.emitSystemMessage(&amp;quot;预言家请睁眼，请选择今晚要查验的玩家。&amp;quot;);&lt;/p&gt;
+&lt;p&gt;Msg checkDecision = seer.getAgent()
+                .call(prompts.createSeerCheckPrompt(gameState), SeerCheckModel.class)
+                .block();&lt;/p&gt;
+&lt;p&gt;SeerCheckModel checkModel = checkDecision.getStructuredData(SeerCheckModel.class);&lt;/p&gt;
+&lt;p&gt;if (checkModel.targetPlayer != null) {
+            Player target = gameState.findPlayerByName(checkModel.targetPlayer);
+            if (target != null &amp;amp;&amp;amp; target.isAlive()) {
+                String identity = (target.getRole() == Role.WEREWOLF)
+                        ? &amp;quot;是狼人&amp;quot; : &amp;quot;不是狼人&amp;quot;;
+                emitter.emitPlayerAction(
+                        seer.getName(),
+                        messages.getRoleDisplayName(Role.SEER),
+                        &amp;quot;查验&amp;quot;,
+                        target.getName(),
+                        target.getName() + &amp;quot; &amp;quot; + identity);&lt;/p&gt;
+&lt;p&gt;// 通知预言家查验结果
+                seer.getAgent().call(prompts.createSeerResultPrompt(target)).block();
+            }
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 白天阶段
+     */
+    private void dayPhase() {
+        emitter.emitSystemMessage(&amp;quot;现在是白天，请所有玩家自由讨论。&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 猎人开枪
+        Player hunter = gameState.getHunter();
+        if (hunter != null &amp;amp;&amp;amp; !hunter.isAlive()) {
+            if (hunter.equals(gameState.getLastNightVictim())
+                    || hunter.equals(gameState.getLastPoisonedVictim())) {
+                hunterShoot(hunter);
+                if (checkGameEnd()) return;
+            }
+        }&lt;/p&gt;
+&lt;p&gt;// 讨论阶段
+        discussionPhase();&lt;/p&gt;
+&lt;p&gt;// 投票阶段
+        Player votedOut = votingPhase();&lt;/p&gt;
+&lt;p&gt;if (votedOut != null) {
+            votedOut.kill();
+            emitter.emitPlayerEliminated(
+                    votedOut.getName(),
+                    messages.getRoleDisplayName(votedOut.getRole()),
+                    &amp;quot;voted&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 猎人技能
+            if (votedOut.getRole() == Role.HUNTER) {
+                hunterShoot(votedOut);
+            }
+        }&lt;/p&gt;
+&lt;p&gt;emitStatsUpdate();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 讨论阶段
+     */
+    private void discussionPhase() {
+        List&amp;lt;Player&amp;gt; alivePlayers = gameState.getAlivePlayers();
+        if (alivePlayers.size() &amp;lt;= 2) return;&lt;/p&gt;
+&lt;p&gt;try (MsgHub discussionHub = MsgHub.builder()
+                .name(&amp;quot;DayDiscussion&amp;quot;)
+                .participants(alivePlayers.stream()
+                        .map(Player::getAgent)
+                        .toArray(ReActAgent[]::new))
+                .enableAutoBroadcast(true)
+                .build()) {&lt;/p&gt;
+&lt;p&gt;discussionHub.enter().block();&lt;/p&gt;
+&lt;p&gt;// 讨论 3 轮
+            for (int round = 1; round &amp;lt;= MAX_DISCUSSION_ROUNDS; round++) {
+                emitter.emitSystemMessage(&amp;quot;讨论第 &amp;quot; + round + &amp;quot; 轮&amp;quot;);&lt;/p&gt;
+&lt;p&gt;for (Player player : alivePlayers) {
+                    Msg response = player.getAgent().call().block();
+                    String content = utils.extractTextContent(response);
+                    emitter.emitPlayerSpeak(player.getName(), content, &amp;quot;day_discussion&amp;quot;);
+                }
+            }
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 投票阶段
+     */
+    private Player votingPhase() {
+        List&amp;lt;Player&amp;gt; alivePlayers = gameState.getAlivePlayers();
+        if (alivePlayers.size() &amp;lt;= 1) return null;&lt;/p&gt;
+&lt;p&gt;emitter.emitSystemMessage(&amp;quot;请所有玩家投票，选择要放逐的玩家。&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 并行投票
+        FanoutPipeline votingPipeline = FanoutPipeline.builder()
+                .addAgents(alivePlayers.stream()
+                        .map(p -&amp;gt; (AgentBase) p.getAgent()).toList())
+                .concurrent()
+                .build();&lt;/p&gt;
+&lt;p&gt;List&amp;lt;Msg&amp;gt; votes = votingPipeline.execute(
+                prompts.createVotingPrompt(gameState),
+                VoteModel.class).block();&lt;/p&gt;
+&lt;p&gt;// 显示投票
+        for (Msg vote : votes) {
+            try {
+                VoteModel voteData = vote.getStructuredData(VoteModel.class);
+                emitter.emitPlayerVote(
+                        vote.getName(),
+                        voteData.targetPlayer,
+                        voteData.reason);
+            } catch (Exception e) {
+                emitter.emitSystemMessage(
+                        messages.getVoteParsingError(vote.getName()));
+            }
+        }&lt;/p&gt;
+&lt;p&gt;// 统计票数
+        return utils.countVotes(votes, gameState);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 猎人开枪
+     */
+    private void hunterShoot(Player hunter) {
+        emitter.emitSystemMessage(
+                messages.getRoleDisplayName(Role.HUNTER) + &amp;quot; &amp;quot;
+                        + hunter.getName() + &amp;quot; 请发动技能。&amp;quot;);&lt;/p&gt;
+&lt;p&gt;Msg shootDecision = hunter.getAgent()
+                .call(prompts.createHunterShootPrompt(gameState, hunter),
+                        HunterShootModel.class)
+                .block();&lt;/p&gt;
+&lt;p&gt;HunterShootModel shootModel =
+                shootDecision.getStructuredData(HunterShootModel.class);&lt;/p&gt;
+&lt;p&gt;if (Boolean.TRUE.equals(shootModel.willShoot)
+                &amp;amp;&amp;amp; shootModel.targetPlayer != null) {
+            Player target = gameState.findPlayerByName(shootModel.targetPlayer);
+            if (target != null &amp;amp;&amp;amp; target.isAlive()) {
+                target.kill();
+                emitter.emitPlayerEliminated(
+                        target.getName(),
+                        messages.getRoleDisplayName(target.getRole()),
+                        &amp;quot;shot&amp;quot;);
+            }
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 检查游戏是否结束
+     */
+    private boolean checkGameEnd() {
+        return gameState.checkVillagersWin() || gameState.checkWerewolvesWin();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 宣布游戏结果
+     */
+    private void announceWinner() {
+        if (gameState.checkVillagersWin()) {
+            emitter.emitGameEnd(&amp;quot;villagers&amp;quot;,
+                    &amp;quot;好人阵营胜利！所有狼人已被放逐。&amp;quot;);
+        } else if (gameState.checkWerewolvesWin()) {
+            emitter.emitGameEnd(&amp;quot;werewolves&amp;quot;,
+                    &amp;quot;狼人阵营胜利！狼人数量已超过好人。&amp;quot;);
+        } else {
+            emitter.emitGameEnd(&amp;quot;none&amp;quot;, &amp;quot;游戏达到最大回合数，平局。&amp;quot;);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;private void emitStatsUpdate() {
+        emitter.emitStatsUpdate(
+                gameState.getAlivePlayers().size(),
+                gameState.getAliveWerewolves().size(),
+                gameState.getAliveVillagers().size());
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;19.2.4 投票数据模型&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 文件：VoteModel.java
+package io.agentscope.tutorial.chapter19.werewolf.model;
+&lt;p&gt;import io.agentscope.core.annotation.StructuredData;&lt;/p&gt;
+&lt;p&gt;/**
+ * 投票数据模型
+ *
+ * 用于结构化 LLM 输出的投票决策
+ */
+@StructuredData
+public class VoteModel {&lt;/p&gt;
+&lt;p&gt;/**
+     * 投票目标玩家名称
+     */
+    public String targetPlayer;&lt;/p&gt;
+&lt;p&gt;/**
+     * 投票理由（可选）
+     */
+    public String reason;&lt;/p&gt;
+&lt;p&gt;public VoteModel() {}&lt;/p&gt;
+&lt;p&gt;public VoteModel(String targetPlayer, String reason) {
+        this.targetPlayer = targetPlayer;
+        this.reason = reason;
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;19.2.5 配置文件&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# application.yml
+server:
+  port: 8080
+&lt;p&gt;spring:
+  application:
+    name: werewolf-game&lt;/p&gt;
+&lt;h1&gt;游戏配置&lt;/h1&gt;
+werewolf:
+  model: qwen3-max
+  max-rounds: 30
+  max-discussion-rounds: 3
+&lt;h1&gt;角色配置&lt;/h1&gt;
+roles:
+  villager-count: 3
+  werewolf-count: 3
+  seer-count: 1
+  witch-count: 1
+  hunter-count: 1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;19.2.6 运行说明&lt;/h3&gt;
+&lt;p&gt;**1. 环境准备**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 设置 API Key
+export DASHSCOPE_API_KEY=your_api_key_here
+&lt;h1&gt;验证 Java 环境&lt;/h1&gt;
+java -version  # 需要 21.x
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**2. 启动游戏**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 编译项目
+cd werewolf
+mvn clean package -DskipTests
+&lt;h1&gt;启动应用&lt;/h1&gt;
+mvn spring-boot:run
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**3. 测试游戏**&lt;/p&gt;
+&lt;p&gt;使用浏览器或 curl 测试：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 启动中文游戏（默认）
+curl -X POST &amp;quot;http://localhost:8080/api/game/start?lang=zh-CN&amp;quot;
+&lt;h1&gt;启动英文游戏&lt;/h1&gt;
+curl -X POST &amp;quot;http://localhost:8080/api/game/start?lang=en-US&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**4. 前端集成**&lt;/p&gt;
+&lt;p&gt;前端通过 SSE 接收游戏事件：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-javascript&quot;&gt;// 前端 SSE 连接示例
+const eventSource = new EventSource('http://localhost:8080/api/game/start?lang=zh-CN');
+&lt;p&gt;eventSource.addEventListener('game_init', (e) =&amp;gt; {
+    const players = JSON.parse(e.data).playersInfo;
+    console.log('游戏初始化，玩家:', players);
+});&lt;/p&gt;
+&lt;p&gt;eventSource.addEventListener('phase_change', (e) =&amp;gt; {
+    const phase = JSON.parse(e.data);
+    console.log(&lt;code&gt;第 ${phase.round} 回合 - ${phase.phase}&lt;/code&gt;);
+});&lt;/p&gt;
+&lt;p&gt;eventSource.addEventListener('player_speak', (e) =&amp;gt; {
+    const speak = JSON.parse(e.data);
+    console.log(&lt;code&gt;${speak.playerName}: ${speak.content}&lt;/code&gt;);
+});&lt;/p&gt;
+&lt;p&gt;eventSource.addEventListener('player_vote', (e) =&amp;gt; {
+    const vote = JSON.parse(e.data);
+    console.log(&lt;code&gt;${vote.playerName} 投票给 ${vote.targetPlayer}&lt;/code&gt;);
+});&lt;/p&gt;
+&lt;p&gt;eventSource.addEventListener('player_eliminated', (e) =&amp;gt; {
+    const death = JSON.parse(e.data);
+    console.log(&lt;code&gt;${death.playerName}（${death.roleDisplay}）被${death.cause}&lt;/code&gt;);
+});&lt;/p&gt;
+&lt;p&gt;eventSource.addEventListener('game_end', (e) =&amp;gt; {
+    const result = JSON.parse(e.data);
+    console.log(&lt;code&gt;游戏结束 - ${result.winner} 获胜: ${result.content}&lt;/code&gt;);
+});
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;19.3 【案例】企业智能助手&lt;/h2&gt;
+&lt;h3&gt;19.3.1 系统概述&lt;/h3&gt;
+&lt;p&gt;企业智能助手是一个面向企业场景的多功能 AI 助手系统，集成了知识库问答、日程管理、邮件处理、报表生成等多种能力。系统采用多代理架构，主代理负责意图识别和任务分发，各专业子代理负责具体业务处理。&lt;/p&gt;
+&lt;p&gt;**系统架构图：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;┌─────────────────────────────────────────────────────────────────┐
+│                    企业用户（多终端）                            │
+│    ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
+│    │  Web   │  │ 钉钉/企微 │  │ 钉钉/企微 │  │   API   │      │
+│    └──────────┘  └──────────┘  └──────────┘  └──────────┘      │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     企业智能助手网关                             │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  意图识别 → 能力路由 → 会话管理 → 安全审计                │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+              ┌─────────────────┼─────────────────┐
+              │                 │                 │
+              ▼                 ▼                 ▼
+    ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
+    │  知识库问答代理   │ │   日程管理代理   │ │   报表生成代理   │
+    │                  │ │                  │ │                  │
+    │  - FAQ检索       │ │  - 创建日程      │ │  - 数据查询      │
+    │  - 文档问答      │ │  - 查询日程      │ │  - 图表生成      │
+    │  - RAG 增强      │ │  - 发送邀请      │ │  - 定时推送      │
+    └────────┬─────────┘ └────────┬─────────┘ └────────┬─────────┘
+             │                    │                    │
+             └────────────────────┼────────────────────┘
+                                  │
+                                  ▼
+                    ┌─────────────────────────┐
+                    │     H2 嵌入式数据库      │
+                    │  - 知识库              │
+                    │  - 会话历史            │
+                    │  - 日程数据            │
+                    │  - 报表模板            │
+                    └─────────────────────────┘
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;19.3.2 项目结构&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;enterprise-assistant/
+├── src/main/java/io/agentscope/tutorial/chapter19/enterprise/
+│   ├── EnterpriseAssistantApplication.java    # 应用入口
+│   ├── agent/
+│   │   ├── EnterpriseAssistantAgent.java       # 主助手代理
+│   │   ├── KnowledgeAgent.java                 # 知识库问答代理
+│   │   ├── ScheduleAgent.java                  # 日程管理代理
+│   │   └── ReportAgent.java                    # 报表生成代理
+│   ├── config/
+│   │   ├── AgentConfig.java                    # 代理配置
+│   │   ├── PromptConfig.java                   # 提示词配置
+│   │   └── RAGConfig.java                      # RAG 配置
+│   ├── controller/
+│   │   └── AssistantController.java            # Web 控制器
+│   ├── service/
+│   │   ├── KnowledgeService.java               # 知识库服务
+│   │   ├── ScheduleService.java                # 日程服务
+│   │   └── ReportService.java                  # 报表服务
+│   ├── entity/
+│   │   ├── KnowledgeArticle.java               # 知识文章
+│   │   ├── Schedule.java                       # 日程
+│   │   └── Report.java                         # 报表
+│   └── tools/
+│       └── AssistantTools.java                # 工具类
+└── src/main/resources/
+    ├── application.yml
+    └── db/
+        └── schema.sql                          # 数据库 Schema
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;19.3.3 核心实现&lt;/h3&gt;
+#### 1. 企业助手主代理
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 文件：EnterpriseAssistantAgent.java
+package io.agentscope.tutorial.chapter19.enterprise.agent;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.agent.Event;
+import io.agentscope.core.memory.Memory;
+import io.agentscope.core.memory.autocontext.AutoContextConfig;
+import io.agentscope.core.memory.autocontext.AutoContextMemory;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.model.Model;
+import io.agentscope.core.session.mysql.MysqlSession;
+import io.agentscope.core.tool.Toolkit;
+import io.agentscope.tutorial.chapter19.enterprise.tools.AssistantTools;
+import java.nio.file.Paths;
+import javax.sql.DataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import reactor.core.publisher.Flux;&lt;/p&gt;
+&lt;p&gt;/**
+ * 企业智能助手主代理
+ *
+ * 负责：
+ * 1. 理解用户意图
+ * 2. 调用相应的子代理处理任务
+ * 3. 聚合结果返回给用户
+ */
+public class EnterpriseAssistantAgent {&lt;/p&gt;
+&lt;p&gt;private static final Logger logger =
+            LoggerFactory.getLogger(EnterpriseAssistantAgent.class);&lt;/p&gt;
+&lt;p&gt;private final Model model;
+    private final AssistantTools tools;
+    private final String sysPrompt;&lt;/p&gt;
+&lt;p&gt;@Autowired
+    private DataSource dataSource;&lt;/p&gt;
+&lt;p&gt;public EnterpriseAssistantAgent(
+            Model model,
+            AssistantTools tools,
+            String sysPrompt) {
+        this.model = model;
+        this.tools = tools;
+        this.sysPrompt = sysPrompt;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 处理用户请求
+     *
+     * @param msg 用户消息
+     * @param sessionId 会话ID
+     * @param userId 用户ID
+     * @return 事件流
+     */
+    public Flux&amp;lt;Event&amp;gt; stream(Msg msg, String sessionId, String userId) {
+        logger.info(&amp;quot;处理用户请求 - userId: {}, sessionId: {}&amp;quot;, userId, sessionId);&lt;/p&gt;
+&lt;p&gt;// 创建工具集
+        Toolkit toolkit = new Toolkit();
+        toolkit.registerTool(tools);&lt;/p&gt;
+&lt;p&gt;// 配置上下文压缩：当 token 占比超过 50% 时压缩
+        AutoContextConfig autoContextConfig = AutoContextConfig.builder()
+                .tokenRatio(0.5)
+                .lastKeep(15)
+                .build();&lt;/p&gt;
+&lt;p&gt;// 使用自动上下文内存
+        AutoContextMemory memory = new AutoContextMemory(autoContextConfig, model);&lt;/p&gt;
+&lt;p&gt;// MySQL 会话持久化
+        MysqlSession mysqlSession = new MysqlSession(
+                dataSource,
+                &amp;quot;enterprise_assistant&amp;quot;,
+                null,
+                true);&lt;/p&gt;
+&lt;p&gt;// 创建 ReActAgent
+        ReActAgent agent = ReActAgent.builder()
+                .name(&amp;quot;enterprise_assistant&amp;quot;)
+                .sysPrompt(sysPrompt)
+                .toolkit(toolkit)
+                .model(model)
+                .memory(memory)
+                .build();&lt;/p&gt;
+&lt;p&gt;// 加载历史会话
+        agent.loadIfExists(mysqlSession, sessionId);&lt;/p&gt;
+&lt;p&gt;return agent.stream(msg)
+                .doFinally(signalType -&amp;gt; {
+                    logger.info(&amp;quot;请求处理完成，保存会话: {}&amp;quot;, sessionId);
+                    agent.saveTo(mysqlSession, sessionId);
+                });
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+#### 2. 知识库问答代理
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 文件：KnowledgeAgent.java
+package io.agentscope.tutorial.chapter19.enterprise.agent;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.memory.InMemoryMemory;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.model.Model;
+import io.agentscope.core.tool.Toolkit;
+import io.agentscope.tutorial.chapter19.enterprise.service.KnowledgeService;
+import io.agentscope.tutorial.chapter19.enterprise.entity.KnowledgeArticle;
+import java.util.List;&lt;/p&gt;
+&lt;p&gt;/**
+ * 知识库问答代理
+ *
+ * 负责：
+ * - FAQ 问答
+ * - 文档检索
+ * - RAG 增强回答
+ */
+public class KnowledgeAgent {&lt;/p&gt;
+&lt;p&gt;private final Model model;
+    private final KnowledgeService knowledgeService;
+    private final String sysPrompt;&lt;/p&gt;
+&lt;p&gt;public KnowledgeAgent(
+            Model model,
+            KnowledgeService knowledgeService,
+            String sysPrompt) {
+        this.model = model;
+        this.knowledgeService = knowledgeService;
+        this.sysPrompt = sysPrompt;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 回答知识库相关问题
+     *
+     * @param query 用户问题
+     * @return 回答内容
+     */
+    public String answer(String query) {
+        // 检索相关知识
+        List&amp;lt;KnowledgeArticle&amp;gt; articles = knowledgeService.search(query, 5);&lt;/p&gt;
+&lt;p&gt;if (articles.isEmpty()) {
+            return &amp;quot;抱歉，我没有找到相关的知识内容。&amp;quot;;
+        }&lt;/p&gt;
+&lt;p&gt;// 构建增强提示词
+        StringBuilder context = new StringBuilder();
+        context.append(&amp;quot;参考以下知识内容回答用户问题：\n\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;for (int i = 0; i &amp;lt; articles.size(); i++) {
+            KnowledgeArticle article = articles.get(i);
+            context.append(String.format(&amp;quot;【文档 %d】%s\n%s\n\n&amp;quot;,
+                    i + 1,
+                    article.getTitle(),
+                    article.getContent()));
+        }&lt;/p&gt;
+&lt;p&gt;context.append(&amp;quot;用户问题：&amp;quot;).append(query);&lt;/p&gt;
+&lt;p&gt;// 创建 Agent 回答
+        ReActAgent agent = ReActAgent.builder()
+                .name(&amp;quot;knowledge_agent&amp;quot;)
+                .sysPrompt(buildSysPrompt())
+                .model(model)
+                .memory(new InMemoryMemory())
+                .toolkit(new Toolkit())
+                .build();&lt;/p&gt;
+&lt;p&gt;Msg response = agent.call(Msg.builder()
+                .content(TextBlock.builder().text(context.toString()).build())
+                .build()).block();&lt;/p&gt;
+&lt;p&gt;return extractText(response);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * RAG 增强检索
+     */
+    public String answerWithRAG(String query) {
+        // 向量检索
+        List&amp;lt;KnowledgeArticle&amp;gt; articles = knowledgeService.vectorSearch(query, 5);&lt;/p&gt;
+&lt;p&gt;// 构建上下文
+        StringBuilder context = new StringBuilder();
+        context.append(&amp;quot;请根据以下检索到的知识内容，准确回答用户问题。\n\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;for (KnowledgeArticle article : articles) {
+            context.append(String.format(&amp;quot;标题：%s\n内容：%s\n相似度：%.2f\n\n&amp;quot;,
+                    article.getTitle(),
+                    article.getContent(),
+                    article.getScore()));
+        }&lt;/p&gt;
+&lt;p&gt;context.append(&amp;quot;用户问题：&amp;quot;).append(query);&lt;/p&gt;
+&lt;p&gt;ReActAgent agent = ReActAgent.builder()
+                .name(&amp;quot;knowledge_agent_rag&amp;quot;)
+                .sysPrompt(buildRagPrompt())
+                .model(model)
+                .memory(new InMemoryMemory())
+                .toolkit(new Toolkit())
+                .build();&lt;/p&gt;
+&lt;p&gt;Msg response = agent.call(Msg.builder()
+                .content(TextBlock.builder().text(context.toString()).build())
+                .build()).block();&lt;/p&gt;
+&lt;p&gt;return extractText(response);
+    }&lt;/p&gt;
+&lt;p&gt;private String buildSysPrompt() {
+        return &amp;quot;&amp;quot;&amp;quot;
+                你是一个企业知识库助手，负责根据检索到的知识内容回答用户问题。&lt;/p&gt;
+&lt;p&gt;回答要求：
+                1. 基于提供的知识内容进行回答，不要编造信息
+                2. 如果知识内容不足以回答，说明无法回答
+                3. 回答要清晰、准确、易懂
+                4. 可以引用具体的文档内容来支持回答&lt;/p&gt;
+&lt;p&gt;如果没有找到相关知识，明确告知用户。
+                &amp;quot;&amp;quot;&amp;quot;;
+    }&lt;/p&gt;
+&lt;p&gt;private String buildRagPrompt() {
+        return &amp;quot;&amp;quot;&amp;quot;
+                你是一个企业知识库助手，基于 RAG 检索结果回答用户问题。&lt;/p&gt;
+&lt;p&gt;回答要求：
+                1. 充分利用检索到的文档内容
+                2. 标注信息来源（文档标题）
+                3. 如果检索结果不够，诚实说明
+                4. 保持回答的专业性和准确性
+                &amp;quot;&amp;quot;&amp;quot;;
+    }&lt;/p&gt;
+&lt;p&gt;private String extractText(Msg msg) {
+        return msg.getContent().stream()
+                .filter(block -&amp;gt; block instanceof TextBlock)
+                .map(block -&amp;gt; ((TextBlock) block).getText())
+                .findFirst()
+                .orElse(&amp;quot;&amp;quot;);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+#### 3. 日程管理代理
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 文件：ScheduleAgent.java
+package io.agentscope.tutorial.chapter19.enterprise.agent;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.memory.InMemoryMemory;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.model.Model;
+import io.agentscope.core.tool.Toolkit;
+import io.agentscope.tutorial.chapter19.enterprise.entity.Schedule;
+import io.agentscope.tutorial.chapter19.enterprise.service.ScheduleService;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;&lt;/p&gt;
+&lt;p&gt;/**
+ * 日程管理代理
+ *
+ * 负责：
+ * - 创建日程
+ * - 查询日程
+ * - 修改日程
+ * - 发送日程邀请
+ */
+public class ScheduleAgent {&lt;/p&gt;
+&lt;p&gt;private final Model model;
+    private final ScheduleService scheduleService;
+    private final String sysPrompt;&lt;/p&gt;
+&lt;p&gt;public ScheduleAgent(
+            Model model,
+            ScheduleService scheduleService,
+            String sysPrompt) {
+        this.model = model;
+        this.scheduleService = scheduleService;
+        this.sysPrompt = sysPrompt;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建日程
+     *
+     * @param params 日程参数
+     * @return 创建结果
+     */
+    public String createSchedule(Map&amp;lt;String, Object&amp;gt; params) {
+        try {
+            String title = (String) params.get(&amp;quot;title&amp;quot;);
+            String description = (String) params.get(&amp;quot;description&amp;quot;);
+            String startTime = (String) params.get(&amp;quot;startTime&amp;quot;);
+            String endTime = (String) params.get(&amp;quot;endTime&amp;quot;);
+            List&amp;lt;String&amp;gt; attendees = (List&amp;lt;String&amp;gt;) params.get(&amp;quot;attendees&amp;quot;);&lt;/p&gt;
+&lt;p&gt;Schedule schedule = scheduleService.createSchedule(
+                    title, description,
+                    LocalDateTime.parse(startTime),
+                    LocalDateTime.parse(endTime),
+                    attendees);&lt;/p&gt;
+&lt;p&gt;StringBuilder result = new StringBuilder();
+            result.append(&amp;quot;日程创建成功！\n&amp;quot;);
+            result.append(String.format(&amp;quot;标题：%s\n&amp;quot;, schedule.getTitle()));
+            result.append(String.format(&amp;quot;时间：%s - %s\n&amp;quot;,
+                    schedule.getStartTime(), schedule.getEndTime()));
+            result.append(String.format(&amp;quot;ID：%s&amp;quot;, schedule.getId()));&lt;/p&gt;
+&lt;p&gt;return result.toString();&lt;/p&gt;
+&lt;p&gt;} catch (Exception e) {
+            return &amp;quot;创建日程失败：&amp;quot; + e.getMessage();
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 查询用户的日程
+     *
+     * @param userId 用户ID
+     * @param date 日期（可选）
+     * @return 日程列表
+     */
+    public String querySchedules(String userId, String date) {
+        List&amp;lt;Schedule&amp;gt; schedules;&lt;/p&gt;
+&lt;p&gt;if (date != null &amp;amp;&amp;amp; !date.isEmpty()) {
+            schedules = scheduleService.getSchedulesByDate(userId, date);
+        } else {
+            schedules = scheduleService.getUpcomingSchedules(userId);
+        }&lt;/p&gt;
+&lt;p&gt;if (schedules.isEmpty()) {
+            return &amp;quot;暂无日程安排&amp;quot;;
+        }&lt;/p&gt;
+&lt;p&gt;StringBuilder result = new StringBuilder(&amp;quot;您的日程安排：\n\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;for (int i = 0; i &amp;lt; schedules.size(); i++) {
+            Schedule s = schedules.get(i);
+            result.append(String.format(&amp;quot;%d. %s\n&amp;quot;, i + 1, s.getTitle()));
+            result.append(String.format(&amp;quot;   时间：%s - %s\n&amp;quot;,
+                    s.getStartTime(), s.getEndTime()));
+            if (s.getDescription() != null) {
+                result.append(String.format(&amp;quot;   描述：%s\n&amp;quot;, s.getDescription()));
+            }
+            result.append(&amp;quot;\n&amp;quot;);
+        }&lt;/p&gt;
+&lt;p&gt;return result.toString();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 更新日程
+     *
+     * @param scheduleId 日程ID
+     * @param params 更新参数
+     * @return 更新结果
+     */
+    public String updateSchedule(String scheduleId, Map&amp;lt;String, Object&amp;gt; params) {
+        try {
+            boolean success = scheduleService.updateSchedule(scheduleId, params);&lt;/p&gt;
+&lt;p&gt;if (success) {
+                return &amp;quot;日程更新成功！&amp;quot;;
+            } else {
+                return &amp;quot;日程更新失败，日程可能不存在。&amp;quot;;
+            }
+        } catch (Exception e) {
+            return &amp;quot;更新日程失败：&amp;quot; + e.getMessage();
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 发送日程邀请
+     */
+    public String sendInvitation(String scheduleId) {
+        try {
+            scheduleService.sendInvitations(scheduleId);
+            return &amp;quot;日程邀请已发送！&amp;quot;;
+        } catch (Exception e) {
+            return &amp;quot;发送邀请失败：&amp;quot; + e.getMessage();
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 删除日程
+     */
+    public String deleteSchedule(String scheduleId) {
+        try {
+            boolean success = scheduleService.deleteSchedule(scheduleId);
+            return success ? &amp;quot;日程已删除&amp;quot; : &amp;quot;删除失败，日程可能不存在&amp;quot;;
+        } catch (Exception e) {
+            return &amp;quot;删除日程失败：&amp;quot; + e.getMessage();
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+#### 4. 报表生成代理
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 文件：ReportAgent.java
+package io.agentscope.tutorial.chapter19.enterprise.agent;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.memory.InMemoryMemory;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.model.Model;
+import io.agentscope.core.tool.Toolkit;
+import io.agentscope.tutorial.chapter19.enterprise.entity.Report;
+import io.agentscope.tutorial.chapter19.enterprise.service.ReportService;
+import java.util.Map;&lt;/p&gt;
+&lt;p&gt;/**
+ * 报表生成代理
+ *
+ * 负责：
+ * - 数据查询和分析
+ * - 图表生成
+ * - 报表模板应用
+ * - 定时推送
+ */
+public class ReportAgent {&lt;/p&gt;
+&lt;p&gt;private final Model model;
+    private final ReportService reportService;
+    private final String sysPrompt;&lt;/p&gt;
+&lt;p&gt;public ReportAgent(
+            Model model,
+            ReportService reportService,
+            String sysPrompt) {
+        this.model = model;
+        this.reportService = reportService;
+        this.sysPrompt = sysPrompt;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 生成数据报表
+     *
+     * @param params 报表参数
+     * @return 报表内容
+     */
+    public String generateReport(Map&amp;lt;String, Object&amp;gt; params) {
+        try {
+            String reportType = (String) params.get(&amp;quot;type&amp;quot;);
+            String dataRange = (String) params.get(&amp;quot;dataRange&amp;quot;);
+            String format = (String) params.getOrDefault(&amp;quot;format&amp;quot;, &amp;quot;text&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 查询数据
+            Map&amp;lt;String, Object&amp;gt; data = reportService.queryData(reportType, dataRange);&lt;/p&gt;
+&lt;p&gt;// 生成报表
+            Report report = reportService.generateReport(
+                    reportType, dataRange, data, format);&lt;/p&gt;
+&lt;p&gt;return formatReport(report);&lt;/p&gt;
+&lt;p&gt;} catch (Exception e) {
+            return &amp;quot;生成报表失败：&amp;quot; + e.getMessage();
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 生成图表
+     */
+    public String generateChart(Map&amp;lt;String, Object&amp;gt; params) {
+        try {
+            String chartType = (String) params.get(&amp;quot;chartType&amp;quot;);
+            String dataSource = (String) params.get(&amp;quot;dataSource&amp;quot;);
+            Map&amp;lt;String, Object&amp;gt; options = (Map&amp;lt;String, Object&amp;gt;) params.get(&amp;quot;options&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 查询图表数据
+            Map&amp;lt;String, Object&amp;gt; chartData = reportService.queryChartData(
+                    dataSource, chartType);&lt;/p&gt;
+&lt;p&gt;// 生成图表配置
+            String chartConfig = reportService.generateChartConfig(
+                    chartType, chartData, options);&lt;/p&gt;
+&lt;p&gt;return chartConfig;&lt;/p&gt;
+&lt;p&gt;} catch (Exception e) {
+            return &amp;quot;生成图表失败：&amp;quot; + e.getMessage();
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 设置定时推送
+     */
+    public String setupScheduleReport(Map&amp;lt;String, Object&amp;gt; params) {
+        try {
+            String reportType = (String) params.get(&amp;quot;type&amp;quot;);
+            String cron = (String) params.get(&amp;quot;cron&amp;quot;);
+            String recipients = (String) params.get(&amp;quot;recipients&amp;quot;);&lt;/p&gt;
+&lt;p&gt;reportService.setupScheduledReport(reportType, cron, recipients);&lt;/p&gt;
+&lt;p&gt;return String.format(&amp;quot;定时报表设置成功！\n&amp;quot; +
+                    &amp;quot;类型：%s\n&amp;quot; +
+                    &amp;quot;执行时间：%s\n&amp;quot; +
+                    &amp;quot;接收人：%s&amp;quot;, reportType, cron, recipients);&lt;/p&gt;
+&lt;p&gt;} catch (Exception e) {
+            return &amp;quot;设置定时报表失败：&amp;quot; + e.getMessage();
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 查询历史报表
+     */
+    public String queryHistoryReports(String userId, String type, int limit) {
+        var reports = reportService.getHistoryReports(userId, type, limit);&lt;/p&gt;
+&lt;p&gt;if (reports.isEmpty()) {
+            return &amp;quot;暂无历史报表&amp;quot;;
+        }&lt;/p&gt;
+&lt;p&gt;StringBuilder result = new StringBuilder(&amp;quot;历史报表：\n\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;for (Report report : reports) {
+            result.append(String.format(&amp;quot;- %s (%s)\n&amp;quot;,
+                    report.getTitle(), report.getCreatedAt()));
+        }&lt;/p&gt;
+&lt;p&gt;return result.toString();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 格式化报表输出
+     */
+    private String formatReport(Report report) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(&amp;quot;=&amp;quot;.repeat(50)).append(&amp;quot;\n&amp;quot;);
+        sb.append(report.getTitle()).append(&amp;quot;\n&amp;quot;);
+        sb.append(&amp;quot;=&amp;quot;.repeat(50)).append(&amp;quot;\n\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;sb.append(report.getContent()).append(&amp;quot;\n\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;sb.append(&amp;quot;-&amp;quot;.repeat(50)).append(&amp;quot;\n&amp;quot;);
+        sb.append(String.format(&amp;quot;生成时间：%s\n&amp;quot;, report.getCreatedAt()));
+        sb.append(String.format(&amp;quot;数据范围：%s&amp;quot;, report.getDataRange()));&lt;/p&gt;
+&lt;p&gt;return sb.toString();
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+#### 5. 知识库服务
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 文件：KnowledgeService.java
+package io.agentscope.tutorial.chapter19.enterprise.service;
+&lt;p&gt;import io.agentscope.tutorial.chapter19.enterprise.entity.KnowledgeArticle;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.stereotype.Service;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.List;&lt;/p&gt;
+&lt;p&gt;/**
+ * 知识库服务
+ *
+ * 负责知识文章的存储、检索和管理
+ */
+@Service
+public class KnowledgeService {&lt;/p&gt;
+&lt;p&gt;private final JdbcTemplate jdbcTemplate;&lt;/p&gt;
+&lt;p&gt;public KnowledgeService(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 搜索知识文章（关键词匹配）
+     */
+    public List&amp;lt;KnowledgeArticle&amp;gt; search(String query, int limit) {
+        String sql = &amp;quot;&amp;quot;&amp;quot;
+                SELECT * FROM knowledge_articles
+                WHERE match(title, content) AGAINST(? IN NATURAL LANGUAGE MODE)
+                   OR title LIKE CONCAT('%', ?, '%')
+                   OR content LIKE CONCAT('%', ?, '%')
+                ORDER BY score DESC
+                LIMIT ?
+                &amp;quot;&amp;quot;&amp;quot;;&lt;/p&gt;
+&lt;p&gt;return jdbcTemplate.query(sql,
+                new KnowledgeArticleRowMapper(),
+                query, query, query, limit);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 向量检索（RAG 增强）
+     */
+    public List&amp;lt;KnowledgeArticle&amp;gt; vectorSearch(String query, int limit) {
+        // H2 不支持向量检索，这里使用简化的相似度匹配
+        // 生产环境应使用 PostgreSQL + pgvector 或其他向量数据库
+        String sql = &amp;quot;&amp;quot;&amp;quot;
+                SELECT *,
+                       (CASE
+                            WHEN title LIKE CONCAT('%', ?, '%') THEN 2.0
+                            ELSE 0.0
+                        END +
+                        CASE
+                            WHEN content LIKE CONCAT('%', ?, '%') THEN 1.0
+                            ELSE 0.0
+                        END) as score
+                FROM knowledge_articles
+                WHERE title LIKE CONCAT('%', ?, '%')
+                   OR content LIKE CONCAT('%', ?, '%')
+                ORDER BY score DESC
+                LIMIT ?
+                &amp;quot;&amp;quot;&amp;quot;;&lt;/p&gt;
+&lt;p&gt;return jdbcTemplate.query(sql,
+                new KnowledgeArticleRowMapper(),
+                query, query, query, query, limit);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 保存知识文章
+     */
+    public KnowledgeArticle save(KnowledgeArticle article) {
+        if (article.getId() == null) {
+            String sql = &amp;quot;&amp;quot;&amp;quot;
+                    INSERT INTO knowledge_articles
+                    (title, content, category, tags, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, NOW(), NOW())
+                    &amp;quot;&amp;quot;&amp;quot;;
+            jdbcTemplate.update(sql,
+                    article.getTitle(),
+                    article.getContent(),
+                    article.getCategory(),
+                    String.join(&amp;quot;,&amp;quot;, article.getTags()));
+        } else {
+            String sql = &amp;quot;&amp;quot;&amp;quot;
+                    UPDATE knowledge_articles
+                    SET title = ?, content = ?, category = ?, tags = ?,
+                        updated_at = NOW()
+                    WHERE id = ?
+                    &amp;quot;&amp;quot;&amp;quot;;
+            jdbcTemplate.update(sql,
+                    article.getTitle(),
+                    article.getContent(),
+                    article.getCategory(),
+                    String.join(&amp;quot;,&amp;quot;, article.getTags()),
+                    article.getId());
+        }&lt;/p&gt;
+&lt;p&gt;return article;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 根据分类查询
+     */
+    public List&amp;lt;KnowledgeArticle&amp;gt; findByCategory(String category) {
+        String sql = &amp;quot;SELECT * FROM knowledge_articles WHERE category = ?&amp;quot;;
+        return jdbcTemplate.query(sql,
+                new KnowledgeArticleRowMapper(),
+                category);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 删除文章
+     */
+    public void delete(Long id) {
+        String sql = &amp;quot;DELETE FROM knowledge_articles WHERE id = ?&amp;quot;;
+        jdbcTemplate.update(sql, id);
+    }&lt;/p&gt;
+&lt;p&gt;private static class KnowledgeArticleRowMapper
+            implements RowMapper&amp;lt;KnowledgeArticle&amp;gt; {&lt;/p&gt;
+&lt;p&gt;@Override
+        public KnowledgeArticle mapRow(ResultSet rs, int rowNum)
+                throws SQLException {&lt;/p&gt;
+&lt;p&gt;KnowledgeArticle article = new KnowledgeArticle();
+            article.setId(rs.getLong(&amp;quot;id&amp;quot;));
+            article.setTitle(rs.getString(&amp;quot;title&amp;quot;));
+            article.setContent(rs.getString(&amp;quot;content&amp;quot;));
+            article.setCategory(rs.getString(&amp;quot;category&amp;quot;));&lt;/p&gt;
+&lt;p&gt;String tags = rs.getString(&amp;quot;tags&amp;quot;);
+            if (tags != null &amp;amp;&amp;amp; !tags.isEmpty()) {
+                article.setTags(List.of(tags.split(&amp;quot;,&amp;quot;)));
+            }&lt;/p&gt;
+&lt;p&gt;article.setCreatedAt(rs.getTimestamp(&amp;quot;created_at&amp;quot;).toLocalDateTime());
+            article.setUpdatedAt(rs.getTimestamp(&amp;quot;updated_at&amp;quot;).toLocalDateTime());&lt;/p&gt;
+&lt;p&gt;// 计算相似度分数（如果有）
+            try {
+                article.setScore(rs.getDouble(&amp;quot;score&amp;quot;));
+            } catch (SQLException e) {
+                article.setScore(1.0);
+            }&lt;/p&gt;
+&lt;p&gt;return article;
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;19.3.4 工具类&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 文件：AssistantTools.java
+package io.agentscope.tutorial.chapter19.enterprise.tools;
+&lt;p&gt;import io.agentscope.core.tool.ToolResult;
+import io.agentscope.core.tool.ToolSpec;
+import io.agentscope.tutorial.chapter19.enterprise.agent.KnowledgeAgent;
+import io.agentscope.tutorial.chapter19.enterprise.agent.ScheduleAgent;
+import io.agentscope.tutorial.chapter19.enterprise.agent.ReportAgent;
+import java.util.List;
+import java.util.Map;&lt;/p&gt;
+&lt;p&gt;/**
+ * 企业助手工具类
+ *
+ * 提供与各子代理交互的工具
+ */
+public class AssistantTools {&lt;/p&gt;
+&lt;p&gt;private final KnowledgeAgent knowledgeAgent;
+    private final ScheduleAgent scheduleAgent;
+    private final ReportAgent reportAgent;&lt;/p&gt;
+&lt;p&gt;public AssistantTools(
+            KnowledgeAgent knowledgeAgent,
+            ScheduleAgent scheduleAgent,
+            ReportAgent reportAgent) {
+        this.knowledgeAgent = knowledgeAgent;
+        this.scheduleAgent = scheduleAgent;
+        this.reportAgent = reportAgent;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取工具规格列表
+     */
+    public static List&amp;lt;ToolSpec&amp;gt; getToolSpecs() {
+        return List.of(
+                // 知识库问答
+                ToolSpec.builder()
+                        .name(&amp;quot;search_knowledge&amp;quot;)
+                        .description(&amp;quot;搜索企业知识库，回答用户关于公司制度、业务流程等问题&amp;quot;)
+                        .paramSpec(&amp;quot;&amp;quot;&amp;quot;
+                                {
+                                    &amp;quot;type&amp;quot;: &amp;quot;object&amp;quot;,
+                                    &amp;quot;properties&amp;quot;: {
+                                        &amp;quot;query&amp;quot;: {
+                                            &amp;quot;type&amp;quot;: &amp;quot;string&amp;quot;,
+                                            &amp;quot;description&amp;quot;: &amp;quot;用户问题或关键词&amp;quot;
+                                        }
+                                    },
+                                    &amp;quot;required&amp;quot;: [&amp;quot;query&amp;quot;]
+                                }
+                                &amp;quot;&amp;quot;&amp;quot;)
+                        .build(),&lt;/p&gt;
+&lt;p&gt;// 创建日程
+                ToolSpec.builder()
+                        .name(&amp;quot;create_schedule&amp;quot;)
+                        .description(&amp;quot;创建新的日程安排&amp;quot;)
+                        .paramSpec(&amp;quot;&amp;quot;&amp;quot;
+                                {
+                                    &amp;quot;type&amp;quot;: &amp;quot;object&amp;quot;,
+                                    &amp;quot;properties&amp;quot;: {
+                                        &amp;quot;title&amp;quot;: {&amp;quot;type&amp;quot;: &amp;quot;string&amp;quot;, &amp;quot;description&amp;quot;: &amp;quot;日程标题&amp;quot;},
+                                        &amp;quot;description&amp;quot;: {&amp;quot;type&amp;quot;: &amp;quot;string&amp;quot;, &amp;quot;description&amp;quot;: &amp;quot;日程描述&amp;quot;},
+                                        &amp;quot;startTime&amp;quot;: {&amp;quot;type&amp;quot;: &amp;quot;string&amp;quot;, &amp;quot;description&amp;quot;: &amp;quot;开始时间 ISO 格式&amp;quot;},
+                                        &amp;quot;endTime&amp;quot;: {&amp;quot;type&amp;quot;: &amp;quot;string&amp;quot;, &amp;quot;description&amp;quot;: &amp;quot;结束时间 ISO 格式&amp;quot;},
+                                        &amp;quot;attendees&amp;quot;: {
+                                            &amp;quot;type&amp;quot;: &amp;quot;array&amp;quot;,
+                                            &amp;quot;items&amp;quot;: {&amp;quot;type&amp;quot;: &amp;quot;string&amp;quot;},
+                                            &amp;quot;description&amp;quot;: &amp;quot;参与人邮箱列表&amp;quot;
+                                        }
+                                    },
+                                    &amp;quot;required&amp;quot;: [&amp;quot;title&amp;quot;, &amp;quot;startTime&amp;quot;, &amp;quot;endTime&amp;quot;]
+                                }
+                                &amp;quot;&amp;quot;&amp;quot;)
+                        .build(),&lt;/p&gt;
+&lt;p&gt;// 查询日程
+                ToolSpec.builder()
+                        .name(&amp;quot;query_schedules&amp;quot;)
+                        .description(&amp;quot;查询用户的日程安排&amp;quot;)
+                        .paramSpec(&amp;quot;&amp;quot;&amp;quot;
+                                {
+                                    &amp;quot;type&amp;quot;: &amp;quot;object&amp;quot;,
+                                    &amp;quot;properties&amp;quot;: {
+                                        &amp;quot;date&amp;quot;: {
+                                            &amp;quot;type&amp;quot;: &amp;quot;string&amp;quot;,
+                                            &amp;quot;description&amp;quot;: &amp;quot;查询日期（可选，如 2024-01-15）&amp;quot;
+                                        }
+                                    }
+                                }
+                                &amp;quot;&amp;quot;&amp;quot;)
+                        .build(),&lt;/p&gt;
+&lt;p&gt;// 生成报表
+                ToolSpec.builder()
+                        .name(&amp;quot;generate_report&amp;quot;)
+                        .description(&amp;quot;生成数据报表&amp;quot;)
+                        .paramSpec(&amp;quot;&amp;quot;&amp;quot;
+                                {
+                                    &amp;quot;type&amp;quot;: &amp;quot;object&amp;quot;,
+                                    &amp;quot;properties&amp;quot;: {
+                                        &amp;quot;type&amp;quot;: {
+                                            &amp;quot;type&amp;quot;: &amp;quot;string&amp;quot;,
+                                            &amp;quot;description&amp;quot;: &amp;quot;报表类型（如 sales, user, performance）&amp;quot;
+                                        },
+                                        &amp;quot;dataRange&amp;quot;: {
+                                            &amp;quot;type&amp;quot;: &amp;quot;string&amp;quot;,
+                                            &amp;quot;description&amp;quot;: &amp;quot;数据范围（如 2024-01, last_week）&amp;quot;
+                                        },
+                                        &amp;quot;format&amp;quot;: {
+                                            &amp;quot;type&amp;quot;: &amp;quot;string&amp;quot;,
+                                            &amp;quot;description&amp;quot;: &amp;quot;输出格式（text, markdown, json）&amp;quot;
+                                        }
+                                    },
+                                    &amp;quot;required&amp;quot;: [&amp;quot;type&amp;quot;, &amp;quot;dataRange&amp;quot;]
+                                }
+                                &amp;quot;&amp;quot;&amp;quot;)
+                        .build(),&lt;/p&gt;
+&lt;p&gt;// 生成图表
+                ToolSpec.builder()
+                        .name(&amp;quot;generate_chart&amp;quot;)
+                        .description(&amp;quot;生成数据图表&amp;quot;)
+                        .paramSpec(&amp;quot;&amp;quot;&amp;quot;
+                                {
+                                    &amp;quot;type&amp;quot;: &amp;quot;object&amp;quot;,
+                                    &amp;quot;properties&amp;quot;: {
+                                        &amp;quot;chartType&amp;quot;: {
+                                            &amp;quot;type&amp;quot;: &amp;quot;string&amp;quot;,
+                                            &amp;quot;description&amp;quot;: &amp;quot;图表类型（bar, line, pie, table）&amp;quot;
+                                        },
+                                        &amp;quot;dataSource&amp;quot;: {
+                                            &amp;quot;type&amp;quot;: &amp;quot;string&amp;quot;,
+                                            &amp;quot;description&amp;quot;: &amp;quot;数据源标识&amp;quot;
+                                        },
+                                        &amp;quot;options&amp;quot;: {
+                                            &amp;quot;type&amp;quot;: &amp;quot;object&amp;quot;,
+                                            &amp;quot;description&amp;quot;: &amp;quot;图表配置选项&amp;quot;
+                                        }
+                                    },
+                                    &amp;quot;required&amp;quot;: [&amp;quot;chartType&amp;quot;, &amp;quot;dataSource&amp;quot;]
+                                }
+                                &amp;quot;&amp;quot;&amp;quot;)
+                        .build()
+        );
+    }&lt;/p&gt;
+&lt;p&gt;// 工具执行方法
+    public ToolResult searchKnowledge(String query) {
+        try {
+            String answer = knowledgeAgent.answer(query);
+            return ToolResult.success(&amp;quot;知识检索完成&amp;quot;, answer);
+        } catch (Exception e) {
+            return ToolResult.failure(&amp;quot;检索失败：&amp;quot; + e.getMessage());
+        }
+    }&lt;/p&gt;
+&lt;p&gt;public ToolResult createSchedule(Map&amp;lt;String, Object&amp;gt; params) {
+        try {
+            String result = scheduleAgent.createSchedule(params);
+            return ToolResult.success(&amp;quot;日程创建完成&amp;quot;, result);
+        } catch (Exception e) {
+            return ToolResult.failure(&amp;quot;创建日程失败：&amp;quot; + e.getMessage());
+        }
+    }&lt;/p&gt;
+&lt;p&gt;public ToolResult querySchedules(String date) {
+        try {
+            // 从当前上下文获取 userId
+            String userId = &amp;quot;current_user&amp;quot;;
+            String result = scheduleAgent.querySchedules(userId, date);
+            return ToolResult.success(&amp;quot;日程查询完成&amp;quot;, result);
+        } catch (Exception e) {
+            return ToolResult.failure(&amp;quot;查询日程失败：&amp;quot; + e.getMessage());
+        }
+    }&lt;/p&gt;
+&lt;p&gt;public ToolResult generateReport(Map&amp;lt;String, Object&amp;gt; params) {
+        try {
+            String result = reportAgent.generateReport(params);
+            return ToolResult.success(&amp;quot;报表生成完成&amp;quot;, result);
+        } catch (Exception e) {
+            return ToolResult.failure(&amp;quot;生成报表失败：&amp;quot; + e.getMessage());
+        }
+    }&lt;/p&gt;
+&lt;p&gt;public ToolResult generateChart(Map&amp;lt;String, Object&amp;gt; params) {
+        try {
+            String result = reportAgent.generateChart(params);
+            return ToolResult.success(&amp;quot;图表生成完成&amp;quot;, result);
+        } catch (Exception e) {
+            return ToolResult.failure(&amp;quot;生成图表失败：&amp;quot; + e.getMessage());
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;19.3.5 数据库 Schema&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;-- 企业智能助手数据库 Schema
+-- H2 嵌入式数据库
+&lt;p&gt;-- 知识库表
+CREATE TABLE IF NOT EXISTS knowledge_articles (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    category VARCHAR(100),
+    tags VARCHAR(500),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FULLTEXT (title, content)
+);&lt;/p&gt;
+&lt;p&gt;-- 日程表
+CREATE TABLE IF NOT EXISTS schedules (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id VARCHAR(100) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    start_time TIMESTAMP NOT NULL,
+    end_time TIMESTAMP NOT NULL,
+    attendees VARCHAR(1000),
+    status VARCHAR(20) DEFAULT 'ACTIVE',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);&lt;/p&gt;
+&lt;p&gt;-- 报表表
+CREATE TABLE IF NOT EXISTS reports (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id VARCHAR(100) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    content TEXT,
+    data_range VARCHAR(100),
+    format VARCHAR(20) DEFAULT 'text',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);&lt;/p&gt;
+&lt;p&gt;-- 会话历史表
+CREATE TABLE IF NOT EXISTS session_history (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    session_id VARCHAR(100) NOT NULL,
+    user_id VARCHAR(100) NOT NULL,
+    messages TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);&lt;/p&gt;
+&lt;p&gt;-- 定时任务表
+CREATE TABLE IF NOT EXISTS scheduled_tasks (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id VARCHAR(100) NOT NULL,
+    task_type VARCHAR(50) NOT NULL,
+    cron_expression VARCHAR(100),
+    params TEXT,
+    last_run TIMESTAMP,
+    next_run TIMESTAMP,
+    status VARCHAR(20) DEFAULT 'ACTIVE',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);&lt;/p&gt;
+&lt;p&gt;-- 初始化知识库数据
+INSERT INTO knowledge_articles (title, content, category, tags) VALUES
+('请假制度', '员工请假需提前在系统中提交申请，审批流程：员工 -&amp;gt; 直属上级 -&amp;gt; HR', '人力资源', '请假,考勤,制度'),
+('报销流程', '员工报销需在每月 5 日前提交上月票据，审批周期 3 个工作日', '财务', '报销,财务,流程'),
+('IT 支持', 'IT 问题请联系 helpdesk@company.com 或拨打 8001', 'IT服务', 'IT,技术支持'),
+('会议室预约', '会议室通过 OA 系统预约，提前 2 小时可预约使用', '行政', '会议,预约,办公');&lt;/p&gt;
+&lt;p&gt;-- 初始化示例日程
+INSERT INTO schedules (user_id, title, description, start_time, end_time) VALUES
+('admin', '周例会', '部门周例会', DATEADD('DAY', 1, CURRENT_TIMESTAMP), DATEADD('HOUR', 1, DATEADD('DAY', 1, CURRENT_TIMESTAMP)));&lt;/p&gt;
+&lt;p&gt;-- 初始化示例报表
+INSERT INTO reports (user_id, title, type, content, data_range) VALUES
+('admin', '销售月报', 'sales', '本月销售额 100 万，环比增长 15%', 'last_month');
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;19.3.6 应用配置&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# application.yml
+server:
+  port: 8080
+&lt;p&gt;spring:
+  application:
+    name: enterprise-assistant&lt;/p&gt;
+&lt;p&gt;datasource:
+    url: jdbc:h2:mem:enterprise;DB_CLOSE_DELAY=-1;MODE=MySQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:&lt;/p&gt;
+&lt;p&gt;sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema.sql&lt;/p&gt;
+&lt;h1&gt;AgentScope 配置&lt;/h1&gt;
+agentscope:
+  model:
+    provider: dashscope
+    api-key: ${DASHSCOPE_API_KEY:demo}
+    model-name: qwen3-max
+&lt;h1&gt;代理提示词配置&lt;/h1&gt;
+enterprise:
+  prompts:
+    assistant-instruction: |
+      你是一个企业智能助手，帮助用户处理日常工作。
+&lt;p&gt;你可以：
+      1. 回答企业知识库相关问题
+      2. 创建和管理日程安排
+      3. 生成数据报表和图表
+      4. 设置定时任务和推送&lt;/p&gt;
+&lt;p&gt;请根据用户需求，调用相应的工具完成任务。
+      回答要专业、简洁、准确。&lt;/p&gt;
+&lt;h1&gt;RAG 配置&lt;/h1&gt;
+rag:
+  embedding:
+    model: text-embedding-v3
+    dimension: 1536
+  retrieval:
+    top-k: 5
+    min-score: 0.7
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;19.3.7 实体类&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 文件：KnowledgeArticle.java
+package io.agentscope.tutorial.chapter19.enterprise.entity;
+&lt;p&gt;import java.time.LocalDateTime;
+import java.util.List;&lt;/p&gt;
+&lt;p&gt;/**
+ * 知识文章实体
+ */
+public class KnowledgeArticle {&lt;/p&gt;
+&lt;p&gt;private Long id;
+    private String title;
+    private String content;
+    private String category;
+    private List&amp;lt;String&amp;gt; tags;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
+    private double score;  // 检索相似度分数&lt;/p&gt;
+&lt;p&gt;// Getter 和 Setter
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
+    public String getContent() { return content; }
+    public void setContent(String content) { this.content = content; }
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
+    public List&amp;lt;String&amp;gt; getTags() { return tags; }
+    public void setTags(List&amp;lt;String&amp;gt; tags) { this.tags = tags; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+    public double getScore() { return score; }
+    public void setScore(double score) { this.score = score; }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 文件：Schedule.java
+package io.agentscope.tutorial.chapter19.enterprise.entity;
+&lt;p&gt;import java.time.LocalDateTime;
+import java.util.List;&lt;/p&gt;
+&lt;p&gt;/**
+ * 日程实体
+ */
+public class Schedule {&lt;/p&gt;
+&lt;p&gt;private Long id;
+    private String userId;
+    private String title;
+    private String description;
+    private LocalDateTime startTime;
+    private LocalDateTime endTime;
+    private List&amp;lt;String&amp;gt; attendees;
+    private String status;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;&lt;/p&gt;
+&lt;p&gt;// Getter 和 Setter
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getUserId() { return userId; }
+    public void setUserId(String userId) { this.userId = userId; }
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+    public LocalDateTime getStartTime() { return startTime; }
+    public void setStartTime(LocalDateTime startTime) { this.startTime = startTime; }
+    public LocalDateTime getEndTime() { return endTime; }
+    public void setEndTime(LocalDateTime endTime) { this.endTime = endTime; }
+    public List&amp;lt;String&amp;gt; getAttendees() { return attendees; }
+    public void setAttendees(List&amp;lt;String&amp;gt; attendees) { this.attendees = attendees; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 文件：Report.java
+package io.agentscope.tutorial.chapter19.enterprise.entity;
+&lt;p&gt;import java.time.LocalDateTime;&lt;/p&gt;
+&lt;p&gt;/**
+ * 报表实体
+ */
+public class Report {&lt;/p&gt;
+&lt;p&gt;private Long id;
+    private String userId;
+    private String title;
+    private String type;
+    private String content;
+    private String dataRange;
+    private String format;
+    private LocalDateTime createdAt;&lt;/p&gt;
+&lt;p&gt;// Getter 和 Setter
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getUserId() { return userId; }
+    public void setUserId(String userId) { this.userId = userId; }
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
+    public String getContent() { return content; }
+    public void setContent(String content) { this.content = content; }
+    public String getDataRange() { return dataRange; }
+    public void setDataRange(String dataRange) { this.dataRange = dataRange; }
+    public String getFormat() { return format; }
+    public void setFormat(String format) { this.format = format; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;19.3.8 运行说明&lt;/h3&gt;
+&lt;p&gt;**1. 环境准备**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 确保已安装 Java 21
+java -version
+&lt;h1&gt;设置 API Key&lt;/h1&gt;
+export DASHSCOPE_API_KEY=your_api_key_here
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**2. 启动应用**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;cd enterprise-assistant
+mvn spring-boot:run
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**3. 测试接口**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 聊天接口
+curl -X GET &amp;quot;http://localhost:8080/api/assistant/chat?chat_id=test&amp;amp;user_query=我想查一下请假制度&amp;amp;user_id=user001&amp;quot;
+&lt;h1&gt;查询知识库&lt;/h1&gt;
+curl -X GET &amp;quot;http://localhost:8080/api/assistant/knowledge?query=报销流程&amp;quot;
+&lt;h1&gt;创建日程&lt;/h1&gt;
+curl -X POST &amp;quot;http://localhost:8080/api/assistant/schedule&amp;quot; \
+  -H &amp;quot;Content-Type: application/json&amp;quot; \
+  -d '{&amp;quot;title&amp;quot;:&amp;quot;团队会议&amp;quot;,&amp;quot;startTime&amp;quot;:&amp;quot;2024-01-15T10:00&amp;quot;,&amp;quot;endTime&amp;quot;:&amp;quot;2024-01-15T11:00&amp;quot;}'
+&lt;h1&gt;生成报表&lt;/h1&gt;
+curl -X GET &amp;quot;http://localhost:8080/api/assistant/report?type=sales&amp;amp;dataRange=last_month&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;19.4 本章小结&lt;/h2&gt;
+&lt;p&gt;本章通过三个完整的实战案例，展示了 AgentScope Java 在不同场景下的应用能力：&lt;/p&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;案例&lt;/th&gt;&lt;th&gt;场景&lt;/th&gt;&lt;th&gt;核心特性&lt;/th&gt;&lt;th&gt;关键技术&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;奶茶店多代理系统&lt;/td&gt;&lt;td&gt;电商/客服&lt;/td&gt;&lt;td&gt;多代理协作、A2A 通信、MCP 协议&lt;/td&gt;&lt;td&gt;Supervisor Agent、MCP Server、MySQL Session&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;狼人杀游戏&lt;/td&gt;&lt;td&gt;游戏/社交&lt;/td&gt;&lt;td&gt;多 Agent 博弈、实时 SSE、MsgHub 讨论&lt;/td&gt;&lt;td&gt;FanoutPipeline、MsgHub、ReAct Agent&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;企业智能助手&lt;/td&gt;&lt;td&gt;企业服务&lt;/td&gt;&lt;td&gt;RAG 检索、日程管理、报表生成&lt;/td&gt;&lt;td&gt;RAG、AutoContextMemory、多子代理协作&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;**共同的设计模式：**&lt;/p&gt;
+&lt;p&gt;1. **代理分工**：主代理负责协调，子代理负责具体业务
+2. **会话持久化**：使用 MysqlSession 保存对话历史
+3. **工具集成**：通过 Toolkit 注册工具，实现能力扩展
+4. **流式响应**：使用 Flux 实现 SSE 流式输出&lt;/p&gt;
+&lt;p&gt;这些案例可以作为开发复杂多代理系统的参考模板。&lt;/p&gt;
+</body>
+</html>

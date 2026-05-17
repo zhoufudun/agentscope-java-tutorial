@@ -1,0 +1,2439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第十七章：部署与生产环境</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        h3 { color: #7f8c8d; }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+        }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+        table {
+            border-collapse: collapse;
+            margin: 20px 0;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th { background: #3498db; color: white; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        ul { padding-left: 20px; }
+        li { margin: 5px 0; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            color: #666;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+&lt;h1&gt;第十七章：部署与生产环境&lt;/h1&gt;
+&lt;p&gt;本章介绍如何将 AgentScope Java 应用部署到生产环境。内容包括 Docker 容器化、Kubernetes 部署、监控与追踪、优雅关闭机制以及完整的生产环境配置案例。通过本章的学习，你将掌握将多智能体系统稳定、安全地运行在生产环境中的核心技能。&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;17.1 Docker 容器化&lt;/h2&gt;
+&lt;p&gt;Docker 是现代应用部署的基础设施。本节介绍如何为 AgentScope Java 应用构建生产级别的 Docker 镜像。&lt;/p&gt;
+&lt;h3&gt;1.1 多阶段构建 Dockerfile&lt;/h3&gt;
+&lt;p&gt;生产环境的 Docker 镜像应该尽可能精简，只包含运行时必需的组件。以下是一个标准的 Java 21 多阶段构建 Dockerfile：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-dockerfile&quot;&gt;# Copyright 2024-2026 the original author or authors.
+&lt;h1&gt;# Licensed under the Apache License, Version 2.0 (the &amp;quot;License&amp;quot;);&lt;/h1&gt;
+&lt;h1&gt;you may not use this file except in compliance with the License.&lt;/h1&gt;
+&lt;h1&gt;You may obtain a copy of the License at&lt;/h1&gt;
+&lt;h1&gt;#     http://www.apache.org/licenses/LICENSE-2.0&lt;/h1&gt;
+&lt;h1&gt;# Unless required by applicable law or agreed to in writing, software&lt;/h1&gt;
+&lt;h1&gt;distributed under the License is distributed on an &amp;quot;AS IS&amp;quot; BASIS,&lt;/h1&gt;
+&lt;h1&gt;WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.&lt;/h1&gt;
+&lt;h1&gt;See the License for the specific language governing permissions and&lt;/h1&gt;
+&lt;h1&gt;limitations under the License.&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+&lt;h1&gt;Stage 1: Build Stage - 编译 Java 源码&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+FROM eclipse-temurin:21-jdk AS builder
+&lt;h1&gt;设置工作目录&lt;/h1&gt;
+WORKDIR /build
+&lt;h1&gt;复制 Maven 依赖配置文件&lt;/h1&gt;
+COPY pom.xml .
+COPY src ./src
+&lt;h1&gt;使用 Maven 构建项目&lt;/h1&gt;
+&lt;h1&gt;通过 .mvn 目录配置 Maven 参数（可配置镜像仓库）&lt;/h1&gt;
+RUN --mount=type=cache,target=/root/.m2/repository \
+    ./mvnw clean package -DskipTests -B
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+&lt;h1&gt;Stage 2: Runtime Stage - 生产环境镜像&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+FROM eclipse-temurin:21-jre
+&lt;h1&gt;维护者信息和版本标签&lt;/h1&gt;
+LABEL maintainer=&amp;quot;AgentScope Team&amp;quot;
+LABEL description=&amp;quot;AgentScope Java Agent - Production Image&amp;quot;
+LABEL version=&amp;quot;1.0.0&amp;quot;
+&lt;h1&gt;创建非 root 用户运行应用（安全最佳实践）&lt;/h1&gt;
+RUN groupadd -r appgroup &amp;amp;&amp;amp; useradd -r -g appgroup appuser
+&lt;h1&gt;设置工作目录&lt;/h1&gt;
+WORKDIR /app
+&lt;h1&gt;复制构建产物&lt;/h1&gt;
+COPY --from=builder /build/target/*.jar app.jar
+&lt;h1&gt;复制配置文件（生产环境建议通过 volume 挂载）&lt;/h1&gt;
+&lt;h1&gt;COPY config/application.yml /app/config/&lt;/h1&gt;
+&lt;h1&gt;修改文件所有权&lt;/h1&gt;
+RUN chown -R appuser:appgroup /app
+&lt;h1&gt;切换到非 root 用户&lt;/h1&gt;
+USER appuser
+&lt;h1&gt;暴露应用端口（根据实际情况修改）&lt;/h1&gt;
+EXPOSE 8080
+&lt;h1&gt;定义环境变量（支持外部覆盖）&lt;/h1&gt;
+ENV SERVER_PORT=8080 \
+    JAVA_OPTS=&amp;quot;-Xms512m -Xmx1024m -XX:+UseG1GC&amp;quot; \
+    JAVA_TOOL_OPTIONS=&amp;quot;-javaagent:/app/jmx_exporter.jar=9404:/app/config/jmx.yml&amp;quot; \
+    SPRING_PROFILES_ACTIVE=production
+&lt;h1&gt;健康检查：检查 Spring Boot Actuator 健康端点&lt;/h1&gt;
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:${SERVER_PORT}/actuator/health || exit 1
+&lt;h1&gt;启动命令：使用 exec 格式确保信号正确传递&lt;/h1&gt;
+ENTRYPOINT [&amp;quot;sh&amp;quot;, &amp;quot;-c&amp;quot;, &amp;quot;java ${JAVA_OPTS} -jar app.jar&amp;quot;]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;1.2 前端集成构建&lt;/h3&gt;
+&lt;p&gt;如果你的应用包含前端模块（如 React/Vue），可以使用多阶段构建同时处理前端和后端：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-dockerfile&quot;&gt;# =============================================================================
+&lt;h1&gt;Stage 1: Frontend Build - 构建前端资源&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+FROM node:20-alpine AS frontend-builder
+&lt;p&gt;WORKDIR /frontend&lt;/p&gt;
+&lt;h1&gt;复制前端依赖配置&lt;/h1&gt;
+COPY frontend/package*.json ./
+&lt;h1&gt;配置 npm 镜像（加速国内构建）&lt;/h1&gt;
+RUN npm config set registry https://registry.npmmirror.com &amp;amp;&amp;amp; \
+    npm install --legacy-peer-deps
+&lt;h1&gt;复制前端源码&lt;/h1&gt;
+COPY frontend/ .
+&lt;h1&gt;构建前端（输出到 dist/）&lt;/h1&gt;
+RUN npm run build-only
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+&lt;h1&gt;Stage 2: Backend Build - 构建 Java 后端&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+FROM eclipse-temurin:21-jdk AS backend-builder
+&lt;p&gt;WORKDIR /build&lt;/p&gt;
+&lt;p&gt;COPY pom.xml .
+COPY src ./src&lt;/p&gt;
+&lt;p&gt;RUN ./mvnw clean package -DskipTests -B&lt;/p&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+&lt;h1&gt;Stage 3: Runtime Stage - 最终镜像&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+FROM eclipse-temurin:21-jre
+&lt;p&gt;LABEL maintainer=&amp;quot;AgentScope Team&amp;quot;
+LABEL description=&amp;quot;AgentScope with Frontend - Production Image&amp;quot;
+LABEL version=&amp;quot;1.0.0&amp;quot;&lt;/p&gt;
+&lt;p&gt;RUN groupadd -r appgroup &amp;amp;&amp;amp; useradd -r -g appgroup appuser&lt;/p&gt;
+&lt;p&gt;WORKDIR /app&lt;/p&gt;
+&lt;h1&gt;复制后端 JAR&lt;/h1&gt;
+COPY --from=backend-builder /build/target/*.jar app.jar
+&lt;h1&gt;复制前端静态文件&lt;/h1&gt;
+RUN mkdir -p /app/static
+COPY --from=frontend-builder /frontend/dist /app/static
+&lt;h1&gt;修改文件所有权&lt;/h1&gt;
+RUN chown -R appuser:appgroup /app
+&lt;p&gt;USER appuser&lt;/p&gt;
+&lt;p&gt;EXPOSE 8080&lt;/p&gt;
+&lt;p&gt;ENV SERVER_PORT=8080 \
+    JAVA_OPTS=&amp;quot;-Xms512m -Xmx1024m -XX:+UseG1GC&amp;quot; \
+    SPRING_WEB_RESOURCES_STATIC_LOCATIONS=&amp;quot;file:/app/static/&amp;quot;&lt;/p&gt;
+&lt;p&gt;HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:${SERVER_PORT}/actuator/health || exit 1&lt;/p&gt;
+&lt;p&gt;ENTRYPOINT [&amp;quot;sh&amp;quot;, &amp;quot;-c&amp;quot;, &amp;quot;java ${JAVA_OPTS} -jar app.jar&amp;quot;]
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;1.3 .dockerignore 配置&lt;/h3&gt;
+&lt;p&gt;排除不必要的文件，减小构建上下文体积：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;# Git
+.git
+.gitignore
+&lt;h1&gt;Build artifacts&lt;/h1&gt;
+target/
+build/
+*.class
+&lt;h1&gt;IDE&lt;/h1&gt;
+.idea/
+.vscode/
+*.iml
+&lt;h1&gt;Documentation&lt;/h1&gt;
+*.md
+docs/
+&lt;h1&gt;Docker files (避免递归复制)&lt;/h1&gt;
+Dockerfile
+docker-compose*.yml
+.dockerignore
+&lt;h1&gt;Logs&lt;/h1&gt;
+*.log
+logs/
+&lt;h1&gt;Temporary files&lt;/h1&gt;
+*.tmp
+*.temp
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;1.4 镜像构建脚本&lt;/h3&gt;
+&lt;p&gt;创建一个自动化构建脚本，支持多平台构建和推送：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;#!/bin/bash
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+&lt;h1&gt;AgentScope Docker Build Script&lt;/h1&gt;
+&lt;h1&gt;构建脚本：支持多平台、多模块构建&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+&lt;p&gt;set -e&lt;/p&gt;
+&lt;h1&gt;颜色定义&lt;/h1&gt;
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+&lt;h1&gt;默认配置&lt;/h1&gt;
+VERSION=&amp;quot;${VERSION:-latest}&amp;quot;
+REGISTRY=&amp;quot;${REGISTRY:-registry.cn-hangzhou.aliyuncs.com/agentscope}&amp;quot;
+PLATFORM=&amp;quot;${PLATFORM:-linux/amd64}&amp;quot;
+PUSH_IMAGE=false
+SKIP_DOCKER=false
+&lt;h1&gt;模块列表&lt;/h1&gt;
+MODULES=(&amp;quot;supervisor-agent&amp;quot; &amp;quot;business-sub-agent&amp;quot; &amp;quot;consult-sub-agent&amp;quot; &amp;quot;business-mcp-server&amp;quot;)
+&lt;h1&gt;打印函数&lt;/h1&gt;
+log_info() {
+    echo -e &amp;quot;${GREEN}[INFO]${NC} $1&amp;quot;
+}
+&lt;p&gt;log_warn() {
+    echo -e &amp;quot;${YELLOW}[WARN]${NC} $1&amp;quot;
+}&lt;/p&gt;
+&lt;p&gt;log_error() {
+    echo -e &amp;quot;${RED}[ERROR]${NC} $1&amp;quot;
+}&lt;/p&gt;
+&lt;h1&gt;显示帮助&lt;/h1&gt;
+show_help() {
+    cat &amp;lt;&amp;lt; EOF
+用法: $0 [选项]
+&lt;p&gt;选项:
+    -v, --version &amp;lt;版本&amp;gt;      Docker 镜像版本标签 (默认: latest)
+    -r, --registry &amp;lt;仓库&amp;gt;    Docker 镜像仓库地址 (默认: registry.cn-hangzhou.aliyuncs.com/agentscope)
+    -p, --platform &amp;lt;平台&amp;gt;     目标平台，多个用逗号分隔 (默认: linux/amd64)
+    -m, --modules &amp;lt;模块&amp;gt;      指定要构建的模块，逗号分隔 (默认: 全部)
+    --push                    构建后推送镜像到仓库
+    --skip-docker             跳过 Docker 镜像构建
+    -h, --help                显示帮助信息&lt;/p&gt;
+&lt;p&gt;示例:
+    $0 -v 1.0.0 --push
+    $0 -m supervisor-agent,business-sub-agent -v 1.0.0
+EOF
+}&lt;/p&gt;
+&lt;h1&gt;解析命令行参数&lt;/h1&gt;
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -v|--version)
+            VERSION=&amp;quot;$2&amp;quot;
+            shift 2
+            ;;
+        -r|--registry)
+            REGISTRY=&amp;quot;$2&amp;quot;
+            shift 2
+            ;;
+        -p|--platform)
+            PLATFORM=&amp;quot;$2&amp;quot;
+            shift 2
+            ;;
+        -m|--modules)
+            IFS=',' read -ra MODULES &amp;lt;&amp;lt;&amp;lt; &amp;quot;$2&amp;quot;
+            shift 2
+            ;;
+        --push)
+            PUSH_IMAGE=true
+            shift
+            ;;
+        --skip-docker)
+            SKIP_DOCKER=true
+            shift
+            ;;
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        *)
+            log_error &amp;quot;未知参数: $1&amp;quot;
+            show_help
+            exit 1
+            ;;
+    esac
+done
+&lt;p&gt;log_info &amp;quot;========== 构建配置 ==========&amp;quot;
+log_info &amp;quot;版本: ${VERSION}&amp;quot;
+log_info &amp;quot;仓库: ${REGISTRY}&amp;quot;
+log_info &amp;quot;平台: ${PLATFORM}&amp;quot;
+log_info &amp;quot;模块: ${MODULES[*]}&amp;quot;
+log_info &amp;quot;推送: ${PUSH_IMAGE}&amp;quot;
+log_info &amp;quot;==============================&amp;quot;&lt;/p&gt;
+&lt;h1&gt;构建函数&lt;/h1&gt;
+build_module() {
+    local module=$1
+&lt;p&gt;log_info &amp;quot;开始构建模块: ${module}&amp;quot;&lt;/p&gt;
+&lt;p&gt;# 进入模块目录
+    cd ${module} || { log_error &amp;quot;目录不存在: ${module}&amp;quot;; return 1; }&lt;/p&gt;
+&lt;p&gt;# 如果没有构建产物，先构建
+    if [ ! -f &amp;quot;target/${module}.jar&amp;quot; ] &amp;amp;&amp;amp; [ ! -f &amp;quot;target/*.jar&amp;quot; ]; then
+        log_info &amp;quot;构建 Maven 项目...&amp;quot;
+        ./mvnw clean package -DskipTests -B || { log_error &amp;quot;Maven 构建失败&amp;quot;; cd ..; return 1; }
+    fi&lt;/p&gt;
+&lt;p&gt;# 构建 Docker 镜像
+    if [ &amp;quot;${SKIP_DOCKER}&amp;quot; = false ]; then
+        log_info &amp;quot;构建 Docker 镜像...&amp;quot;
+        docker build \
+            --platform ${PLATFORM} \
+            --tag ${REGISTRY}/${module}:${VERSION} \
+            --tag ${REGISTRY}/${module}:latest \
+            .&lt;/p&gt;
+&lt;p&gt;# 推送镜像
+        if [ &amp;quot;${PUSH_IMAGE}&amp;quot; = true ]; then
+            log_info &amp;quot;推送镜像到仓库...&amp;quot;
+            docker push ${REGISTRY}/${module}:${VERSION}
+            docker push ${REGISTRY}/${module}:latest
+        fi
+    fi&lt;/p&gt;
+&lt;p&gt;# 返回上级目录
+    cd ..&lt;/p&gt;
+&lt;p&gt;log_info &amp;quot;模块 ${module} 构建完成&amp;quot;
+}&lt;/p&gt;
+&lt;h1&gt;批量构建模块&lt;/h1&gt;
+for module in &amp;quot;${MODULES[@]}&amp;quot;; do
+    build_module ${module}
+done
+&lt;p&gt;log_info &amp;quot;========== 全部构建完成 ==========&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;17.2 Kubernetes 部署&lt;/h2&gt;
+&lt;p&gt;Kubernetes 是生产环境容器编排的首选平台。本节介绍如何在 K8s 中部署 AgentScope Java 应用。&lt;/p&gt;
+&lt;h3&gt;2.1 基本 Deployment 配置&lt;/h3&gt;
+&lt;p&gt;以下是生产级别的 Kubernetes Deployment 配置文件：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# Copyright 2024-2026 the original author or authors.
+&lt;h1&gt;# Licensed under the Apache License, Version 2.0 (the &amp;quot;License&amp;quot;);&lt;/h1&gt;
+&lt;h1&gt;you may not use this file except in compliance with the License.&lt;/h1&gt;
+&lt;h1&gt;You may obtain a copy of the License at&lt;/h1&gt;
+&lt;h1&gt;#     http://www.apache.org/licenses/LICENSE-2.0&lt;/h1&gt;
+&lt;h1&gt;# Unless required by applicable law or agreed to in writing, software&lt;/h1&gt;
+&lt;h1&gt;distributed under the License is distributed on an &amp;quot;AS IS&amp;quot; BASIS,&lt;/h1&gt;
+&lt;h1&gt;WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.&lt;/h1&gt;
+&lt;h1&gt;See the License for the specific language governing permissions and&lt;/h1&gt;
+&lt;h1&gt;limitations under the License.&lt;/h1&gt;
+&lt;p&gt;---
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+&lt;h1&gt;Supervisor Agent Deployment&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supervisor-agent
+  namespace: agentscope
+  labels:
+    app: supervisor-agent
+    version: v1
+    component: agent
+spec:
+  # 生产环境建议设置副本数 &amp;gt; 1
+  replicas: 2&lt;/p&gt;
+&lt;p&gt;# 保留历史版本用于回滚
+  revisionHistoryLimit: 10&lt;/p&gt;
+&lt;p&gt;# 更新超时时间
+  progressDeadlineSeconds: 600&lt;/p&gt;
+&lt;p&gt;selector:
+    matchLabels:
+      app: supervisor-agent&lt;/p&gt;
+&lt;p&gt;# 滚动更新策略
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%          # 最多超出 25% 的 Pod
+      maxUnavailable: 25%    # 最多不可用 25% 的 Pod&lt;/p&gt;
+&lt;p&gt;template:
+    metadata:
+      labels:
+        app: supervisor-agent
+        version: v1
+        component: agent&lt;/p&gt;
+&lt;p&gt;spec:
+      # 初始化容器：等待 Nacos 就绪
+      initContainers:
+&lt;ul&gt;&lt;li&gt;name: wait-for-nacos&lt;/li&gt;
+&lt;/ul&gt;          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command:
+&lt;ul&gt;&lt;li&gt;sh&lt;/li&gt;
+&lt;li&gt;-c&lt;/li&gt;
+&lt;li&gt;|&lt;/li&gt;
+&lt;/ul&gt;              echo &amp;quot;等待 Nacos 服务就绪...&amp;quot;
+              NACOS_HOST=$(echo $NACOS_SERVER_ADDR | cut -d: -f1)
+              NACOS_PORT=$(echo $NACOS_SERVER_ADDR | cut -d: -f2)
+              until nc -z $NACOS_HOST $NACOS_PORT; do
+                echo &amp;quot;Nacos 未就绪，等待 2 秒...&amp;quot;
+                sleep 2
+              done
+              echo &amp;quot;Nacos 已就绪&amp;quot;&lt;/p&gt;
+&lt;p&gt;# 应用容器
+      containers:
+&lt;ul&gt;&lt;li&gt;name: supervisor-agent&lt;/li&gt;
+&lt;/ul&gt;          # 镜像地址（根据实际情况修改）
+          image: registry.cn-hangzhou.aliyuncs.com/agentscope/supervisor-agent:1.0.0
+          imagePullPolicy: Always&lt;/p&gt;
+&lt;p&gt;ports:
+&lt;ul&gt;&lt;li&gt;name: http&lt;/li&gt;
+&lt;/ul&gt;              containerPort: 10008
+              protocol: TCP&lt;/p&gt;
+&lt;p&gt;# 环境变量配置
+          env:
+&lt;ul&gt;&lt;li&gt;name: SERVER_PORT&lt;/li&gt;
+&lt;/ul&gt;              value: &amp;quot;10008&amp;quot;
+&lt;ul&gt;&lt;li&gt;name: JAVA_OPTS&lt;/li&gt;
+&lt;/ul&gt;              value: &amp;quot;-Xms1024m -Xmx2048m -XX:+UseG1GC -XX:MaxGCPauseMillis=200&amp;quot;
+&lt;ul&gt;&lt;li&gt;name: MODEL_PROVIDER&lt;/li&gt;
+&lt;/ul&gt;              value: &amp;quot;dashscope&amp;quot;
+&lt;ul&gt;&lt;li&gt;name: MODEL_API_KEY&lt;/li&gt;
+&lt;/ul&gt;              valueFrom:
+                secretKeyRef:
+                  name: agentscope-secrets
+                  key: model-api-key
+&lt;ul&gt;&lt;li&gt;name: MODEL_NAME&lt;/li&gt;
+&lt;/ul&gt;              value: &amp;quot;qwen-max&amp;quot;
+&lt;ul&gt;&lt;li&gt;name: DB_HOST&lt;/li&gt;
+&lt;/ul&gt;              value: &amp;quot;mysql&amp;quot;
+&lt;ul&gt;&lt;li&gt;name: DB_PORT&lt;/li&gt;
+&lt;/ul&gt;              value: &amp;quot;3306&amp;quot;
+&lt;ul&gt;&lt;li&gt;name: DB_NAME&lt;/li&gt;
+&lt;/ul&gt;              value: &amp;quot;multi_agent_demo&amp;quot;
+&lt;ul&gt;&lt;li&gt;name: DB_USERNAME&lt;/li&gt;
+&lt;/ul&gt;              value: &amp;quot;multi_agent_demo&amp;quot;
+&lt;ul&gt;&lt;li&gt;name: DB_PASSWORD&lt;/li&gt;
+&lt;/ul&gt;              valueFrom:
+                secretKeyRef:
+                  name: agentscope-secrets
+                  key: db-password
+&lt;ul&gt;&lt;li&gt;name: NACOS_SERVER_ADDR&lt;/li&gt;
+&lt;/ul&gt;              value: &amp;quot;nacos-server:8848&amp;quot;
+&lt;ul&gt;&lt;li&gt;name: NACOS_NAMESPACE&lt;/li&gt;
+&lt;/ul&gt;              value: &amp;quot;public&amp;quot;
+&lt;ul&gt;&lt;li&gt;name: NACOS_REGISTER_ENABLED&lt;/li&gt;
+&lt;/ul&gt;              value: &amp;quot;true&amp;quot;
+            # OpenTelemetry 配置
+&lt;ul&gt;&lt;li&gt;name: OTEL_EXPORTER_OTLP_ENDPOINT&lt;/li&gt;
+&lt;/ul&gt;              value: &amp;quot;http://otel-collector:4317&amp;quot;
+&lt;ul&gt;&lt;li&gt;name: OTEL_SERVICE_NAME&lt;/li&gt;
+&lt;/ul&gt;              value: &amp;quot;supervisor-agent&amp;quot;&lt;/p&gt;
+&lt;p&gt;# 资源配置（生产环境必须设置）
+          resources:
+            requests:
+              cpu: &amp;quot;1&amp;quot;
+              memory: 2Gi
+            limits:
+              cpu: &amp;quot;2&amp;quot;
+              memory: 4Gi&lt;/p&gt;
+&lt;p&gt;# 健康检查
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3&lt;/p&gt;
+&lt;p&gt;readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3&lt;/p&gt;
+&lt;p&gt;# 生命周期钩子：优雅关闭
+          lifecycle:
+            preStop:
+              exec:
+                command:
+&lt;ul&gt;&lt;li&gt;sh&lt;/li&gt;
+&lt;li&gt;-c&lt;/li&gt;
+&lt;li&gt;sleep 10&lt;/li&gt;
+&lt;/ul&gt;
+          # 终止消息
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File&lt;/p&gt;
+&lt;p&gt;# DNS 策略
+      dnsPolicy: ClusterFirst&lt;/p&gt;
+&lt;p&gt;# 重启策略
+      restartPolicy: Always&lt;/p&gt;
+&lt;p&gt;# 调度器
+      schedulerName: default-scheduler&lt;/p&gt;
+&lt;p&gt;# 优雅关闭超时时间
+      terminationGracePeriodSeconds: 60&lt;/p&gt;
+&lt;p&gt;# 服务账号（用于 RBAC）
+      serviceAccountName: agentscope-sa&lt;/p&gt;
+&lt;p&gt;---
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+&lt;h1&gt;Supervisor Agent Service&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+apiVersion: v1
+kind: Service
+metadata:
+  name: supervisor-agent
+  namespace: agentscope
+  labels:
+    app: supervisor-agent
+spec:
+  type: ClusterIP&lt;/p&gt;
+&lt;p&gt;selector:
+    app: supervisor-agent&lt;/p&gt;
+&lt;p&gt;ports:
+&lt;ul&gt;&lt;li&gt;name: http&lt;/li&gt;
+&lt;/ul&gt;      port: 80
+      targetPort: 10008
+      protocol: TCP&lt;/p&gt;
+&lt;p&gt;# 保持会话亲和性（可选）
+  sessionAffinity: None&lt;/p&gt;
+&lt;p&gt;---
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+&lt;h1&gt;ServiceAccount 配置&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agentscope-sa
+  namespace: agentscope&lt;/p&gt;
+&lt;p&gt;---
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+&lt;h1&gt;RBAC Role 配置&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agentscope-role
+  namespace: agentscope
+rules:
+  # 如果需要访问 K8s API（如 Harness Kubernetes 模式）
+&lt;ul&gt;&lt;li&gt;apiGroups: [&amp;quot;&amp;quot;]&lt;/li&gt;
+&lt;/ul&gt;    resources: [&amp;quot;pods&amp;quot;, &amp;quot;services&amp;quot;, &amp;quot;configmaps&amp;quot;]
+    verbs: [&amp;quot;get&amp;quot;, &amp;quot;list&amp;quot;, &amp;quot;watch&amp;quot;]&lt;/p&gt;
+&lt;p&gt;---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agentscope-role-binding
+  namespace: agentscope
+subjects:
+&lt;ul&gt;&lt;li&gt;kind: ServiceAccount&lt;/li&gt;
+&lt;/ul&gt;    name: agentscope-sa
+    namespace: agentscope
+roleRef:
+  kind: Role
+  name: agentscope-role
+  apiGroup: rbac.authorization.k8s.io
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;2.2 HPA 自动扩缩容配置&lt;/h3&gt;
+&lt;p&gt;根据负载自动调整 Pod 副本数：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# =============================================================================
+&lt;h1&gt;Horizontal Pod Autoscaler&lt;/h1&gt;
+&lt;h1&gt;基于 CPU 和内存自动扩缩容&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: supervisor-agent-hpa
+  namespace: agentscope
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: supervisor-agent
+&lt;p&gt;# 副本数范围
+  minReplicas: 2
+  maxReplicas: 10&lt;/p&gt;
+&lt;p&gt;# 扩缩容指标
+  metrics:
+    # CPU 使用率
+&lt;ul&gt;&lt;li&gt;type: Resource&lt;/li&gt;
+&lt;/ul&gt;      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70&lt;/p&gt;
+&lt;p&gt;# 内存使用率
+&lt;ul&gt;&lt;li&gt;type: Resource&lt;/li&gt;
+&lt;/ul&gt;      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80&lt;/p&gt;
+&lt;p&gt;# 扩缩容行为策略
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300  # 冷却 5 分钟
+      policies:
+&lt;ul&gt;&lt;li&gt;type: Percent&lt;/li&gt;
+&lt;/ul&gt;          value: 10
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0    # 立即扩容
+      policies:
+&lt;ul&gt;&lt;li&gt;type: Percent&lt;/li&gt;
+&lt;/ul&gt;          value: 100
+          periodSeconds: 15
+&lt;ul&gt;&lt;li&gt;type: Pods&lt;/li&gt;
+&lt;/ul&gt;          value: 4
+          periodSeconds: 15
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;2.3 ConfigMap 配置&lt;/h3&gt;
+&lt;p&gt;集中管理配置：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# =============================================================================
+&lt;h1&gt;ConfigMap - 应用配置&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: supervisor-agent-config
+  namespace: agentscope
+data:
+  application.yml: |
+    server:
+      port: 10008
+      shutdown: graceful
+&lt;p&gt;spring:
+      application:
+        name: supervisor-agent
+      lifecycle:
+        timeout-per-shutdown-phase: 30s&lt;/p&gt;
+&lt;p&gt;agentscope:
+      model:
+        provider: ${MODEL_PROVIDER:dashscope}&lt;/p&gt;
+&lt;p&gt;management:
+      endpoints:
+        web:
+          exposure:
+            include: health,info,metrics,prometheus
+      metrics:
+        tags:
+          application: ${spring.application.name}&lt;/p&gt;
+&lt;p&gt;logback.xml: |
+    &amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot;?&amp;gt;
+    &amp;lt;configuration&amp;gt;
+        &amp;lt;include resource=&amp;quot;org/springframework/boot/logging/logback/defaults.xml&amp;quot;/&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;springProperty scope=&amp;quot;context&amp;quot; name=&amp;quot;appName&amp;quot; source=&amp;quot;spring.application.name&amp;quot;/&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;appender name=&amp;quot;CONSOLE&amp;quot; class=&amp;quot;ch.qos.logback.core.ConsoleAppender&amp;quot;&amp;gt;
+            &amp;lt;encoder&amp;gt;
+                &amp;lt;pattern&amp;gt;%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n&amp;lt;/pattern&amp;gt;
+            &amp;lt;/encoder&amp;gt;
+        &amp;lt;/appender&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;appender name=&amp;quot;FILE&amp;quot; class=&amp;quot;ch.qos.logback.core.rolling.RollingFileAppender&amp;quot;&amp;gt;
+            &amp;lt;file&amp;gt;/app/logs/${appName}.log&amp;lt;/file&amp;gt;
+            &amp;lt;rollingPolicy class=&amp;quot;ch.qos.logback.core.rolling.TimeBasedRollingPolicy&amp;quot;&amp;gt;
+                &amp;lt;fileNamePattern&amp;gt;/app/logs/${appName}.%d{yyyy-MM-dd}.log&amp;lt;/fileNamePattern&amp;gt;
+                &amp;lt;maxHistory&amp;gt;30&amp;lt;/maxHistory&amp;gt;
+            &amp;lt;/rollingPolicy&amp;gt;
+            &amp;lt;encoder&amp;gt;
+                &amp;lt;pattern&amp;gt;%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n&amp;lt;/pattern&amp;gt;
+            &amp;lt;/encoder&amp;gt;
+        &amp;lt;/appender&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;root level=&amp;quot;INFO&amp;quot;&amp;gt;
+            &amp;lt;appender-ref ref=&amp;quot;CONSOLE&amp;quot;/&amp;gt;
+            &amp;lt;appender-ref ref=&amp;quot;FILE&amp;quot;/&amp;gt;
+        &amp;lt;/root&amp;gt;
+    &amp;lt;/configuration&amp;gt;&lt;/p&gt;
+&lt;p&gt;---
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+&lt;h1&gt;Secret - 敏感信息配置&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+apiVersion: v1
+kind: Secret
+metadata:
+  name: agentscope-secrets
+  namespace: agentscope
+type: Opaque
+stringData:
+  model-api-key: &amp;quot;your-model-api-key-here&amp;quot;
+  db-password: &amp;quot;your-db-password-here&amp;quot;
+  nacos-password: &amp;quot;your-nacos-password-here&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;2.4 Helm Chart 打包&lt;/h3&gt;
+&lt;p&gt;使用 Helm 管理 Kubernetes 部署：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# Chart.yaml
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+apiVersion: v2
+name: agentscope
+description: AgentScope Java Multi-Agent System Helm Chart
+type: application
+version: 1.0.0
+appVersion: &amp;quot;1.0.0&amp;quot;
+keywords:
+&lt;ul&gt;&lt;li&gt;agentscope&lt;/li&gt;
+&lt;li&gt;multi-agent&lt;/li&gt;
+&lt;li&gt;ai&lt;/li&gt;
+&lt;/ul&gt;maintainers:
+&lt;ul&gt;&lt;li&gt;name: AgentScope Team&lt;/li&gt;
+&lt;/ul&gt;    email: agentscope@example.com
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# values.yaml
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+global:
+  namespace: agentscope
+&lt;p&gt;image:
+  registry: registry.cn-hangzhou.aliyuncs.com/agentscope
+  pullPolicy: Always
+  tag: &amp;quot;1.0.0&amp;quot;&lt;/p&gt;
+&lt;h1&gt;MySQL 配置&lt;/h1&gt;
+mysql:
+  deployEnabled: true
+  host: mysql
+  dbname: multi_agent_demo
+  username: multi_agent_demo
+  password: multi_agent_demo@321
+&lt;h1&gt;Nacos 配置&lt;/h1&gt;
+nacos:
+  deployEnabled: true
+  serverAddr: nacos-server:8848
+  namespace: public
+  registerEnabled: true
+&lt;h1&gt;模型配置&lt;/h1&gt;
+model:
+  provider: dashscope
+  apiKey: {API_KEY}
+  modelName: qwen-max
+&lt;h1&gt;服务副本数&lt;/h1&gt;
+replicas: 2
+&lt;h1&gt;资源配置&lt;/h1&gt;
+resources:
+  requests:
+    cpu: &amp;quot;1&amp;quot;
+    memory: 2Gi
+  limits:
+    cpu: &amp;quot;2&amp;quot;
+    memory: 4Gi
+&lt;h1&gt;HPA 配置&lt;/h1&gt;
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  cpuTargetUtilization: 70
+  memoryTargetUtilization: 80
+&lt;h1&gt;服务启用开关&lt;/h1&gt;
+services:
+  supervisorAgent:
+    enabled: true
+  businessSubAgent:
+    enabled: true
+  consultSubAgent:
+    enabled: true
+  businessMcpServer:
+    enabled: true
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;17.3 监控与追踪（OpenTelemetry）&lt;/h2&gt;
+&lt;p&gt;生产环境必须具备完善的监控和追踪能力。本节介绍如何使用 OpenTelemetry 实现可观测性。&lt;/p&gt;
+&lt;h3&gt;3.1 OpenTelemetry 简介&lt;/h3&gt;
+&lt;p&gt;OpenTelemetry 是云原生计算基金会（CNCF）的可观测性框架，提供统一的指标、日志、追踪采集标准。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;┌─────────────────────────────────────────────────────────────────┐
+│                     OpenTelemetry 架构                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────┐   ┌─────────┐   ┌─────────┐                      │
+│  │  App 1  │   │  App 2  │   │  App N  │   应用层（OTel SDK）  │
+│  └────┬────┘   └────┬────┘   └────┬────┘                      │
+│       │            │            │                             │
+│  ┌────▼────────────▼────────────▼────┐                       │
+│  │         OTLP Exporter            │   数据导出              │
+│  └──────────────┬───────────────────┘                        │
+│                 │                                            │
+│  ┌──────────────▼───────────────────┐                       │
+│  │       OTel Collector             │   收集器               │
+│  │  - 接收 OTLP                      │                       │
+│  │  - 批处理                         │                       │
+│  │  - 过滤/转换                      │                       │
+│  └──────┬────────┬────────┬─────────┘                       │
+│         │        │        │                                 │
+│    ┌────▼┐  ┌────▼┐  ┌────▼┐                                │
+│    │Trace│  │Metric│ │ Log │    后端存储                   │
+│    └────┘  └────┘  └────┘                                  │
+│    Tempo   Prometheus  Loki                                │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;3.2 Spring Boot 集成配置&lt;/h3&gt;
+&lt;p&gt;在 &lt;code&gt;application.yml&lt;/code&gt; 中配置 OpenTelemetry：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# =============================================================================
+&lt;h1&gt;OpenTelemetry + Micrometer 配置&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+&lt;p&gt;spring:
+  application:
+    name: supervisor-agent&lt;/p&gt;
+&lt;p&gt;# 优雅关闭配置
+  lifecycle:
+    timeout-per-shutdown-phase: 30s&lt;/p&gt;
+&lt;h1&gt;服务端口&lt;/h1&gt;
+server:
+  port: 10008
+  shutdown: graceful
+&lt;h1&gt;Actuator + Micrometer 配置&lt;/h1&gt;
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,env
+      base-path: /actuator
+&lt;p&gt;endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true&lt;/p&gt;
+&lt;p&gt;metrics:
+      enabled: true&lt;/p&gt;
+&lt;p&gt;metrics:
+    tags:
+      # 添加应用标识，便于在 Prometheus 中过滤
+      application: ${spring.application.name}
+    export:
+      prometheus:
+        enabled: true&lt;/p&gt;
+&lt;p&gt;# 健康检查配置
+  health:
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true&lt;/p&gt;
+&lt;h1&gt;OpenTelemetry 配置（通过环境变量或配置注入）&lt;/h1&gt;
+&lt;h1&gt;OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317&lt;/h1&gt;
+&lt;h1&gt;OTEL_EXPORTER_OTLP_PROTOCOL=grpc&lt;/h1&gt;
+&lt;h1&gt;OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317&lt;/h1&gt;
+&lt;h1&gt;OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://otel-collector:4318&lt;/h1&gt;
+&lt;h1&gt;OTEL_SERVICE_NAME=${spring.application.name}&lt;/h1&gt;
+&lt;h1&gt;OTEL_RESOURCE_ATTRIBUTES=deployment.environment=production&lt;/h1&gt;
+&lt;h1&gt;JMX Exporter 配置（用于 Prometheus 抓取 JVM 指标）&lt;/h1&gt;
+&lt;h1&gt;启用方式：javaagent:jmx_exporter.jar=9404:config/jmx.yml&lt;/h1&gt;
+&lt;h1&gt;日志配置&lt;/h1&gt;
+logging:
+  level:
+    root: INFO
+    io.agentscope: DEBUG
+    io.opentelemetry: INFO
+  pattern:
+    console: &amp;quot;%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;3.3 JMX Exporter 配置&lt;/h3&gt;
+&lt;p&gt;JMX Exporter 用于暴露 JVM 指标给 Prometheus：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# jmx.yml
+&lt;h1&gt;JMX Exporter 配置文件&lt;/h1&gt;
+---
+jmxUrl: service:jmx:rmi:///jndi/rmi://localhost:9999/jmxrmi
+host: 0.0.0.0
+port: 9404
+ssl: false
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+&lt;h1&gt;JVM 指标&lt;/h1&gt;
+whitelistObjectNames:
+&lt;ul&gt;&lt;li&gt;&amp;quot;java.lang:type=Memory:*&amp;quot;&lt;/li&gt;
+&lt;li&gt;&amp;quot;java.lang:type=GarbageCollector,*&amp;quot;&lt;/li&gt;
+&lt;li&gt;&amp;quot;java.lang:type=Runtime:*&amp;quot;&lt;/li&gt;
+&lt;li&gt;&amp;quot;java.lang:type=Threading:*&amp;quot;&lt;/li&gt;
+&lt;li&gt;&amp;quot;java.lang:type=ClassLoading:*&amp;quot;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h1&gt;Tomcat 指标（如果使用嵌入式 Tomcat）&lt;/h1&gt;
+&lt;h1&gt;- &amp;quot;Catalina:type=GlobalRequestProcessor,*&amp;quot;&lt;/h1&gt;
+&lt;h1&gt;- &amp;quot;Catalina:type=ThreadPool,*&amp;quot;&lt;/h1&gt;
+&lt;h1&gt;自定义指标规则&lt;/h1&gt;
+rules:
+  # 内存使用情况
+&lt;ul&gt;&lt;li&gt;pattern: 'java.lang&amp;lt;type=Memory&amp;gt;&amp;lt;HeapMemoryUsage&amp;gt;(\w+)'&lt;/li&gt;
+&lt;/ul&gt;    name: jvm_memory_heap_$1
+    type: GAUGE
+    help: &amp;quot;JVM Heap Memory Usage&amp;quot;
+&lt;ul&gt;&lt;li&gt;pattern: 'java.lang&amp;lt;type=Memory&amp;gt;&amp;lt;NonHeapMemoryUsage&amp;gt;(\w+)'&lt;/li&gt;
+&lt;/ul&gt;    name: jvm_memory_nonheap_$1
+    type: GAUGE
+    help: &amp;quot;JVM Non-Heap Memory Usage&amp;quot;
+&lt;p&gt;# GC 指标
+&lt;ul&gt;&lt;li&gt;pattern: 'java.lang&amp;lt;type=GarbageCollector, name=(\w+)&amp;gt;&amp;lt;&amp;gt;(\w+)'&lt;/li&gt;
+&lt;/ul&gt;    name: jvm_gc_$1_$2
+    type: GAUGE
+    help: &amp;quot;JVM Garbage Collector Metrics&amp;quot;&lt;/p&gt;
+&lt;p&gt;# 线程指标
+&lt;ul&gt;&lt;li&gt;pattern: 'java.lang&amp;lt;type=Threading&amp;gt;&amp;lt;&amp;gt;(\w+)'&lt;/li&gt;
+&lt;/ul&gt;    name: jvm_threads_$1
+    type: GAUGE
+    help: &amp;quot;JVM Thread Metrics&amp;quot;&lt;/p&gt;
+&lt;p&gt;# 类加载指标
+&lt;ul&gt;&lt;li&gt;pattern: 'java.lang&amp;lt;type=ClassLoading&amp;gt;&amp;lt;&amp;gt;(\w+)'&lt;/li&gt;
+&lt;/ul&gt;    name: jvm_classloading_$1
+    type: GAUGE
+    help: &amp;quot;JVM Class Loading Metrics&amp;quot;&lt;/p&gt;
+&lt;p&gt;# JVM 运行时指标
+&lt;ul&gt;&lt;li&gt;pattern: 'java.lang&amp;lt;type=Runtime&amp;gt;&amp;lt;&amp;gt;(\w+)'&lt;/li&gt;
+&lt;/ul&gt;    name: jvm_runtime_$1
+    type: GAUGE
+    help: &amp;quot;JVM Runtime Metrics&amp;quot;&lt;/p&gt;
+&lt;p&gt;# 默认规则：转换所有 JMX MBean
+&lt;ul&gt;&lt;li&gt;pattern: '.*'&lt;/li&gt;
+&lt;/ul&gt;    name: jmx_$1
+    type: GAUGE
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;3.4 OTel Collector 配置&lt;/h3&gt;
+&lt;p&gt;部署 OTel Collector 作为数据收集中间件：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# otel-collector-config.yaml
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+receivers:
+  # OTLP 接收器（gRPC）
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+&lt;p&gt;# Prometheus 接收器（抓取 Pod 指标）
+  prometheus:
+    config:
+      scrape_configs:
+&lt;ul&gt;&lt;li&gt;job_name: 'agentscope-agents'&lt;/li&gt;
+&lt;/ul&gt;          kubernetes_sd_configs:
+&lt;ul&gt;&lt;li&gt;role: pod&lt;/li&gt;
+&lt;/ul&gt;          relabel_configs:
+&lt;ul&gt;&lt;li&gt;source_labels: [__meta_kubernetes_pod_label_app]&lt;/li&gt;
+&lt;/ul&gt;              regex: '.*-agent'
+              action: keep
+&lt;ul&gt;&lt;li&gt;source_labels: [__meta_kubernetes_namespace]&lt;/li&gt;
+&lt;/ul&gt;              target_label: namespace
+&lt;ul&gt;&lt;li&gt;source_labels: [__meta_kubernetes_pod_name]&lt;/li&gt;
+&lt;/ul&gt;              target_label: pod&lt;/p&gt;
+&lt;p&gt;processors:
+  # 批处理
+  batch:
+    timeout: 10s
+    send_batch_size: 1024&lt;/p&gt;
+&lt;p&gt;# 内存限制
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128&lt;/p&gt;
+&lt;p&gt;# 属性过滤
+  filter:
+    metrics:
+      exclude:
+        match_type: strict
+        metric_names:
+&lt;ul&gt;&lt;li&gt;'otel.exporter'&lt;/li&gt;
+&lt;/ul&gt;
+  # 资源属性添加
+  resource:
+    attributes:
+&lt;ul&gt;&lt;li&gt;action: upsert&lt;/li&gt;
+&lt;/ul&gt;        key: deployment.environment
+        value: production&lt;/p&gt;
+&lt;p&gt;exporters:
+  # Jaeger 追踪导出
+  jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true&lt;/p&gt;
+&lt;p&gt;# Prometheus 指标导出（供下游 Prometheus 抓取）
+  prometheus:
+    endpoint: &amp;quot;0.0.0.0:8889&amp;quot;
+    namespace: agentscope
+    const_labels:
+      environment: production&lt;/p&gt;
+&lt;p&gt;# Loki 日志导出
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push&lt;/p&gt;
+&lt;p&gt;# DEBUG exporter（开发调试用）
+  logging:
+    verbosity: basic&lt;/p&gt;
+&lt;p&gt;service:
+  pipelines:
+    # Traces pipeline
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [jaeger, logging]&lt;/p&gt;
+&lt;p&gt;# Metrics pipeline
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, filter, batch, resource]
+      exporters: [prometheus, logging]&lt;/p&gt;
+&lt;p&gt;# Logs pipeline
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [loki, logging]
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;3.5 Prometheus 配置&lt;/h3&gt;
+&lt;p&gt;Prometheus 配置用于抓取应用指标：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# prometheus-config.yaml
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+&lt;p&gt;scrape_configs:
+  # OTel Collector 指标
+&lt;ul&gt;&lt;li&gt;job_name: 'otel-collector'&lt;/li&gt;
+&lt;/ul&gt;    static_configs:
+&lt;ul&gt;&lt;li&gt;targets: ['otel-collector:8889']&lt;/li&gt;
+&lt;/ul&gt;        labels:
+          component: otel-collector&lt;/p&gt;
+&lt;p&gt;# AgentScope 应用（JMX Exporter）
+&lt;ul&gt;&lt;li&gt;job_name: 'agentscope-agents'&lt;/li&gt;
+&lt;/ul&gt;    kubernetes_sd_configs:
+&lt;ul&gt;&lt;li&gt;role: pod&lt;/li&gt;
+&lt;/ul&gt;    relabel_configs:
+      # 过滤 agent 应用
+&lt;ul&gt;&lt;li&gt;source_labels: [__meta_kubernetes_pod_label_app]&lt;/li&gt;
+&lt;/ul&gt;        regex: '.*-agent'
+        action: keep
+      # 过滤 metrics 端口
+&lt;ul&gt;&lt;li&gt;source_labels: [__meta_kubernetes_pod_container_port_number]&lt;/li&gt;
+&lt;/ul&gt;        regex: '9404'
+        action: keep
+      # 重命名标签
+&lt;ul&gt;&lt;li&gt;source_labels: [__meta_kubernetes_namespace]&lt;/li&gt;
+&lt;/ul&gt;        target_label: namespace
+&lt;ul&gt;&lt;li&gt;source_labels: [__meta_kubernetes_pod_name]&lt;/li&gt;
+&lt;/ul&gt;        target_label: pod
+&lt;ul&gt;&lt;li&gt;source_labels: [__meta_kubernetes_pod_label_app]&lt;/li&gt;
+&lt;/ul&gt;        target_label: app
+    metric_relabel_configs:
+      # 添加环境标签
+&lt;ul&gt;&lt;li&gt;target_label: environment&lt;/li&gt;
+&lt;/ul&gt;        replacement: production&lt;/p&gt;
+&lt;p&gt;# Spring Boot Actuator (Prometheus 端点)
+&lt;ul&gt;&lt;li&gt;job_name: 'spring-boot-actuator'&lt;/li&gt;
+&lt;/ul&gt;    kubernetes_sd_configs:
+&lt;ul&gt;&lt;li&gt;role: service&lt;/li&gt;
+&lt;/ul&gt;    relabel_configs:
+&lt;ul&gt;&lt;li&gt;source_labels: [__meta_kubernetes_service_label_app]&lt;/li&gt;
+&lt;/ul&gt;        regex: '.*-agent'
+        action: keep
+&lt;ul&gt;&lt;li&gt;source_labels: [__meta_kubernetes_service_name]&lt;/li&gt;
+&lt;/ul&gt;        target_label: service
+&lt;ul&gt;&lt;li&gt;source_labels: [__meta_kubernetes_namespace]&lt;/li&gt;
+&lt;/ul&gt;        target_label: namespace
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;3.6 Grafana Dashboard 配置&lt;/h3&gt;
+&lt;p&gt;Grafana Dashboard 用于可视化展示监控数据：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-json&quot;&gt;{
+  &amp;quot;annotations&amp;quot;: {
+    &amp;quot;list&amp;quot;: []
+  },
+  &amp;quot;editable&amp;quot;: true,
+  &amp;quot;fiscalYearStartMonth&amp;quot;: 0,
+  &amp;quot;graphTooltip&amp;quot;: 1,
+  &amp;quot;id&amp;quot;: null,
+  &amp;quot;links&amp;quot;: [],
+  &amp;quot;liveNow&amp;quot;: false,
+  &amp;quot;panels&amp;quot;: [
+    {
+      &amp;quot;datasource&amp;quot;: {
+        &amp;quot;type&amp;quot;: &amp;quot;prometheus&amp;quot;,
+        &amp;quot;uid&amp;quot;: &amp;quot;prometheus&amp;quot;
+      },
+      &amp;quot;fieldConfig&amp;quot;: {
+        &amp;quot;defaults&amp;quot;: {
+          &amp;quot;color&amp;quot;: {
+            &amp;quot;mode&amp;quot;: &amp;quot;palette-classic&amp;quot;
+          },
+          &amp;quot;custom&amp;quot;: {
+            &amp;quot;axisCenteredZero&amp;quot;: false,
+            &amp;quot;axisColorMode&amp;quot;: &amp;quot;text&amp;quot;,
+            &amp;quot;axisLabel&amp;quot;: &amp;quot;&amp;quot;,
+            &amp;quot;axisPlacement&amp;quot;: &amp;quot;auto&amp;quot;,
+            &amp;quot;barAlignment&amp;quot;: 0,
+            &amp;quot;drawStyle&amp;quot;: &amp;quot;line&amp;quot;,
+            &amp;quot;fillOpacity&amp;quot;: 10,
+            &amp;quot;gradientMode&amp;quot;: &amp;quot;none&amp;quot;,
+            &amp;quot;hideFrom&amp;quot;: {
+              &amp;quot;legend&amp;quot;: false,
+              &amp;quot;tooltip&amp;quot;: false,
+              &amp;quot;viz&amp;quot;: false
+            },
+            &amp;quot;lineInterpolation&amp;quot;: &amp;quot;linear&amp;quot;,
+            &amp;quot;lineWidth&amp;quot;: 1,
+            &amp;quot;pointSize&amp;quot;: 5,
+            &amp;quot;scaleDistribution&amp;quot;: {
+              &amp;quot;type&amp;quot;: &amp;quot;linear&amp;quot;
+            },
+            &amp;quot;showPoints&amp;quot;: &amp;quot;never&amp;quot;,
+            &amp;quot;spanNulls&amp;quot;: false,
+            &amp;quot;stacking&amp;quot;: {
+              &amp;quot;group&amp;quot;: &amp;quot;A&amp;quot;,
+              &amp;quot;mode&amp;quot;: &amp;quot;none&amp;quot;
+            },
+            &amp;quot;thresholdsStyle&amp;quot;: {
+              &amp;quot;mode&amp;quot;: &amp;quot;off&amp;quot;
+            }
+          },
+          &amp;quot;mappings&amp;quot;: [],
+          &amp;quot;thresholds&amp;quot;: {
+            &amp;quot;mode&amp;quot;: &amp;quot;absolute&amp;quot;,
+            &amp;quot;steps&amp;quot;: [
+              {
+                &amp;quot;color&amp;quot;: &amp;quot;green&amp;quot;,
+                &amp;quot;value&amp;quot;: null
+              }
+            ]
+          },
+          &amp;quot;unit&amp;quot;: &amp;quot;percent&amp;quot;
+        },
+        &amp;quot;overrides&amp;quot;: []
+      },
+      &amp;quot;gridPos&amp;quot;: {
+        &amp;quot;h&amp;quot;: 8,
+        &amp;quot;w&amp;quot;: 12,
+        &amp;quot;x&amp;quot;: 0,
+        &amp;quot;y&amp;quot;: 0
+      },
+      &amp;quot;id&amp;quot;: 1,
+      &amp;quot;options&amp;quot;: {
+        &amp;quot;legend&amp;quot;: {
+          &amp;quot;calcs&amp;quot;: [&amp;quot;mean&amp;quot;, &amp;quot;lastNotNull&amp;quot;],
+          &amp;quot;displayMode&amp;quot;: &amp;quot;table&amp;quot;,
+          &amp;quot;placement&amp;quot;: &amp;quot;bottom&amp;quot;,
+          &amp;quot;showLegend&amp;quot;: true
+        },
+        &amp;quot;tooltip&amp;quot;: {
+          &amp;quot;mode&amp;quot;: &amp;quot;single&amp;quot;,
+          &amp;quot;sort&amp;quot;: &amp;quot;none&amp;quot;
+        }
+      },
+      &amp;quot;targets&amp;quot;: [
+        {
+          &amp;quot;datasource&amp;quot;: {
+            &amp;quot;type&amp;quot;: &amp;quot;prometheus&amp;quot;,
+            &amp;quot;uid&amp;quot;: &amp;quot;prometheus&amp;quot;
+          },
+          &amp;quot;expr&amp;quot;: &amp;quot;jvm_memory_used_bytes{application=\&amp;quot;$application\&amp;quot;, area=\&amp;quot;heap\&amp;quot;} / jvm_memory_max_bytes{application=\&amp;quot;$application\&amp;quot;, area=\&amp;quot;heap\&amp;quot;}&amp;quot;,
+          &amp;quot;legendFormat&amp;quot;: &amp;quot;Heap Usage&amp;quot;,
+          &amp;quot;refId&amp;quot;: &amp;quot;A&amp;quot;
+        },
+        {
+          &amp;quot;datasource&amp;quot;: {
+            &amp;quot;type&amp;quot;: &amp;quot;prometheus&amp;quot;,
+            &amp;quot;uid&amp;quot;: &amp;quot;prometheus&amp;quot;
+          },
+          &amp;quot;expr&amp;quot;: &amp;quot;system_cpu_usage{application=\&amp;quot;$application\&amp;quot;}&amp;quot;,
+          &amp;quot;legendFormat&amp;quot;: &amp;quot;System CPU&amp;quot;,
+          &amp;quot;refId&amp;quot;: &amp;quot;B&amp;quot;
+        },
+        {
+          &amp;quot;datasource&amp;quot;: {
+            &amp;quot;type&amp;quot;: &amp;quot;prometheus&amp;quot;,
+            &amp;quot;uid&amp;quot;: &amp;quot;prometheus&amp;quot;
+          },
+          &amp;quot;expr&amp;quot;: &amp;quot;process_cpu_usage{application=\&amp;quot;$application\&amp;quot;}&amp;quot;,
+          &amp;quot;legendFormat&amp;quot;: &amp;quot;Process CPU&amp;quot;,
+          &amp;quot;refId&amp;quot;: &amp;quot;C&amp;quot;
+        }
+      ],
+      &amp;quot;title&amp;quot;: &amp;quot;JVM 和系统资源使用率&amp;quot;,
+      &amp;quot;type&amp;quot;: &amp;quot;timeseries&amp;quot;
+    },
+    {
+      &amp;quot;datasource&amp;quot;: {
+        &amp;quot;type&amp;quot;: &amp;quot;prometheus&amp;quot;,
+        &amp;quot;uid&amp;quot;: &amp;quot;prometheus&amp;quot;
+      },
+      &amp;quot;fieldConfig&amp;quot;: {
+        &amp;quot;defaults&amp;quot;: {
+          &amp;quot;color&amp;quot;: {
+            &amp;quot;mode&amp;quot;: &amp;quot;thresholds&amp;quot;
+          },
+          &amp;quot;mappings&amp;quot;: [],
+          &amp;quot;thresholds&amp;quot;: {
+            &amp;quot;mode&amp;quot;: &amp;quot;absolute&amp;quot;,
+            &amp;quot;steps&amp;quot;: [
+              {
+                &amp;quot;color&amp;quot;: &amp;quot;green&amp;quot;,
+                &amp;quot;value&amp;quot;: null
+              },
+              {
+                &amp;quot;color&amp;quot;: &amp;quot;yellow&amp;quot;,
+                &amp;quot;value&amp;quot;: 70
+              },
+              {
+                &amp;quot;color&amp;quot;: &amp;quot;red&amp;quot;,
+                &amp;quot;value&amp;quot;: 90
+              }
+            ]
+          },
+          &amp;quot;unit&amp;quot;: &amp;quot;percent&amp;quot;
+        },
+        &amp;quot;overrides&amp;quot;: []
+      },
+      &amp;quot;gridPos&amp;quot;: {
+        &amp;quot;h&amp;quot;: 4,
+        &amp;quot;w&amp;quot;: 6,
+        &amp;quot;x&amp;quot;: 12,
+        &amp;quot;y&amp;quot;: 0
+      },
+      &amp;quot;id&amp;quot;: 2,
+      &amp;quot;options&amp;quot;: {
+        &amp;quot;colorMode&amp;quot;: &amp;quot;value&amp;quot;,
+        &amp;quot;graphMode&amp;quot;: &amp;quot;area&amp;quot;,
+        &amp;quot;justifyMode&amp;quot;: &amp;quot;auto&amp;quot;,
+        &amp;quot;orientation&amp;quot;: &amp;quot;auto&amp;quot;,
+        &amp;quot;reduceOptions&amp;quot;: {
+          &amp;quot;calcs&amp;quot;: [&amp;quot;lastNotNull&amp;quot;],
+          &amp;quot;fields&amp;quot;: &amp;quot;&amp;quot;,
+          &amp;quot;values&amp;quot;: false
+        },
+        &amp;quot;textMode&amp;quot;: &amp;quot;auto&amp;quot;
+      },
+      &amp;quot;targets&amp;quot;: [
+        {
+          &amp;quot;datasource&amp;quot;: {
+            &amp;quot;type&amp;quot;: &amp;quot;prometheus&amp;quot;,
+            &amp;quot;uid&amp;quot;: &amp;quot;prometheus&amp;quot;
+          },
+          &amp;quot;expr&amp;quot;: &amp;quot;jvm_memory_used_bytes{application=\&amp;quot;$application\&amp;quot;, area=\&amp;quot;heap\&amp;quot;} / jvm_memory_max_bytes{application=\&amp;quot;$application\&amp;quot;, area=\&amp;quot;heap\&amp;quot;} * 100&amp;quot;,
+          &amp;quot;legendFormat&amp;quot;: &amp;quot;&amp;quot;,
+          &amp;quot;refId&amp;quot;: &amp;quot;A&amp;quot;
+        }
+      ],
+      &amp;quot;title&amp;quot;: &amp;quot;堆内存使用率&amp;quot;,
+      &amp;quot;type&amp;quot;: &amp;quot;stat&amp;quot;
+    },
+    {
+      &amp;quot;datasource&amp;quot;: {
+        &amp;quot;type&amp;quot;: &amp;quot;prometheus&amp;quot;,
+        &amp;quot;uid&amp;quot;: &amp;quot;prometheus&amp;quot;
+      },
+      &amp;quot;fieldConfig&amp;quot;: {
+        &amp;quot;defaults&amp;quot;: {
+          &amp;quot;color&amp;quot;: {
+            &amp;quot;mode&amp;quot;: &amp;quot;thresholds&amp;quot;
+          },
+          &amp;quot;mappings&amp;quot;: [],
+          &amp;quot;thresholds&amp;quot;: {
+            &amp;quot;mode&amp;quot;: &amp;quot;absolute&amp;quot;,
+            &amp;quot;steps&amp;quot;: [
+              {
+                &amp;quot;color&amp;quot;: &amp;quot;green&amp;quot;,
+                &amp;quot;value&amp;quot;: null
+              }
+            ]
+          },
+          &amp;quot;unit&amp;quot;: &amp;quot;short&amp;quot;
+        },
+        &amp;quot;overrides&amp;quot;: []
+      },
+      &amp;quot;gridPos&amp;quot;: {
+        &amp;quot;h&amp;quot;: 4,
+        &amp;quot;w&amp;quot;: 6,
+        &amp;quot;x&amp;quot;: 18,
+        &amp;quot;y&amp;quot;: 0
+      },
+      &amp;quot;id&amp;quot;: 3,
+      &amp;quot;options&amp;quot;: {
+        &amp;quot;colorMode&amp;quot;: &amp;quot;value&amp;quot;,
+        &amp;quot;graphMode&amp;quot;: &amp;quot;none&amp;quot;,
+        &amp;quot;justifyMode&amp;quot;: &amp;quot;auto&amp;quot;,
+        &amp;quot;orientation&amp;quot;: &amp;quot;auto&amp;quot;,
+        &amp;quot;reduceOptions&amp;quot;: {
+          &amp;quot;calcs&amp;quot;: [&amp;quot;lastNotNull&amp;quot;],
+          &amp;quot;fields&amp;quot;: &amp;quot;&amp;quot;,
+          &amp;quot;values&amp;quot;: false
+        },
+        &amp;quot;textMode&amp;quot;: &amp;quot;auto&amp;quot;
+      },
+      &amp;quot;targets&amp;quot;: [
+        {
+          &amp;quot;datasource&amp;quot;: {
+            &amp;quot;type&amp;quot;: &amp;quot;prometheus&amp;quot;,
+            &amp;quot;uid&amp;quot;: &amp;quot;prometheus&amp;quot;
+          },
+          &amp;quot;expr&amp;quot;: &amp;quot;jvm_threads_live_threads{application=\&amp;quot;$application\&amp;quot;}&amp;quot;,
+          &amp;quot;legendFormat&amp;quot;: &amp;quot;&amp;quot;,
+          &amp;quot;refId&amp;quot;: &amp;quot;A&amp;quot;
+        }
+      ],
+      &amp;quot;title&amp;quot;: &amp;quot;活跃线程数&amp;quot;,
+      &amp;quot;type&amp;quot;: &amp;quot;stat&amp;quot;
+    },
+    {
+      &amp;quot;datasource&amp;quot;: {
+        &amp;quot;type&amp;quot;: &amp;quot;prometheus&amp;quot;,
+        &amp;quot;uid&amp;quot;: &amp;quot;prometheus&amp;quot;
+      },
+      &amp;quot;fieldConfig&amp;quot;: {
+        &amp;quot;defaults&amp;quot;: {
+          &amp;quot;color&amp;quot;: {
+            &amp;quot;mode&amp;quot;: &amp;quot;palette-classic&amp;quot;
+          },
+          &amp;quot;custom&amp;quot;: {
+            &amp;quot;axisCenteredZero&amp;quot;: false,
+            &amp;quot;axisColorMode&amp;quot;: &amp;quot;text&amp;quot;,
+            &amp;quot;axisLabel&amp;quot;: &amp;quot;&amp;quot;,
+            &amp;quot;axisPlacement&amp;quot;: &amp;quot;auto&amp;quot;,
+            &amp;quot;barAlignment&amp;quot;: 0,
+            &amp;quot;drawStyle&amp;quot;: &amp;quot;line&amp;quot;,
+            &amp;quot;fillOpacity&amp;quot;: 10,
+            &amp;quot;gradientMode&amp;quot;: &amp;quot;none&amp;quot;,
+            &amp;quot;hideFrom&amp;quot;: {
+              &amp;quot;legend&amp;quot;: false,
+              &amp;quot;tooltip&amp;quot;: false,
+              &amp;quot;viz&amp;quot;: false
+            },
+            &amp;quot;lineInterpolation&amp;quot;: &amp;quot;linear&amp;quot;,
+            &amp;quot;lineWidth&amp;quot;: 1,
+            &amp;quot;pointSize&amp;quot;: 5,
+            &amp;quot;scaleDistribution&amp;quot;: {
+              &amp;quot;type&amp;quot;: &amp;quot;linear&amp;quot;
+            },
+            &amp;quot;showPoints&amp;quot;: &amp;quot;never&amp;quot;,
+            &amp;quot;spanNulls&amp;quot;: false,
+            &amp;quot;stacking&amp;quot;: {
+              &amp;quot;group&amp;quot;: &amp;quot;A&amp;quot;,
+              &amp;quot;mode&amp;quot;: &amp;quot;none&amp;quot;
+            },
+            &amp;quot;thresholdsStyle&amp;quot;: {
+              &amp;quot;mode&amp;quot;: &amp;quot;off&amp;quot;
+            }
+          },
+          &amp;quot;mappings&amp;quot;: [],
+          &amp;quot;thresholds&amp;quot;: {
+            &amp;quot;mode&amp;quot;: &amp;quot;absolute&amp;quot;,
+            &amp;quot;steps&amp;quot;: [
+              {
+                &amp;quot;color&amp;quot;: &amp;quot;green&amp;quot;,
+                &amp;quot;value&amp;quot;: null
+              }
+            ]
+          },
+          &amp;quot;unit&amp;quot;: &amp;quot;reqps&amp;quot;
+        },
+        &amp;quot;overrides&amp;quot;: []
+      },
+      &amp;quot;gridPos&amp;quot;: {
+        &amp;quot;h&amp;quot;: 8,
+        &amp;quot;w&amp;quot;: 12,
+        &amp;quot;x&amp;quot;: 12,
+        &amp;quot;y&amp;quot;: 4
+      },
+      &amp;quot;id&amp;quot;: 4,
+      &amp;quot;options&amp;quot;: {
+        &amp;quot;legend&amp;quot;: {
+          &amp;quot;calcs&amp;quot;: [&amp;quot;mean&amp;quot;, &amp;quot;max&amp;quot;],
+          &amp;quot;displayMode&amp;quot;: &amp;quot;table&amp;quot;,
+          &amp;quot;placement&amp;quot;: &amp;quot;bottom&amp;quot;,
+          &amp;quot;showLegend&amp;quot;: true
+        },
+        &amp;quot;tooltip&amp;quot;: {
+          &amp;quot;mode&amp;quot;: &amp;quot;single&amp;quot;,
+          &amp;quot;sort&amp;quot;: &amp;quot;none&amp;quot;
+        }
+      },
+      &amp;quot;targets&amp;quot;: [
+        {
+          &amp;quot;datasource&amp;quot;: {
+            &amp;quot;type&amp;quot;: &amp;quot;prometheus&amp;quot;,
+            &amp;quot;uid&amp;quot;: &amp;quot;prometheus&amp;quot;
+          },
+          &amp;quot;expr&amp;quot;: &amp;quot;rate(http_server_requests_seconds_count{application=\&amp;quot;$application\&amp;quot;, status=~\&amp;quot;2..\&amp;quot;}[1m])&amp;quot;,
+          &amp;quot;legendFormat&amp;quot;: &amp;quot;2xx&amp;quot;,
+          &amp;quot;refId&amp;quot;: &amp;quot;A&amp;quot;
+        },
+        {
+          &amp;quot;datasource&amp;quot;: {
+            &amp;quot;type&amp;quot;: &amp;quot;prometheus&amp;quot;,
+            &amp;quot;uid&amp;quot;: &amp;quot;prometheus&amp;quot;
+          },
+          &amp;quot;expr&amp;quot;: &amp;quot;rate(http_server_requests_seconds_count{application=\&amp;quot;$application\&amp;quot;, status=~\&amp;quot;4..\&amp;quot;}[1m])&amp;quot;,
+          &amp;quot;legendFormat&amp;quot;: &amp;quot;4xx&amp;quot;,
+          &amp;quot;refId&amp;quot;: &amp;quot;B&amp;quot;
+        },
+        {
+          &amp;quot;datasource&amp;quot;: {
+            &amp;quot;type&amp;quot;: &amp;quot;prometheus&amp;quot;,
+            &amp;quot;uid&amp;quot;: &amp;quot;prometheus&amp;quot;
+          },
+          &amp;quot;expr&amp;quot;: &amp;quot;rate(http_server_requests_seconds_count{application=\&amp;quot;$application\&amp;quot;, status=~\&amp;quot;5..\&amp;quot;}[1m])&amp;quot;,
+          &amp;quot;legendFormat&amp;quot;: &amp;quot;5xx&amp;quot;,
+          &amp;quot;refId&amp;quot;: &amp;quot;C&amp;quot;
+        }
+      ],
+      &amp;quot;title&amp;quot;: &amp;quot;HTTP 请求速率&amp;quot;,
+      &amp;quot;type&amp;quot;: &amp;quot;timeseries&amp;quot;
+    },
+    {
+      &amp;quot;datasource&amp;quot;: {
+        &amp;quot;type&amp;quot;: &amp;quot;prometheus&amp;quot;,
+        &amp;quot;uid&amp;quot;: &amp;quot;prometheus&amp;quot;
+      },
+      &amp;quot;fieldConfig&amp;quot;: {
+        &amp;quot;defaults&amp;quot;: {
+          &amp;quot;color&amp;quot;: {
+            &amp;quot;mode&amp;quot;: &amp;quot;palette-classic&amp;quot;
+          },
+          &amp;quot;custom&amp;quot;: {
+            &amp;quot;axisCenteredZero&amp;quot;: false,
+            &amp;quot;axisColorMode&amp;quot;: &amp;quot;text&amp;quot;,
+            &amp;quot;axisLabel&amp;quot;: &amp;quot;&amp;quot;,
+            &amp;quot;axisPlacement&amp;quot;: &amp;quot;auto&amp;quot;,
+            &amp;quot;barAlignment&amp;quot;: 0,
+            &amp;quot;drawStyle&amp;quot;: &amp;quot;line&amp;quot;,
+            &amp;quot;fillOpacity&amp;quot;: 10,
+            &amp;quot;gradientMode&amp;quot;: &amp;quot;none&amp;quot;,
+            &amp;quot;hideFrom&amp;quot;: {
+              &amp;quot;legend&amp;quot;: false,
+              &amp;quot;tooltip&amp;quot;: false,
+              &amp;quot;viz&amp;quot;: false
+            },
+            &amp;quot;lineInterpolation&amp;quot;: &amp;quot;linear&amp;quot;,
+            &amp;quot;lineWidth&amp;quot;: 1,
+            &amp;quot;pointSize&amp;quot;: 5,
+            &amp;quot;scaleDistribution&amp;quot;: {
+              &amp;quot;type&amp;quot;: &amp;quot;linear&amp;quot;
+            },
+            &amp;quot;showPoints&amp;quot;: &amp;quot;never&amp;quot;,
+            &amp;quot;spanNulls&amp;quot;: false,
+            &amp;quot;stacking&amp;quot;: {
+              &amp;quot;group&amp;quot;: &amp;quot;A&amp;quot;,
+              &amp;quot;mode&amp;quot;: &amp;quot;none&amp;quot;
+            },
+            &amp;quot;thresholdsStyle&amp;quot;: {
+              &amp;quot;mode&amp;quot;: &amp;quot;off&amp;quot;
+            }
+          },
+          &amp;quot;mappings&amp;quot;: [],
+          &amp;quot;thresholds&amp;quot;: {
+            &amp;quot;mode&amp;quot;: &amp;quot;absolute&amp;quot;,
+            &amp;quot;steps&amp;quot;: [
+              {
+                &amp;quot;color&amp;quot;: &amp;quot;green&amp;quot;,
+                &amp;quot;value&amp;quot;: null
+              }
+            ]
+          },
+          &amp;quot;unit&amp;quot;: &amp;quot;ms&amp;quot;
+        },
+        &amp;quot;overrides&amp;quot;: []
+      },
+      &amp;quot;gridPos&amp;quot;: {
+        &amp;quot;h&amp;quot;: 8,
+        &amp;quot;w&amp;quot;: 12,
+        &amp;quot;x&amp;quot;: 0,
+        &amp;quot;y&amp;quot;: 8
+      },
+      &amp;quot;id&amp;quot;: 5,
+      &amp;quot;options&amp;quot;: {
+        &amp;quot;legend&amp;quot;: {
+          &amp;quot;calcs&amp;quot;: [&amp;quot;mean&amp;quot;, &amp;quot;p95&amp;quot;],
+          &amp;quot;displayMode&amp;quot;: &amp;quot;table&amp;quot;,
+          &amp;quot;placement&amp;quot;: &amp;quot;bottom&amp;quot;,
+          &amp;quot;showLegend&amp;quot;: true
+        },
+        &amp;quot;tooltip&amp;quot;: {
+          &amp;quot;mode&amp;quot;: &amp;quot;single&amp;quot;,
+          &amp;quot;sort&amp;quot;: &amp;quot;none&amp;quot;
+        }
+      },
+      &amp;quot;targets&amp;quot;: [
+        {
+          &amp;quot;datasource&amp;quot;: {
+            &amp;quot;type&amp;quot;: &amp;quot;prometheus&amp;quot;,
+            &amp;quot;uid&amp;quot;: &amp;quot;prometheus&amp;quot;
+          },
+          &amp;quot;expr&amp;quot;: &amp;quot;histogram_quantile(0.5, rate(http_server_requests_seconds_bucket{application=\&amp;quot;$application\&amp;quot;}[5m])) * 1000&amp;quot;,
+          &amp;quot;legendFormat&amp;quot;: &amp;quot;p50&amp;quot;,
+          &amp;quot;refId&amp;quot;: &amp;quot;A&amp;quot;
+        },
+        {
+          &amp;quot;datasource&amp;quot;: {
+            &amp;quot;type&amp;quot;: &amp;quot;prometheus&amp;quot;,
+            &amp;quot;uid&amp;quot;: &amp;quot;prometheus&amp;quot;
+          },
+          &amp;quot;expr&amp;quot;: &amp;quot;histogram_quantile(0.95, rate(http_server_requests_seconds_bucket{application=\&amp;quot;$application\&amp;quot;}[5m])) * 1000&amp;quot;,
+          &amp;quot;legendFormat&amp;quot;: &amp;quot;p95&amp;quot;,
+          &amp;quot;refId&amp;quot;: &amp;quot;B&amp;quot;
+        },
+        {
+          &amp;quot;datasource&amp;quot;: {
+            &amp;quot;type&amp;quot;: &amp;quot;prometheus&amp;quot;,
+            &amp;quot;uid&amp;quot;: &amp;quot;prometheus&amp;quot;
+          },
+          &amp;quot;expr&amp;quot;: &amp;quot;histogram_quantile(0.99, rate(http_server_requests_seconds_bucket{application=\&amp;quot;$application\&amp;quot;}[5m])) * 1000&amp;quot;,
+          &amp;quot;legendFormat&amp;quot;: &amp;quot;p99&amp;quot;,
+          &amp;quot;refId&amp;quot;: &amp;quot;C&amp;quot;
+        }
+      ],
+      &amp;quot;title&amp;quot;: &amp;quot;HTTP 响应延迟&amp;quot;,
+      &amp;quot;type&amp;quot;: &amp;quot;timeseries&amp;quot;
+    }
+  ],
+  &amp;quot;refresh&amp;quot;: &amp;quot;10s&amp;quot;,
+  &amp;quot;schemaVersion&amp;quot;: 38,
+  &amp;quot;style&amp;quot;: &amp;quot;dark&amp;quot;,
+  &amp;quot;tags&amp;quot;: [&amp;quot;agentscope&amp;quot;, &amp;quot;jvm&amp;quot;, &amp;quot;spring-boot&amp;quot;],
+  &amp;quot;templating&amp;quot;: {
+    &amp;quot;list&amp;quot;: [
+      {
+        &amp;quot;current&amp;quot;: {
+          &amp;quot;selected&amp;quot;: false,
+          &amp;quot;text&amp;quot;: &amp;quot;supervisor-agent&amp;quot;,
+          &amp;quot;value&amp;quot;: &amp;quot;supervisor-agent&amp;quot;
+        },
+        &amp;quot;datasource&amp;quot;: {
+          &amp;quot;type&amp;quot;: &amp;quot;prometheus&amp;quot;,
+          &amp;quot;uid&amp;quot;: &amp;quot;prometheus&amp;quot;
+        },
+        &amp;quot;definition&amp;quot;: &amp;quot;label_values(jvm_memory_used_bytes, application)&amp;quot;,
+        &amp;quot;hide&amp;quot;: 0,
+        &amp;quot;includeAll&amp;quot;: false,
+        &amp;quot;label&amp;quot;: &amp;quot;应用&amp;quot;,
+        &amp;quot;multi&amp;quot;: false,
+        &amp;quot;name&amp;quot;: &amp;quot;application&amp;quot;,
+        &amp;quot;options&amp;quot;: [],
+        &amp;quot;query&amp;quot;: {
+          &amp;quot;query&amp;quot;: &amp;quot;label_values(jvm_memory_used_bytes, application)&amp;quot;,
+          &amp;quot;refId&amp;quot;: &amp;quot;StandardVariableQuery&amp;quot;
+        },
+        &amp;quot;refresh&amp;quot;: 1,
+        &amp;quot;regex&amp;quot;: &amp;quot;&amp;quot;,
+        &amp;quot;skipUrlSync&amp;quot;: false,
+        &amp;quot;sort&amp;quot;: 0,
+        &amp;quot;type&amp;quot;: &amp;quot;query&amp;quot;
+      }
+    ]
+  },
+  &amp;quot;time&amp;quot;: {
+    &amp;quot;from&amp;quot;: &amp;quot;now-1h&amp;quot;,
+    &amp;quot;to&amp;quot;: &amp;quot;now&amp;quot;
+  },
+  &amp;quot;timepicker&amp;quot;: {},
+  &amp;quot;timezone&amp;quot;: &amp;quot;browser&amp;quot;,
+  &amp;quot;title&amp;quot;: &amp;quot;AgentScope JVM 监控面板&amp;quot;,
+  &amp;quot;uid&amp;quot;: &amp;quot;agentscope-jvm&amp;quot;,
+  &amp;quot;version&amp;quot;: 1,
+  &amp;quot;weekStart&amp;quot;: &amp;quot;&amp;quot;
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;17.4 优雅关闭&lt;/h2&gt;
+&lt;p&gt;生产环境中，服务的关闭必须优雅，以确保正在处理的请求能够正常完成，避免数据丢失和服务中断。&lt;/p&gt;
+&lt;h3&gt;4.1 优雅关闭原理&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;┌────────────────────────────────────────────────────────────────────┐
+│                     优雅关闭流程                                    │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│  1. 收到 SIGTERM 信号                                              │
+│         │                                                         │
+│         ▼                                                         │
+│  2. 停止接收新请求（Liveness Probe 失败）                          │
+│         │                                                         │
+│         ▼                                                         │
+│  3. 等待正在处理的请求完成                                          │
+│     ┌────────────────────────────────────────────────────┐        │
+│     │  Spring Lifecycle: timeout-per-shutdown-phase      │        │
+│     │  AgentScope: GracefulShutdownManager               │        │
+│     └────────────────────────────────────────────────────┘        │
+│         │                                                         │
+│         ▼                                                         │
+│  4. 关闭数据库连接池                                               │
+│         │                                                         │
+│         ▼                                                         │
+│  5. 关闭线程池                                                    │
+│         │                                                         │
+│         ▼                                                         │
+│  6. 进程退出                                                      │
+│                                                                    │
+└────────────────────────────────────────────────────────────────────┘
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;4.2 Spring Boot 优雅关闭配置&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# application.yml
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+server:
+  port: 8080
+  # 启用优雅关闭
+  shutdown: graceful
+&lt;h1&gt;关闭阶段超时时间（生产环境建议设置较长时间）&lt;/h1&gt;
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+&lt;h1&gt;Actuator 健康检查配置&lt;/h1&gt;
+management:
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+&lt;p&gt;health:
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true&lt;/p&gt;
+&lt;h1&gt;AgentScope 优雅关闭配置&lt;/h1&gt;
+agent:
+  # Agent 执行超时时间（-1 表示不超时）
+  shutdown-timeout-seconds: -1
+&lt;p&gt;# 部分推理结果保存策略
+  # 可选值：
+  #   - save: 保存部分推理结果
+  #   - discard: 丢弃部分推理结果
+  shutdown-partial-reasoning-policy: save
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;4.3 GracefulShutdownManager 使用&lt;/h3&gt;
+&lt;p&gt;AgentScope 提供了 &lt;code&gt;GracefulShutdownManager&lt;/code&gt; 用于管理 Agent 的优雅关闭：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;/*
+ * Copyright 2024-2026 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &amp;quot;License&amp;quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &amp;quot;AS IS&amp;quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package io.agentscope.tutorial.chapter17.shutdown;
+&lt;p&gt;import io.agentscope.core.shutdown.GracefulShutdownManager;
+import io.agentscope.core.shutdown.ShutdownState;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;&lt;/p&gt;
+&lt;p&gt;import java.util.LinkedHashMap;
+import java.util.Map;&lt;/p&gt;
+&lt;p&gt;/**
+ * Agent 优雅关闭控制器
+ *
+ * &amp;lt;p&amp;gt;提供以下功能：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;获取当前关闭状态&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;获取活跃请求数&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;手动触发优雅关闭&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;就绪检查（用于 Kubernetes readinessProbe）&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * @author AgentScope Team
+ */
+@RestController
+@RequestMapping(&amp;quot;/api/shutdown&amp;quot;)
+public class ShutdownController {&lt;/p&gt;
+&lt;p&gt;/**
+     * 单例获取关闭管理器
+     */
+    private final GracefulShutdownManager shutdownManager = GracefulShutdownManager.getInstance();&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取当前关闭状态
+     *
+     * @return 包含状态和活跃请求数的响应
+     */
+    @GetMapping(&amp;quot;/status&amp;quot;)
+    public Map&amp;lt;String, Object&amp;gt; getStatus() {
+        Map&amp;lt;String, Object&amp;gt; result = new LinkedHashMap&amp;lt;&amp;gt;();
+        result.put(&amp;quot;state&amp;quot;, shutdownManager.getState().name());
+        result.put(&amp;quot;activeRequests&amp;quot;, shutdownManager.getActiveRequestCount());
+        result.put(&amp;quot;timestamp&amp;quot;, System.currentTimeMillis());
+        return result;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 就绪检查端点
+     *
+     * &amp;lt;p&amp;gt;当服务处于 RUNNING 状态时返回 200 OK，
+     * 其他状态返回 503 Service Unavailable
+     *
+     * @return 就绪状态信息
+     */
+    @GetMapping(&amp;quot;/readiness&amp;quot;)
+    public Map&amp;lt;String, Object&amp;gt; readiness() {
+        Map&amp;lt;String, Object&amp;gt; result = new LinkedHashMap&amp;lt;&amp;gt;();
+        ShutdownState state = shutdownManager.getState();
+        result.put(&amp;quot;state&amp;quot;, state.name());
+        result.put(&amp;quot;activeRequests&amp;quot;, shutdownManager.getActiveRequestCount());&lt;/p&gt;
+&lt;p&gt;// 非 RUNNING 状态返回 503
+        if (state != ShutdownState.RUNNING) {
+            result.put(&amp;quot;ready&amp;quot;, false);
+            // 注意：Spring 会自动返回 503 状态码
+        } else {
+            result.put(&amp;quot;ready&amp;quot;, true);
+        }&lt;/p&gt;
+&lt;p&gt;return result;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 手动触发优雅关闭
+     *
+     * &amp;lt;p&amp;gt;通常由 Kubernetes preStop hook 或运维平台触发
+     *
+     * @return 关闭操作结果
+     */
+    @PostMapping(&amp;quot;/trigger&amp;quot;)
+    public Map&amp;lt;String, Object&amp;gt; triggerShutdown() {
+        Map&amp;lt;String, Object&amp;gt; result = new LinkedHashMap&amp;lt;&amp;gt;();&lt;/p&gt;
+&lt;p&gt;ShutdownState currentState = shutdownManager.getState();
+        result.put(&amp;quot;previousState&amp;quot;, currentState.name());
+        result.put(&amp;quot;activeRequests&amp;quot;, shutdownManager.getActiveRequestCount());&lt;/p&gt;
+&lt;p&gt;if (currentState == ShutdownState.RUNNING) {
+            shutdownManager.performGracefulShutdown();
+            result.put(&amp;quot;message&amp;quot;, &amp;quot;优雅关闭已触发&amp;quot;);
+            result.put(&amp;quot;newState&amp;quot;, shutdownManager.getState().name());
+        } else {
+            result.put(&amp;quot;message&amp;quot;, &amp;quot;服务已处于关闭流程中&amp;quot;);
+        }&lt;/p&gt;
+&lt;p&gt;return result;
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;4.4 自定义关闭钩子&lt;/h3&gt;
+&lt;p&gt;如果需要执行自定义的清理逻辑，可以注册 Spring 关闭钩子：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;/*
+ * Copyright 2024-2026 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &amp;quot;License&amp;quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &amp;quot;AS IS&amp;quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package io.agentscope.tutorial.chapter17.shutdown;
+&lt;p&gt;import io.agentscope.core.workflow.agent.AgentRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationListener;
+import org.springframework.context.event.ContextClosedEvent;
+import org.springframework.stereotype.Component;&lt;/p&gt;
+&lt;p&gt;/**
+ * 应用关闭事件监听器
+ *
+ * &amp;lt;p&amp;gt;在应用关闭时执行必要的清理工作，
+ * 如注销 Agent、刷新缓冲、关闭连接等
+ */
+@Component
+public class ApplicationShutdownListener implements ApplicationListener&amp;lt;ContextClosedEvent&amp;gt; {&lt;/p&gt;
+&lt;p&gt;private static final Logger logger = LoggerFactory.getLogger(ApplicationShutdownListener.class);&lt;/p&gt;
+&lt;p&gt;private final AgentRegistry agentRegistry;&lt;/p&gt;
+&lt;p&gt;public ApplicationShutdownListener(AgentRegistry agentRegistry) {
+        this.agentRegistry = agentRegistry;
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public void onApplicationEvent(ContextClosedEvent event) {
+        logger.info(&amp;quot;收到关闭事件，开始清理资源...&amp;quot;);&lt;/p&gt;
+&lt;p&gt;try {
+            // 1. 停止接收新请求
+            logger.info(&amp;quot;步骤 1: 停止 Agent 接收新请求&amp;quot;);
+            agentRegistry.pauseAll();&lt;/p&gt;
+&lt;p&gt;// 2. 等待正在处理的请求完成
+            logger.info(&amp;quot;步骤 2: 等待活跃请求完成...&amp;quot;);
+            if (!agentRegistry.awaitTermination(30, java.util.concurrent.TimeUnit.SECONDS)) {
+                logger.warn(&amp;quot;活跃请求未在 30 秒内完成，继续关闭...&amp;quot;);
+            }&lt;/p&gt;
+&lt;p&gt;// 3. 注销所有 Agent
+            logger.info(&amp;quot;步骤 3: 注销所有 Agent&amp;quot;);
+            agentRegistry.shutdown();&lt;/p&gt;
+&lt;p&gt;// 4. 刷新缓冲数据
+            logger.info(&amp;quot;步骤 4: 刷新缓冲数据&amp;quot;);
+            // flushBuffers();&lt;/p&gt;
+&lt;p&gt;logger.info(&amp;quot;资源清理完成&amp;quot;);
+        } catch (Exception e) {
+            logger.error(&amp;quot;关闭过程中发生错误&amp;quot;, e);
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;4.5 Kubernetes 关闭优化&lt;/h3&gt;
+&lt;p&gt;在 Kubernetes 环境中，还需要配置合理的终止宽限期和 preStop hook：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# Kubernetes Deployment 中的 lifecycle 配置
+spec:
+  template:
+    spec:
+      containers:
+&lt;ul&gt;&lt;li&gt;name: supervisor-agent&lt;/li&gt;
+&lt;/ul&gt;          lifecycle:
+            # 容器停止前执行的命令
+            preStop:
+              exec:
+                command:
+&lt;ul&gt;&lt;li&gt;sh&lt;/li&gt;
+&lt;li&gt;-c&lt;/li&gt;
+&lt;li&gt;|&lt;/li&gt;
+&lt;/ul&gt;                    echo &amp;quot;开始优雅关闭...&amp;quot;
+                    # 等待信号传递到应用
+                    sleep 5
+&lt;p&gt;# 终止宽限期（与 shutdown-timeout-per-shutdown-phase 配合）
+      terminationGracePeriodSeconds: 60
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;17.5 【案例】生产环境部署&lt;/h2&gt;
+&lt;p&gt;本案例展示一个完整的生产环境部署配置，包含 Docker Compose 本地开发和 Kubernetes 生产部署两个版本。&lt;/p&gt;
+&lt;h3&gt;5.1 项目结构&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;agentscope-production/
+├── docker/
+│   ├── Dockerfile
+│   ├── .dockerignore
+│   └── build.sh
+├── kubernetes/
+│   ├── base/
+│   │   ├── namespace.yaml
+│   │   ├── configmap.yaml
+│   │   └── secret.yaml
+│   ├── overlays/
+│   │   ├── dev/
+│   │   └── prod/
+│   └── kustomization.yaml
+├── monitoring/
+│   ├── otel-collector.yaml
+│   ├── prometheus.yaml
+│   └── grafana-dashboard.yaml
+├── docker-compose.yml
+└── README.md
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;5.2 Docker Compose 配置&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# docker-compose.yml
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+&lt;h1&gt;AgentScope 生产环境 Docker Compose 配置&lt;/h1&gt;
+&lt;h1&gt;适用于本地开发和测试环境&lt;/h1&gt;
+&lt;h1&gt;生产环境请使用 Kubernetes 部署&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+&lt;p&gt;services:
+  # ============================================================================
+  # 基础设施服务
+  # ============================================================================&lt;/p&gt;
+&lt;p&gt;# MySQL 数据库
+  mysql:
+    image: mysql:8.0
+    container_name: agentscope-mysql
+    restart: unless-stopped
+    ports:
+&lt;ul&gt;&lt;li&gt;&amp;quot;${MYSQL_PORT:-3306}:3306&amp;quot;&lt;/li&gt;
+&lt;/ul&gt;    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-multi_agent_demo@321}
+      MYSQL_DATABASE: ${DB_NAME:-multi_agent_demo}
+      MYSQL_USER: ${DB_USERNAME:-multi_agent_demo}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-multi_agent_demo@321}
+      TZ: Asia/Shanghai
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+    volumes:
+&lt;ul&gt;&lt;li&gt;mysql-data:/var/lib/mysql&lt;/li&gt;
+&lt;li&gt;./init-scripts:/docker-entrypoint-initdb.d&lt;/li&gt;
+&lt;/ul&gt;    command:
+&lt;ul&gt;&lt;li&gt;--default-authentication-plugin=mysql_native_password&lt;/li&gt;
+&lt;li&gt;--character-set-server=utf8mb4&lt;/li&gt;
+&lt;li&gt;--collation-server=utf8mb4_unicode_ci&lt;/li&gt;
+&lt;li&gt;--max_connections=500&lt;/li&gt;
+&lt;li&gt;--innodb_buffer_pool_size=1G&lt;/li&gt;
+&lt;/ul&gt;    healthcheck:
+      test: [&amp;quot;CMD&amp;quot;, &amp;quot;mysqladmin&amp;quot;, &amp;quot;ping&amp;quot;, &amp;quot;-h&amp;quot;, &amp;quot;localhost&amp;quot;, &amp;quot;-uroot&amp;quot;, &amp;quot;-p${DB_PASSWORD:-multi_agent_demo@321}&amp;quot;]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+&lt;ul&gt;&lt;li&gt;agentscope-network&lt;/li&gt;
+&lt;/ul&gt;
+  # Nacos 服务注册中心
+  nacos-server:
+    image: nacos/nacos-server:v2.4.3
+    container_name: agentscope-nacos
+    restart: unless-stopped
+    ports:
+&lt;ul&gt;&lt;li&gt;&amp;quot;${NACOS_PORT:-8848}:8848&amp;quot;&lt;/li&gt;
+&lt;li&gt;&amp;quot;${NACOS_GRPC_PORT:-9848}:9848&amp;quot;&lt;/li&gt;
+&lt;/ul&gt;    environment:
+      PREFER_HOST_MODE: hostname
+      MODE: standalone
+      NACOS_AUTH_ENABLE: false
+      TZ: Asia/Shanghai
+      JVM_XMS: 512m
+      JVM_XMX: 1024m
+    volumes:
+&lt;ul&gt;&lt;li&gt;nacos-data:/home/nacos/data&lt;/li&gt;
+&lt;/ul&gt;    healthcheck:
+      test: [&amp;quot;CMD&amp;quot;, &amp;quot;curl&amp;quot;, &amp;quot;-f&amp;quot;, &amp;quot;http://localhost:8848/nacos/&amp;quot;]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+&lt;ul&gt;&lt;li&gt;agentscope-network&lt;/li&gt;
+&lt;/ul&gt;
+  # Redis 会话存储（可选）
+  redis:
+    image: redis:7-alpine
+    container_name: agentscope-redis
+    restart: unless-stopped
+    ports:
+&lt;ul&gt;&lt;li&gt;&amp;quot;${REDIS_PORT:-6379}:6379&amp;quot;&lt;/li&gt;
+&lt;/ul&gt;    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+&lt;ul&gt;&lt;li&gt;redis-data:/data&lt;/li&gt;
+&lt;/ul&gt;    healthcheck:
+      test: [&amp;quot;CMD&amp;quot;, &amp;quot;redis-cli&amp;quot;, &amp;quot;ping&amp;quot;]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+&lt;ul&gt;&lt;li&gt;agentscope-network&lt;/li&gt;
+&lt;/ul&gt;
+  # ============================================================================
+  # 监控服务
+  # ============================================================================&lt;/p&gt;
+&lt;p&gt;# Prometheus 监控
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: agentscope-prometheus
+    restart: unless-stopped
+    ports:
+&lt;ul&gt;&lt;li&gt;&amp;quot;${PROMETHEUS_PORT:-9090}:9090&amp;quot;&lt;/li&gt;
+&lt;/ul&gt;    volumes:
+&lt;ul&gt;&lt;li&gt;./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml&lt;/li&gt;
+&lt;li&gt;prometheus-data:/prometheus&lt;/li&gt;
+&lt;/ul&gt;    command:
+&lt;ul&gt;&lt;li&gt;'--config.file=/etc/prometheus/prometheus.yml'&lt;/li&gt;
+&lt;li&gt;'--storage.tsdb.path=/prometheus'&lt;/li&gt;
+&lt;li&gt;'--storage.tsdb.retention.time=15d'&lt;/li&gt;
+&lt;li&gt;'--web.console.libraries=/usr/share/prometheus/console_libraries'&lt;/li&gt;
+&lt;li&gt;'--web.console.templates=/usr/share/prometheus/consoles'&lt;/li&gt;
+&lt;/ul&gt;    networks:
+&lt;ul&gt;&lt;li&gt;agentscope-network&lt;/li&gt;
+&lt;/ul&gt;
+  # Grafana 可视化
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: agentscope-grafana
+    restart: unless-stopped
+    ports:
+&lt;ul&gt;&lt;li&gt;&amp;quot;${GRAFANA_PORT:-3000}:3000&amp;quot;&lt;/li&gt;
+&lt;/ul&gt;    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
+      GF_USERS_ALLOW_SIGN_UP: false
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+    volumes:
+&lt;ul&gt;&lt;li&gt;grafana-data:/var/lib/grafana&lt;/li&gt;
+&lt;li&gt;./monitoring/dashboards:/etc/grafana/provisioning/dashboards&lt;/li&gt;
+&lt;li&gt;./monitoring/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml&lt;/li&gt;
+&lt;/ul&gt;    networks:
+&lt;ul&gt;&lt;li&gt;agentscope-network&lt;/li&gt;
+&lt;/ul&gt;
+  # OTel Collector
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.100.0
+    container_name: agentscope-otel-collector
+    restart: unless-stopped
+    ports:
+&lt;ul&gt;&lt;li&gt;&amp;quot;4317:4317&amp;quot;   # OTLP gRPC&lt;/li&gt;
+&lt;li&gt;&amp;quot;4318:4318&amp;quot;   # OTLP HTTP&lt;/li&gt;
+&lt;li&gt;&amp;quot;8889:8889&amp;quot;   # Prometheus metrics&lt;/li&gt;
+&lt;/ul&gt;    volumes:
+&lt;ul&gt;&lt;li&gt;./monitoring/otel-collector-config.yml:/etc/otelcol/config.yml&lt;/li&gt;
+&lt;/ul&gt;    command: [&amp;quot;--config=/etc/otelcol/config.yml&amp;quot;]
+    networks:
+&lt;ul&gt;&lt;li&gt;agentscope-network&lt;/li&gt;
+&lt;/ul&gt;
+  # ============================================================================
+  # 业务服务
+  # ============================================================================&lt;/p&gt;
+&lt;p&gt;# Supervisor Agent（主管理 Agent）
+  supervisor-agent:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: agentscope-supervisor-agent
+    restart: unless-stopped
+    ports:
+&lt;ul&gt;&lt;li&gt;&amp;quot;${SUPERVISOR_PORT:-10008}:10008&amp;quot;&lt;/li&gt;
+&lt;/ul&gt;    environment:
+      SERVER_PORT: 10008
+      # 模型配置
+      MODEL_PROVIDER: ${MODEL_PROVIDER:-dashscope}
+      MODEL_API_KEY: ${MODEL_API_KEY}
+      MODEL_NAME: ${MODEL_NAME:-qwen-max}
+      MODEL_BASE_URL: ${MODEL_BASE_URL:-}
+      # 数据库配置
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-multi_agent_demo}
+      DB_USERNAME: ${DB_USERNAME:-multi_agent_demo}
+      DB_PASSWORD: ${DB_PASSWORD:-multi_agent_demo@321}
+      # Nacos 配置
+      NACOS_SERVER_ADDR: nacos-server:8848
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-public}
+      NACOS_REGISTER_ENABLED: &amp;quot;true&amp;quot;
+      # Redis 配置（会话共享）
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # OpenTelemetry 配置
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: supervisor-agent
+      # JVM 参数
+      JAVA_OPTS: &amp;quot;-Xms1024m -Xmx2048m -XX:+UseG1GC&amp;quot;
+      # 关闭配置
+      SPRING_PROFILES_ACTIVE: production
+    depends_on:
+      mysql:
+        condition: service_healthy
+      nacos-server:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [&amp;quot;CMD&amp;quot;, &amp;quot;curl&amp;quot;, &amp;quot;-f&amp;quot;, &amp;quot;http://localhost:10008/actuator/health&amp;quot;]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+&lt;ul&gt;&lt;li&gt;agentscope-network&lt;/li&gt;
+&lt;/ul&gt;
+  # Business Sub Agent
+  business-sub-agent:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: agentscope-business-sub-agent
+    restart: unless-stopped
+    ports:
+&lt;ul&gt;&lt;li&gt;&amp;quot;${BUSINESS_AGENT_PORT:-10006}:10006&amp;quot;&lt;/li&gt;
+&lt;/ul&gt;    environment:
+      SERVER_PORT: 10006
+      MODEL_PROVIDER: ${MODEL_PROVIDER:-dashscope}
+      MODEL_API_KEY: ${MODEL_API_KEY}
+      MODEL_NAME: ${MODEL_NAME:-qwen-max}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-multi_agent_demo}
+      DB_USERNAME: ${DB_USERNAME:-multi_agent_demo}
+      DB_PASSWORD: ${DB_PASSWORD:-multi_agent_demo@321}
+      NACOS_SERVER_ADDR: nacos-server:8848
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-public}
+      NACOS_REGISTER_ENABLED: &amp;quot;true&amp;quot;
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: business-sub-agent
+      JAVA_OPTS: &amp;quot;-Xms512m -Xmx1024m -XX:+UseG1GC&amp;quot;
+      SPRING_PROFILES_ACTIVE: production
+    depends_on:
+      mysql:
+        condition: service_healthy
+      nacos-server:
+        condition: service_healthy
+    networks:
+&lt;ul&gt;&lt;li&gt;agentscope-network&lt;/li&gt;
+&lt;/ul&gt;
+  # Consult Sub Agent
+  consult-sub-agent:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: agentscope-consult-sub-agent
+    restart: unless-stopped
+    ports:
+&lt;ul&gt;&lt;li&gt;&amp;quot;${CONSULT_AGENT_PORT:-10005}:10005&amp;quot;&lt;/li&gt;
+&lt;/ul&gt;    environment:
+      SERVER_PORT: 10005
+      MODEL_PROVIDER: ${MODEL_PROVIDER:-dashscope}
+      MODEL_API_KEY: ${MODEL_API_KEY}
+      MODEL_NAME: ${MODEL_NAME:-qwen-max}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-multi_agent_demo}
+      DB_USERNAME: ${DB_USERNAME:-multi_agent_demo}
+      DB_PASSWORD: ${DB_PASSWORD:-multi_agent_demo@321}
+      NACOS_SERVER_ADDR: nacos-server:8848
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-public}
+      NACOS_REGISTER_ENABLED: &amp;quot;true&amp;quot;
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: consult-sub-agent
+      JAVA_OPTS: &amp;quot;-Xms512m -Xmx1024m -XX:+UseG1GC&amp;quot;
+      SPRING_PROFILES_ACTIVE: production
+    depends_on:
+      mysql:
+        condition: service_healthy
+      nacos-server:
+        condition: service_healthy
+    networks:
+&lt;ul&gt;&lt;li&gt;agentscope-network&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h1&gt;============================================================================&lt;/h1&gt;
+&lt;h1&gt;网络配置&lt;/h1&gt;
+&lt;h1&gt;============================================================================&lt;/h1&gt;
+networks:
+  agentscope-network:
+    driver: bridge
+    name: agentscope-network&lt;/p&gt;
+&lt;h1&gt;============================================================================&lt;/h1&gt;
+&lt;h1&gt;存储卷配置&lt;/h1&gt;
+&lt;h1&gt;============================================================================&lt;/h1&gt;
+volumes:
+  mysql-data:
+    name: agentscope-mysql-data
+  nacos-data:
+    name: agentscope-nacos-data
+  redis-data:
+    name: agentscope-redis-data
+  prometheus-data:
+    name: agentscope-prometheus-data
+  grafana-data:
+    name: agentscope-grafana-data
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;5.3 环境变量配置文件&lt;/h3&gt;
+&lt;p&gt;创建 &lt;code&gt;.env&lt;/code&gt; 文件（不要提交到版本控制）：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# .env.example - 环境变量配置示例
+&lt;h1&gt;==================== 数据库配置 ====================&lt;/h1&gt;
+DB_NAME=multi_agent_demo
+DB_USERNAME=multi_agent_demo
+DB_PASSWORD=your_secure_password_here
+&lt;h1&gt;==================== 服务端口 ====================&lt;/h1&gt;
+MYSQL_PORT=3306
+NACOS_PORT=8848
+NACOS_GRPC_PORT=9848
+REDIS_PORT=6379
+SUPERVISOR_PORT=10008
+BUSINESS_AGENT_PORT=10006
+CONSULT_AGENT_PORT=10005
+PROMETHEUS_PORT=9090
+GRAFANA_PORT=3000
+&lt;h1&gt;==================== Nacos 配置 ====================&lt;/h1&gt;
+NACOS_NAMESPACE=public
+&lt;h1&gt;==================== 模型配置 ====================&lt;/h1&gt;
+&lt;h1&gt;可选值: dashscope, openai, ollama, gemini&lt;/h1&gt;
+MODEL_PROVIDER=dashscope
+MODEL_API_KEY=your_model_api_key
+MODEL_NAME=qwen-max
+&lt;h1&gt;==================== 监控配置 ====================&lt;/h1&gt;
+GRAFANA_PASSWORD=your_grafana_password
+&lt;h1&gt;==================== 镜像仓库 ====================&lt;/h1&gt;
+IMAGE_REGISTRY=registry.cn-hangzhou.aliyuncs.com/agentscope
+IMAGE_TAG=1.0.0
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;5.4 Prometheus 配置文件&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# monitoring/prometheus.yml
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+&lt;p&gt;alerting:
+  alertmanagers:
+&lt;ul&gt;&lt;li&gt;static_configs:&lt;/li&gt;
+&lt;li&gt;targets: []&lt;/li&gt;
+&lt;/ul&gt;
+rule_files: []&lt;/p&gt;
+&lt;p&gt;scrape_configs:
+  # Prometheus 自身指标
+&lt;ul&gt;&lt;li&gt;job_name: 'prometheus'&lt;/li&gt;
+&lt;/ul&gt;    static_configs:
+&lt;ul&gt;&lt;li&gt;targets: ['localhost:9090']&lt;/li&gt;
+&lt;/ul&gt;
+  # OTel Collector 指标
+&lt;ul&gt;&lt;li&gt;job_name: 'otel-collector'&lt;/li&gt;
+&lt;/ul&gt;    static_configs:
+&lt;ul&gt;&lt;li&gt;targets: ['otel-collector:8889']&lt;/li&gt;
+&lt;/ul&gt;
+  # Spring Boot Actuator 指标
+&lt;ul&gt;&lt;li&gt;job_name: 'spring-boot-actuator'&lt;/li&gt;
+&lt;/ul&gt;    metrics_path: /actuator/prometheus
+    static_configs:
+      # Supervisor Agent
+&lt;ul&gt;&lt;li&gt;targets: ['supervisor-agent:10008']&lt;/li&gt;
+&lt;/ul&gt;        labels:
+          application: supervisor-agent
+          environment: production
+      # Business Sub Agent
+&lt;ul&gt;&lt;li&gt;targets: ['business-sub-agent:10006']&lt;/li&gt;
+&lt;/ul&gt;        labels:
+          application: business-sub-agent
+          environment: production
+      # Consult Sub Agent
+&lt;ul&gt;&lt;li&gt;targets: ['consult-sub-agent:10005']&lt;/li&gt;
+&lt;/ul&gt;        labels:
+          application: consult-sub-agent
+          environment: production&lt;/p&gt;
+&lt;p&gt;# JMX Exporter 指标
+&lt;ul&gt;&lt;li&gt;job_name: 'jmx-exporter'&lt;/li&gt;
+&lt;/ul&gt;    static_configs:
+&lt;ul&gt;&lt;li&gt;targets: ['supervisor-agent:9404']&lt;/li&gt;
+&lt;/ul&gt;        labels:
+          application: supervisor-agent
+&lt;ul&gt;&lt;li&gt;targets: ['business-sub-agent:9404']&lt;/li&gt;
+&lt;/ul&gt;        labels:
+          application: business-sub-agent
+&lt;ul&gt;&lt;li&gt;targets: ['consult-sub-agent:9404']&lt;/li&gt;
+&lt;/ul&gt;        labels:
+          application: consult-sub-agent
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;5.5 OTel Collector 配置文件&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# monitoring/otel-collector-config.yml
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+receivers:
+  # OTLP 接收器
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+&lt;p&gt;# Prometheus 接收器
+  prometheus:
+    config:
+      global:
+        scrape_interval: 15s
+      scrape_configs:
+&lt;ul&gt;&lt;li&gt;job_name: 'spring-boot-apps'&lt;/li&gt;
+&lt;/ul&gt;          static_configs:
+&lt;ul&gt;&lt;li&gt;targets: ['supervisor-agent:10008', 'business-sub-agent:10006', 'consult-sub-agent:10005']&lt;/li&gt;
+&lt;/ul&gt;              labels:
+                service: agentscope&lt;/p&gt;
+&lt;p&gt;processors:
+  # 批处理
+  batch:
+    timeout: 10s
+    send_batch_size: 1024&lt;/p&gt;
+&lt;p&gt;# 内存限制
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128&lt;/p&gt;
+&lt;p&gt;# 属性过滤
+  filter:
+    metrics:
+      exclude:
+        match_type: strict
+        metric_names:
+&lt;ul&gt;&lt;li&gt;'otel.*'&lt;/li&gt;
+&lt;li&gt;'process.*'&lt;/li&gt;
+&lt;/ul&gt;
+  # 资源属性
+  resource:
+    attributes:
+&lt;ul&gt;&lt;li&gt;action: upsert&lt;/li&gt;
+&lt;/ul&gt;        key: deployment.environment
+        value: production
+&lt;ul&gt;&lt;li&gt;action: upsert&lt;/li&gt;
+&lt;/ul&gt;        key: service.namespace
+        value: agentscope&lt;/p&gt;
+&lt;p&gt;exporters:
+  # Prometheus 导出（供下游 Prometheus 抓取）
+  prometheus:
+    endpoint: &amp;quot;0.0.0.0:8889&amp;quot;
+    namespace: agentscope
+    const_labels:
+      environment: production&lt;/p&gt;
+&lt;p&gt;# 日志导出（开发调试）
+  logging:
+    verbosity: basic
+    sampling_initial: 5
+    sampling_thereafter: 200&lt;/p&gt;
+&lt;p&gt;service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [logging]&lt;/p&gt;
+&lt;p&gt;metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, batch, resource]
+      exporters: [prometheus, logging]&lt;/p&gt;
+&lt;p&gt;logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [logging]
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;5.6 Grafana 数据源配置&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# monitoring/datasources.yml
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+apiVersion: 1
+&lt;p&gt;datasources:
+&lt;ul&gt;&lt;li&gt;name: Prometheus&lt;/li&gt;
+&lt;/ul&gt;    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    uid: prometheus
+&lt;ul&gt;&lt;li&gt;name: Loki&lt;/li&gt;
+&lt;/ul&gt;    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
+    uid: loki
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;5.7 启动脚本&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;#!/bin/bash
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+&lt;h1&gt;AgentScope 生产环境启动脚本&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+&lt;p&gt;set -e&lt;/p&gt;
+&lt;h1&gt;颜色输出&lt;/h1&gt;
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+&lt;p&gt;log_info() {
+    echo -e &amp;quot;${GREEN}[INFO]${NC} $1&amp;quot;
+}&lt;/p&gt;
+&lt;p&gt;log_warn() {
+    echo -e &amp;quot;${YELLOW}[WARN]${NC} $1&amp;quot;
+}&lt;/p&gt;
+&lt;p&gt;log_error() {
+    echo -e &amp;quot;${RED}[ERROR]${NC} $1&amp;quot;
+}&lt;/p&gt;
+&lt;h1&gt;检查环境变量&lt;/h1&gt;
+check_env() {
+    log_info &amp;quot;检查环境变量...&amp;quot;
+&lt;p&gt;if [ -z &amp;quot;$MODEL_API_KEY&amp;quot; ]; then
+        log_error &amp;quot;请设置 MODEL_API_KEY 环境变量&amp;quot;
+        exit 1
+    fi&lt;/p&gt;
+&lt;p&gt;log_info &amp;quot;环境变量检查通过&amp;quot;
+}&lt;/p&gt;
+&lt;h1&gt;构建镜像&lt;/h1&gt;
+build_images() {
+    log_info &amp;quot;构建 Docker 镜像...&amp;quot;
+&lt;p&gt;if [ -d &amp;quot;../supervisor-agent&amp;quot; ]; then
+        log_info &amp;quot;构建 Supervisor Agent 镜像...&amp;quot;
+        cd ../supervisor-agent
+        ./mvnw clean package -DskipTests -B
+        docker build -t agentscope/supervisor-agent:latest -f ../docker/Dockerfile ..
+    fi&lt;/p&gt;
+&lt;p&gt;cd - &amp;gt; /dev/null
+}&lt;/p&gt;
+&lt;h1&gt;启动服务&lt;/h1&gt;
+start_services() {
+    log_info &amp;quot;启动服务...&amp;quot;
+    docker-compose up -d
+&lt;p&gt;log_info &amp;quot;等待服务就绪...&amp;quot;
+    sleep 10&lt;/p&gt;
+&lt;p&gt;# 检查健康状态
+    check_health
+}&lt;/p&gt;
+&lt;h1&gt;检查健康状态&lt;/h1&gt;
+check_health() {
+    log_info &amp;quot;检查服务健康状态...&amp;quot;
+&lt;p&gt;local services=(&amp;quot;mysql&amp;quot; &amp;quot;nacos-server&amp;quot; &amp;quot;redis&amp;quot; &amp;quot;supervisor-agent&amp;quot;)&lt;/p&gt;
+&lt;p&gt;for service in &amp;quot;${services[@]}&amp;quot;; do
+        local max_attempts=30
+        local attempt=0&lt;/p&gt;
+&lt;p&gt;while [ $attempt -lt $max_attempts ]; do
+            if docker ps --format '{{.Names}}' | grep -q &amp;quot;${service}&amp;quot;; then
+                log_info &amp;quot;${service} 已启动&amp;quot;
+                break
+            fi
+            attempt=$((attempt + 1))
+            sleep 2
+        done&lt;/p&gt;
+&lt;p&gt;if [ $attempt -eq $max_attempts ]; then
+            log_error &amp;quot;${service} 启动超时&amp;quot;
+        fi
+    done
+}&lt;/p&gt;
+&lt;h1&gt;显示服务状态&lt;/h1&gt;
+show_status() {
+    echo &amp;quot;&amp;quot;
+    log_info &amp;quot;========== 服务状态 ==========&amp;quot;
+    docker-compose ps
+    echo &amp;quot;&amp;quot;
+    log_info &amp;quot;========== 访问地址 ==========&amp;quot;
+    echo &amp;quot;Supervisor Agent: http://localhost:10008&amp;quot;
+    echo &amp;quot;Nacos:           http://localhost:8848/nacos&amp;quot;
+    echo &amp;quot;Prometheus:      http://localhost:9090&amp;quot;
+    echo &amp;quot;Grafana:         http://localhost:3000&amp;quot;
+    echo &amp;quot;&amp;quot;
+    log_info &amp;quot;默认账号: admin / admin123&amp;quot;
+    echo &amp;quot;===============================&amp;quot;
+}
+&lt;h1&gt;主函数&lt;/h1&gt;
+main() {
+    log_info &amp;quot;========== AgentScope 生产环境启动 ==========&amp;quot;
+&lt;p&gt;check_env&lt;/p&gt;
+&lt;p&gt;if [ &amp;quot;$1&amp;quot; == &amp;quot;--build&amp;quot; ]; then
+        build_images
+    fi&lt;/p&gt;
+&lt;p&gt;start_services
+    show_status&lt;/p&gt;
+&lt;p&gt;log_info &amp;quot;启动完成!&amp;quot;
+}&lt;/p&gt;
+&lt;h1&gt;执行主函数&lt;/h1&gt;
+main &amp;quot;$@&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;5.8 生产环境检查清单&lt;/h3&gt;
+&lt;p&gt;在部署到生产环境前，请确保完成以下检查：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-markdown&quot;&gt;## 生产环境部署检查清单
+&lt;h3&gt;镜像构建&lt;/h3&gt;
+&lt;ul&gt;&lt;li&gt;[ ] 使用生产版本 tag（非 latest）&lt;/li&gt;
+&lt;li&gt;[ ] 镜像已推送到私有仓库&lt;/li&gt;
+&lt;li&gt;[ ] 镜像签名验证（如启用）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;配置验证&lt;/h3&gt;
+&lt;ul&gt;&lt;li&gt;[ ] 所有敏感信息使用 Secret 管理&lt;/li&gt;
+&lt;li&gt;[ ] 数据库密码已修改为强密码&lt;/li&gt;
+&lt;li&gt;[ ] API Keys 已配置（从 Secret 或 Vault 读取）&lt;/li&gt;
+&lt;li&gt;[ ] 域名和端口配置正确&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;Kubernetes 配置&lt;/h3&gt;
+&lt;ul&gt;&lt;li&gt;[ ] Resources requests/limits 已设置&lt;/li&gt;
+&lt;li&gt;[ ] Liveness/Readiness Probe 已配置&lt;/li&gt;
+&lt;li&gt;[ ] 滚动更新策略已设置&lt;/li&gt;
+&lt;li&gt;[ ] 终止宽限期合理（建议 60s）&lt;/li&gt;
+&lt;li&gt;[ ] HPA 配置已验证&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;监控告警&lt;/h3&gt;
+&lt;ul&gt;&lt;li&gt;[ ] Prometheus 配置已验证&lt;/li&gt;
+&lt;li&gt;[ ] Grafana Dashboard 已导入&lt;/li&gt;
+&lt;li&gt;[ ] 告警规则已配置&lt;/li&gt;
+&lt;li&gt;[ ] 通知渠道已设置（邮件/钉钉/Slack）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;备份恢复&lt;/h3&gt;
+&lt;ul&gt;&lt;li&gt;[ ] 数据库备份策略已配置&lt;/li&gt;
+&lt;li&gt;[ ] 配置文件备份已设置&lt;/li&gt;
+&lt;li&gt;[ ] 恢复流程已测试&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;安全&lt;/h3&gt;
+&lt;ul&gt;&lt;li&gt;[ ] 网络策略已配置&lt;/li&gt;
+&lt;li&gt;[ ] RBAC 权限已设置&lt;/li&gt;
+&lt;li&gt;[ ] 容器使用非 root 用户运行&lt;/li&gt;
+&lt;li&gt;[ ] TLS/SSL 证书已配置&lt;/li&gt;
+&lt;/ul&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;本章小结&lt;/h2&gt;
+&lt;p&gt;本章详细介绍了 AgentScope Java 应用的生产环境部署方案，涵盖以下核心内容：&lt;/p&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;主题&lt;/th&gt;&lt;th&gt;关键要点&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;**Docker 容器化**&lt;/td&gt;&lt;td&gt;多阶段构建、安全配置（非 root 用户）、健康检查、资源限制&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**Kubernetes 部署**&lt;/td&gt;&lt;td&gt;Deployment 配置、HPA 自动扩缩容、ConfigMap/Secret 管理、Helm Chart&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**监控与追踪**&lt;/td&gt;&lt;td&gt;OpenTelemetry 集成、Prometheus 指标抓取、Grafana 可视化、JMX Exporter&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**优雅关闭**&lt;/td&gt;&lt;td&gt;Spring Boot 关闭配置、GracefulShutdownManager、生命周期钩子、K8s preStop&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**生产环境案例**&lt;/td&gt;&lt;td&gt;Docker Compose 开发环境、完整 Kubernetes 配置、监控栈集成&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;**最佳实践建议**：&lt;/p&gt;
+&lt;p&gt;1. **镜像优化**：使用多阶段构建、减小镜像体积、避免使用 latest tag
+2. **资源配置**：生产环境必须设置 CPU/内存 limits，避免资源耗尽
+3. **健康检查**：配置 Liveness 和 Readiness Probe，确保 K8s 正确管理 Pod 生命周期
+4. **监控覆盖**：JVM 指标、业务指标、追踪全覆盖，提前发现和定位问题
+5. **优雅关闭**：合理设置 terminationGracePeriodSeconds，确保正在处理的请求能够完成&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;参考资料&lt;/h2&gt;
+&lt;ul&gt;&lt;li&gt;&lt;a href=&quot;https://docs.docker.com/&quot;&gt;Docker 官方文档&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://kubernetes.io/zh/docs/&quot;&gt;Kubernetes 官方文档&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://opentelemetry.io/docs/&quot;&gt;OpenTelemetry 官方文档&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html&quot;&gt;Spring Boot 生产特性&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://prometheus.io/docs/introduction/overview/&quot;&gt;Prometheus 官方文档&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://grafana.com/docs/&quot;&gt;Grafana 官方文档&lt;/a&gt;&lt;/li&gt;&lt;/ul&gt;
+</body>
+</html>

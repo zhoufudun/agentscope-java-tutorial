@@ -1,0 +1,1766 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第十六章：Spring Boot 集成</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        h3 { color: #7f8c8d; }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+        }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+        table {
+            border-collapse: collapse;
+            margin: 20px 0;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th { background: #3498db; color: white; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        ul { padding-left: 20px; }
+        li { margin: 5px 0; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            color: #666;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+&lt;h1&gt;第十六章：Spring Boot 集成&lt;/h1&gt;
+&lt;p&gt;&gt; 本章讲解如何将 AgentScope Java 与 Spring Boot 3 深度集成，通过 starters 实现零配置自动装配，并构建符合 OpenAI Chat Completions 标准的 HTTP API 服务。&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;16.1 Spring Boot Starter 配置&lt;/h2&gt;
+&lt;p&gt;AgentScope Java 提供了一组 Spring Boot Starters，封装了核心组件的自动装配逻辑，让你无需手动创建 Model、Memory、Toolkit、ReActAgent 等 Bean，开箱即用。&lt;/p&gt;
+&lt;h3&gt;16.1.1 Starter 模块总览&lt;/h3&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Starter&lt;/th&gt;&lt;th&gt;描述&lt;/th&gt;&lt;th&gt;核心功能&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;agentscope-spring-boot-starter&lt;/code&gt;&lt;/td&gt;&lt;td&gt;核心 Starter&lt;/td&gt;&lt;td&gt;自动装配 Model、Memory、Toolkit、ReActAgent&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;agentscope-chat-completions-web-starter&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Chat Completions API&lt;/td&gt;&lt;td&gt;暴露 OpenAI 兼容的 &lt;code&gt;/v1/chat/completions&lt;/code&gt; 端点&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;agentscope-agui-spring-boot-starter&lt;/code&gt;&lt;/td&gt;&lt;td&gt;AG-UI 协议支持&lt;/td&gt;&lt;td&gt;支持 AG-UI 协议的 Agent 运行接口&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;agentscope-a2a-spring-boot-starter&lt;/code&gt;&lt;/td&gt;&lt;td&gt;A2A 协议支持&lt;/td&gt;&lt;td&gt;Agent-to-Agent 通信的 HTTP 接口&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;agentscope-nacos-spring-boot-starter&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Nacos 集成&lt;/td&gt;&lt;td&gt;配置中心与服务注册发现&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;h3&gt;16.1.2 添加 Maven 依赖&lt;/h3&gt;
+&lt;p&gt;在 &lt;code&gt;pom.xml&lt;/code&gt; 中引入核心 Starter 和 Chat Completions Web Starter：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot;?&amp;gt;
+&amp;lt;project xmlns=&amp;quot;http://maven.apache.org/POM/4.0.0&amp;quot;
+         xmlns:xsi=&amp;quot;http://www.w3.org/2001/XMLSchema-instance&amp;quot;
+         xsi:schemaLocation=&amp;quot;http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd&amp;quot;&amp;gt;
+    &amp;lt;modelVersion&amp;gt;4.0.0&amp;lt;/modelVersion&amp;gt;
+&lt;p&gt;&amp;lt;parent&amp;gt;
+        &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+        &amp;lt;artifactId&amp;gt;spring-boot-starter-parent&amp;lt;/artifactId&amp;gt;
+        &amp;lt;version&amp;gt;3.3.0&amp;lt;/version&amp;gt;
+    &amp;lt;/parent&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;groupId&amp;gt;io.agentscope.tutorial&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;chapter16-agent-api-service&amp;lt;/artifactId&amp;gt;
+    &amp;lt;version&amp;gt;1.0.0&amp;lt;/version&amp;gt;
+    &amp;lt;packaging&amp;gt;jar&amp;lt;/packaging&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;name&amp;gt;Chapter 16 - Agent API Service&amp;lt;/name&amp;gt;
+    &amp;lt;description&amp;gt;基于 Spring Boot 3 的 AgentScope API 服务&amp;lt;/description&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;properties&amp;gt;
+        &amp;lt;java.version&amp;gt;21&amp;lt;/java.version&amp;gt;
+        &amp;lt;maven.compiler.source&amp;gt;21&amp;lt;/maven.compiler.source&amp;gt;
+        &amp;lt;maven.compiler.target&amp;gt;21&amp;lt;/maven.compiler.target&amp;gt;
+        &amp;lt;project.build.sourceEncoding&amp;gt;UTF-8&amp;lt;/project.build.sourceEncoding&amp;gt;
+    &amp;lt;/properties&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;dependencies&amp;gt;
+        &amp;lt;!-- Spring Boot Web 依赖 --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-starter-web&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- Spring Boot 配置处理器（生成配置元数据） --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-configuration-processor&amp;lt;/artifactId&amp;gt;
+            &amp;lt;optional&amp;gt;true&amp;lt;/optional&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- AgentScope 核心 Starter（自动装配 Model、Agent 等组件） --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-spring-boot-starter&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;${agentscope.version}&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- AgentScope Chat Completions Web Starter（HTTP API） --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-chat-completions-web-starter&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;${agentscope.version}&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- Spring Boot JDBC（用于 H2 会话管理） --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-starter-jdbc&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- H2 数据库（内存会话存储） --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;com.h2database&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;h2&amp;lt;/artifactId&amp;gt;
+            &amp;lt;scope&amp;gt;runtime&amp;lt;/scope&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- Lombok（简化代码） --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.projectlombok&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;lombok&amp;lt;/artifactId&amp;gt;
+            &amp;lt;optional&amp;gt;true&amp;lt;/optional&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- 测试依赖 --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-starter-test&amp;lt;/artifactId&amp;gt;
+            &amp;lt;scope&amp;gt;test&amp;lt;/scope&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+    &amp;lt;/dependencies&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;dependencyManagement&amp;gt;
+        &amp;lt;dependencies&amp;gt;
+            &amp;lt;dependency&amp;gt;
+                &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+                &amp;lt;artifactId&amp;gt;agentscope-bom&amp;lt;/artifactId&amp;gt;
+                &amp;lt;version&amp;gt;${agentscope.version}&amp;lt;/version&amp;gt;
+                &amp;lt;type&amp;gt;pom&amp;lt;/type&amp;gt;
+                &amp;lt;scope&amp;gt;import&amp;lt;/scope&amp;gt;
+            &amp;lt;/dependency&amp;gt;
+        &amp;lt;/dependencies&amp;gt;
+    &amp;lt;/dependencyManagement&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;build&amp;gt;
+        &amp;lt;plugins&amp;gt;
+            &amp;lt;plugin&amp;gt;
+                &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+                &amp;lt;artifactId&amp;gt;spring-boot-maven-plugin&amp;lt;/artifactId&amp;gt;
+                &amp;lt;configuration&amp;gt;
+                    &amp;lt;excludes&amp;gt;
+                        &amp;lt;exclude&amp;gt;
+                            &amp;lt;groupId&amp;gt;org.projectlombok&amp;lt;/groupId&amp;gt;
+                            &amp;lt;artifactId&amp;gt;lombok&amp;lt;/artifactId&amp;gt;
+                        &amp;lt;/exclude&amp;gt;
+                    &amp;lt;/excludes&amp;gt;
+                &amp;lt;/configuration&amp;gt;
+            &amp;lt;/plugin&amp;gt;
+        &amp;lt;/plugins&amp;gt;
+    &amp;lt;/build&amp;gt;
+&amp;lt;/project&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;16.2 自动装配机制&lt;/h2&gt;
+&lt;p&gt;AgentScope 的自动装配基于 Spring Boot 的 &lt;code&gt;@AutoConfiguration&lt;/code&gt; 和 &lt;code&gt;@ConfigurationProperties&lt;/code&gt; 机制实现，遵循&quot;约定优于配置&quot;原则。&lt;/p&gt;
+&lt;h3&gt;16.2.1 核心自动配置类&lt;/h3&gt;
+&lt;code&gt;AgentscopeAutoConfiguration&lt;/code&gt; 是核心配置类，它在 &lt;code&gt;META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports&lt;/code&gt; 中声明，Spring Boot 启动时自动加载。
+&lt;p&gt;关键设计：&lt;/p&gt;
+&lt;p&gt;**1. 原型作用域的组件 Bean**&lt;/p&gt;
+&lt;p&gt;由于 ReActAgent、Memory、Toolkit 都是**有状态且非线程安全**的，它们被注册为 &lt;code&gt;prototype&lt;/code&gt; 作用域 Bean，确保每个请求获得独立实例：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;/**
+ * Memory Bean - 原型作用域，每次注入创建新实例
+ * 有状态，非线程安全，每个会话独立使用
+ */
+@Bean
+@ConditionalOnProperty(prefix = &amp;quot;agentscope.agent&amp;quot;, name = &amp;quot;enabled&amp;quot;, havingValue = &amp;quot;true&amp;quot;)
+@ConditionalOnMissingBean
+@Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
+public Memory agentscopeMemory() {
+    return new InMemoryMemory();
+}
+&lt;p&gt;/**
+ * ReActAgent Bean - 原型作用域
+ * 在 Controller/Service 中通过 ObjectProvider&amp;lt;ReActAgent&amp;gt; 按需获取
+ */
+@Bean
+@ConditionalOnMissingBean
+@ConditionalOnProperty(prefix = &amp;quot;agentscope.agent&amp;quot;, name = &amp;quot;enabled&amp;quot;, havingValue = &amp;quot;true&amp;quot;)
+@Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
+public ReActAgent agentscopeReActAgent(
+        Model model, Memory memory, Toolkit toolkit, AgentscopeProperties properties) {
+    AgentProperties config = properties.getAgent();
+    return ReActAgent.builder()
+            .name(config.getName())
+            .sysPrompt(config.getSysPrompt())
+            .model(model)
+            .memory(memory)
+            .toolkit(toolkit)
+            .maxIters(config.getMaxIters())
+            .build();
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**2. 多模型提供商支持**&lt;/p&gt;
+&lt;p&gt;通过 &lt;code&gt;ModelProviderType&lt;/code&gt; 枚举根据配置自动选择模型客户端：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;public enum ModelProviderType {
+    DASHSCOPE,  // 阿里云百炼
+    OPENAI,     // OpenAI 及兼容 API
+    GEMINI,     // Google Gemini
+    ANTHROPIC;  // Anthropic Claude
+&lt;p&gt;public static ModelProviderType fromProperties(AgentscopeProperties properties) {
+        ModelProperties modelConfig = properties.getModel();
+        String provider = modelConfig.getProvider();
+        if (provider != null) {
+            try {
+                return ModelProviderType.valueOf(provider.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                // 默认使用 DashScope
+            }
+        }
+        return DASHSCOPE;
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;16.2.2 配置属性绑定&lt;/h3&gt;
+&lt;p&gt;所有配置通过 &lt;code&gt;application.yml&lt;/code&gt; 中的 &lt;code&gt;agentscope.*&lt;/code&gt; 前缀统一管理：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;agentscope:
+  # 模型提供商配置
+  model:
+    provider: dashscope  # dashscope | openai | gemini | anthropic
+&lt;p&gt;# 阿里云百炼配置（默认）
+  dashscope:
+    enabled: true
+    api-key: ${DASHSCOPE_API_KEY}
+    model-name: qwen-plus
+    stream: true
+    enable-thinking: true&lt;/p&gt;
+&lt;p&gt;# OpenAI 配置（备选）
+  # openai:
+  #   enabled: true
+  #   api-key: ${OPENAI_API_KEY}
+  #   model-name: gpt-4.1-mini
+  #   base-url: https://api.openai.com/v1&lt;/p&gt;
+&lt;p&gt;# 默认 Agent 配置
+  agent:
+    enabled: true
+    name: &amp;quot;Assistant&amp;quot;
+    sys-prompt: &amp;quot;你是一个有帮助的AI助手。&amp;quot;
+    max-iters: 10
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;配置属性类采用分层结构，&lt;code&gt;AgentscopeProperties&lt;/code&gt; 作为根节点，包含各子模块的配置类（&lt;code&gt;AgentProperties&lt;/code&gt;、&lt;code&gt;DashscopeProperties&lt;/code&gt;、&lt;code&gt;OpenAIProperties&lt;/code&gt; 等）。&lt;/p&gt;
+&lt;h3&gt;16.2.3 条件装配逻辑&lt;/h3&gt;
+&lt;p&gt;自动配置使用多个条件注解实现灵活装配：&lt;/p&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;条件注解&lt;/th&gt;&lt;th&gt;作用&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;@ConditionalOnClass&lt;/code&gt;&lt;/td&gt;&lt;td&gt;仅当类路径存在相应类时才加载配置&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;@ConditionalOnProperty&lt;/code&gt;&lt;/td&gt;&lt;td&gt;仅当配置属性满足条件时才生效&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;@ConditionalOnMissingBean&lt;/code&gt;&lt;/td&gt;&lt;td&gt;仅当同类型 Bean 不存在时才创建&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;这确保了：
+&lt;ul&gt;&lt;li&gt;当模型 SDK 在类路径中时自动配置对应模型&lt;/li&gt;
+&lt;li&gt;用户可以通过自定义 Bean 覆盖默认配置&lt;/li&gt;
+&lt;li&gt;各 Starter 之间可以无缝协作&lt;/li&gt;
+&lt;/ul&gt;
+---&lt;/p&gt;
+&lt;h2&gt;16.3 Web API 暴露&lt;/h2&gt;
+&lt;p&gt;AgentScope 提供了多种 Web API 暴露方式，可以将 Agent 能力以 HTTP 接口形式对外提供服务。&lt;/p&gt;
+&lt;h3&gt;16.3.1 REST API 端点设计&lt;/h3&gt;
+&lt;p&gt;典型的 Agent HTTP API 设计：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;POST /api/v1/agent/chat        - 发送对话请求
+GET  /api/v1/agent/sessions    - 获取会话列表
+GET  /api/v1/agent/sessions/{id} - 获取特定会话历史
+DELETE /api/v1/agent/sessions/{id} - 删除会话
+POST /api/v1/agent/sessions/{id}/reset - 重置会话
+GET  /api/v1/agent/tools       - 获取可用工具列表
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;16.3.2 会话管理设计&lt;/h3&gt;
+&lt;p&gt;使用 H2 数据库管理会话状态：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;-- 会话表
+CREATE TABLE agent_sessions (
+    id          VARCHAR(36) PRIMARY KEY,
+    name        VARCHAR(255),
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    metadata    TEXT
+);
+&lt;p&gt;-- 消息历史表
+CREATE TABLE session_messages (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    session_id  VARCHAR(36) NOT NULL,
+    role        VARCHAR(20) NOT NULL,  -- system | user | assistant | tool
+    content     TEXT NOT NULL,
+    tool_call_id VARCHAR(255),
+    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE
+);&lt;/p&gt;
+&lt;p&gt;-- 索引
+CREATE INDEX idx_messages_session ON session_messages(session_id);
+CREATE INDEX idx_messages_created ON session_messages(created_at);
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;16.4 Chat Completions Web 接口&lt;/h2&gt;
+&lt;code&gt;agentscope-chat-completions-web-starter&lt;/code&gt; 自动暴露了一个与 OpenAI Chat Completions API 完全兼容的 HTTP 端点。
+&lt;h3&gt;16.4.1 接口规范&lt;/h3&gt;
+&lt;p&gt;**端点**: &lt;code&gt;POST /v1/chat/completions&lt;/code&gt;&lt;/p&gt;
+&lt;p&gt;**请求格式**（与 OpenAI Chat Completions API 兼容）:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-json&quot;&gt;{
+  &amp;quot;model&amp;quot;: &amp;quot;qwen-plus&amp;quot;,
+  &amp;quot;messages&amp;quot;: [
+    {&amp;quot;role&amp;quot;: &amp;quot;system&amp;quot;, &amp;quot;content&amp;quot;: &amp;quot;你是一个有帮助的助手。&amp;quot;},
+    {&amp;quot;role&amp;quot;: &amp;quot;user&amp;quot;, &amp;quot;content&amp;quot;: &amp;quot;你好，请介绍一下你自己。&amp;quot;}
+  ],
+  &amp;quot;temperature&amp;quot;: 0.7,
+  &amp;quot;max_tokens&amp;quot;: 1000,
+  &amp;quot;stream&amp;quot;: false,
+  &amp;quot;tools&amp;quot;: [
+    {
+      &amp;quot;type&amp;quot;: &amp;quot;function&amp;quot;,
+      &amp;quot;function&amp;quot;: {
+        &amp;quot;name&amp;quot;: &amp;quot;get_weather&amp;quot;,
+        &amp;quot;description&amp;quot;: &amp;quot;获取指定城市的天气信息&amp;quot;,
+        &amp;quot;parameters&amp;quot;: {
+          &amp;quot;type&amp;quot;: &amp;quot;object&amp;quot;,
+          &amp;quot;properties&amp;quot;: {
+            &amp;quot;city&amp;quot;: {&amp;quot;type&amp;quot;: &amp;quot;string&amp;quot;, &amp;quot;description&amp;quot;: &amp;quot;城市名称&amp;quot;}
+          },
+          &amp;quot;required&amp;quot;: [&amp;quot;city&amp;quot;]
+        }
+      }
+    }
+  ]
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**响应格式**（非流式）:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-json&quot;&gt;{
+  &amp;quot;id&amp;quot;: &amp;quot;chatcmpl-xxxx&amp;quot;,
+  &amp;quot;object&amp;quot;: &amp;quot;chat.completion&amp;quot;,
+  &amp;quot;created&amp;quot;: 1234567890,
+  &amp;quot;model&amp;quot;: &amp;quot;qwen-plus&amp;quot;,
+  &amp;quot;choices&amp;quot;: [
+    {
+      &amp;quot;index&amp;quot;: 0,
+      &amp;quot;message&amp;quot;: {
+        &amp;quot;role&amp;quot;: &amp;quot;assistant&amp;quot;,
+        &amp;quot;content&amp;quot;: &amp;quot;你好！我是一个AI助手...&amp;quot;
+      },
+      &amp;quot;finish_reason&amp;quot;: &amp;quot;stop&amp;quot;
+    }
+  ],
+  &amp;quot;usage&amp;quot;: {
+    &amp;quot;prompt_tokens&amp;quot;: 50,
+    &amp;quot;completion_tokens&amp;quot;: 120,
+    &amp;quot;total_tokens&amp;quot;: 170
+  }
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**SSE 流式响应**:&lt;/p&gt;
+&lt;p&gt;当 &lt;code&gt;stream: true&lt;/code&gt; 或请求头 &lt;code&gt;Accept: text/event-stream&lt;/code&gt; 时，返回 Server-Sent Events 流：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;event: chat.completion.chunk
+data: {&amp;quot;id&amp;quot;:&amp;quot;chatcmpl-xxxx&amp;quot;,&amp;quot;object&amp;quot;:&amp;quot;chat.completion.chunk&amp;quot;,&amp;quot;created&amp;quot;:1234567890,&amp;quot;model&amp;quot;:&amp;quot;qwen-plus&amp;quot;,&amp;quot;choices&amp;quot;:[{&amp;quot;index&amp;quot;:0,&amp;quot;delta&amp;quot;:{&amp;quot;content&amp;quot;:&amp;quot;你&amp;quot;},&amp;quot;finish_reason&amp;quot;:null}]}
+&lt;p&gt;event: chat.completion.chunk
+data: {&amp;quot;id&amp;quot;:&amp;quot;chatcmpl-xxxx&amp;quot;,&amp;quot;object&amp;quot;:&amp;quot;chat.completion.chunk&amp;quot;,&amp;quot;created&amp;quot;:1234567890,&amp;quot;model&amp;quot;:&amp;quot;qwen-plus&amp;quot;,&amp;quot;choices&amp;quot;:[{&amp;quot;index&amp;quot;:0,&amp;quot;delta&amp;quot;:{&amp;quot;content&amp;quot;:&amp;quot;好&amp;quot;},&amp;quot;finish_reason&amp;quot;:null}]}&lt;/p&gt;
+&lt;p&gt;event: chat.completion
+data: [DONE]
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;16.4.2 自动配置原理&lt;/h3&gt;
+&lt;code&gt;ChatCompletionsWebAutoConfiguration&lt;/code&gt; 负责创建所有相关组件：
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;@AutoConfiguration
+@EnableConfigurationProperties(ChatCompletionsProperties.class)
+@ConditionalOnProperty(
+    prefix = &amp;quot;agentscope.chat-completions&amp;quot;,
+    name = &amp;quot;enabled&amp;quot;,
+    havingValue = &amp;quot;true&amp;quot;,
+    matchIfMissing = true)
+@ConditionalOnClass(ReActAgent.class)
+public class ChatCompletionsWebAutoConfiguration {
+&lt;p&gt;// 消息转换器：将 HTTP DTO 转为框架消息
+    @Bean
+    @ConditionalOnMissingBean
+    public ChatMessageConverter chatMessageConverter() { ... }&lt;/p&gt;
+&lt;p&gt;// 响应构建器：构建 OpenAI 格式响应
+    @Bean
+    @ConditionalOnMissingBean
+    public ChatCompletionsResponseBuilder chatCompletionsResponseBuilder() { ... }&lt;/p&gt;
+&lt;p&gt;// 流式服务：将 agent 响应转为 SSE
+    @Bean
+    @ConditionalOnMissingBean
+    public ChatCompletionsStreamingService chatCompletionsStreamingService(...) { ... }&lt;/p&gt;
+&lt;p&gt;// HTTP 控制器
+    @Bean
+    @ConditionalOnMissingBean
+    public ChatCompletionsController chatCompletionsController(
+            ObjectProvider&amp;lt;ReActAgent&amp;gt; agentProvider, ...) { ... }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;16.5 【案例】构建 Agent API 服务&lt;/h2&gt;
+&lt;p&gt;本案例实现一个完整的 Spring Boot 3 + Java 21 Agent API 服务，包含：
+&lt;ul&gt;&lt;li&gt;Agent 配置与工具注册&lt;/li&gt;
+&lt;li&gt;REST API 端点&lt;/li&gt;
+&lt;li&gt;Chat Completions Web 接口&lt;/li&gt;
+&lt;li&gt;H2 数据库会话管理&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;16.5.1 项目结构&lt;/h3&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;src/main/java/io/agentscope/tutorial/chapter16/
+├── Application.java                          # Spring Boot 启动类
+├── config/
+│   └── AgentConfig.java                      # Agent 配置类
+├── controller/
+│   ├── AgentController.java                 # REST API 控制器
+│   └── SessionController.java                # 会话管理控制器
+├── service/
+│   ├── SessionService.java                   # 会话服务
+│   └── H2SessionManager.java                 # H2 会话管理器
+├── model/
+│   ├── dto/
+│   │   ├── ChatRequest.java                  # 聊天请求 DTO
+│   │   ├── ChatResponse.java                 # 聊天响应 DTO
+│   │   └── Session.java                      # 会话 DTO
+│   └── entity/
+│       └── SessionMessage.java               # 消息实体
+├── repository/
+│   └── SessionRepository.java                # 会话数据访问
+└── tool/
+    └── WeatherTool.java                      # 示例工具
+&lt;p&gt;src/main/resources/
+├── application.yml                           # 应用配置
+└── schema.sql                                # H2 数据库初始化脚本&lt;/p&gt;
+&lt;p&gt;src/test/java/io/agentscope/tutorial/chapter16/
+├── AgentApiApplicationTests.java            # 集成测试
+└── SessionServiceTest.java                   # 单元测试
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;16.5.2 应用配置&lt;/h3&gt;
+&lt;p&gt;**src/main/resources/application.yml**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# =============================================================================
+&lt;h1&gt;Spring Boot 应用配置&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+spring:
+  application:
+    name: agentscope-agent-api
+&lt;p&gt;# H2 数据库配置（用于会话管理）
+  datasource:
+    url: jdbc:h2:mem:agent_sessions;DB_CLOSE_DELAY=-1;MODE=MySQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2&lt;/p&gt;
+&lt;p&gt;# H2 Web 控制台（开发时使用，生产建议禁用）
+  h2:
+    console:
+      enabled: true
+      path: /h2-console&lt;/p&gt;
+&lt;p&gt;# JPA 配置
+  jpa:
+    hibernate:
+      ddl-auto: none  # 使用 schema.sql 初始化
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: true&lt;/p&gt;
+&lt;p&gt;# SQL 初始化
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql&lt;/p&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+&lt;h1&gt;服务器配置&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+server:
+  port: 8080
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+&lt;h1&gt;AgentScope 配置&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+agentscope:
+  # 模型提供商配置
+  model:
+    provider: dashscope  # 可选: dashscope | openai | gemini | anthropic
+&lt;p&gt;# 阿里云百炼（默认模型）
+  dashscope:
+    enabled: true
+    api-key: ${DASHSCOPE_API_KEY:your-api-key-here}
+    model-name: qwen-plus
+    stream: true
+    enable-thinking: true&lt;/p&gt;
+&lt;p&gt;# OpenAI 配置（取消注释以使用）
+  # openai:
+  #   enabled: true
+  #   api-key: ${OPENAI_API_KEY}
+  #   model-name: gpt-4.1-mini
+  #   base-url: https://api.openai.com/v1&lt;/p&gt;
+&lt;p&gt;# Google Gemini 配置（取消注释以使用）
+  # gemini:
+  #   enabled: true
+  #   api-key: ${GEMINI_API_KEY}
+  #   model-name: gemini-2.0-flash
+  #   project: your-gcp-project
+  #   location: us-central1
+  #   vertex-ai: false&lt;/p&gt;
+&lt;p&gt;# 默认 Agent 配置
+  agent:
+    enabled: true
+    name: &amp;quot;TutorialAgent&amp;quot;
+    sys-prompt: |
+      你是一个专业的AI助手，代号为 TutorialAgent。
+      你具备以下能力：
+&lt;ul&gt;&lt;li&gt;回答各类问题&lt;/li&gt;
+&lt;li&gt;使用工具获取实时信息（如查询天气）&lt;/li&gt;
+&lt;li&gt;进行多轮对话&lt;/li&gt;
+&lt;/ul&gt;    max-iters: 15&lt;/p&gt;
+&lt;p&gt;# Chat Completions API 配置
+  chat-completions:
+    enabled: true
+    base-path: /v1/chat/completions&lt;/p&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+&lt;h1&gt;日志配置&lt;/h1&gt;
+&lt;h1&gt;=============================================================================&lt;/h1&gt;
+logging:
+  level:
+    root: INFO
+    io.agentscope: DEBUG
+    io.agentscope.tutorial: DEBUG
+  pattern:
+    console: &amp;quot;%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**src/main/resources/schema.sql**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;-- =============================================================================
+-- AgentScope Session Schema for H2 Database
+-- =============================================================================
+&lt;p&gt;-- 会话表
+CREATE TABLE IF NOT EXISTS agent_sessions (
+    id          VARCHAR(36) PRIMARY KEY,
+    name        VARCHAR(255),
+    description VARCHAR(500),
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    metadata    TEXT
+);&lt;/p&gt;
+&lt;p&gt;-- 消息历史表
+CREATE TABLE IF NOT EXISTS session_messages (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    session_id  VARCHAR(36) NOT NULL,
+    role        VARCHAR(20) NOT NULL,
+    content     TEXT NOT NULL,
+    tool_call_id VARCHAR(255),
+    tool_name   VARCHAR(255),
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE
+);&lt;/p&gt;
+&lt;p&gt;-- 创建索引
+CREATE INDEX IF NOT EXISTS idx_messages_session ON session_messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_messages_created ON session_messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_updated ON agent_sessions(updated_at);
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;16.5.3 Spring Boot 启动类&lt;/h3&gt;
+&lt;p&gt;**io/agentscope/tutorial/chapter16/Application.java**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter16;
+&lt;p&gt;import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;&lt;/p&gt;
+&lt;p&gt;/**
+ * AgentScope Agent API Service - Spring Boot 启动类
+ *
+ * &amp;lt;p&amp;gt;本服务提供以下功能：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;REST API 端点：POST /api/v1/agent/chat&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;会话管理：GET/DELETE /api/v1/agent/sessions/{id}&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;Chat Completions API：POST /v1/chat/completions（OpenAI 兼容）&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * &amp;lt;p&amp;gt;启动方式：
+ * &amp;lt;pre&amp;gt;{@code
+ * # 方式1: 命令行
+ * mvn spring-boot:run
+ *
+ * # 方式2: 设置环境变量后运行
+ * export DASHSCOPE_API_KEY=your-api-key
+ * java -jar target/chapter16-agent-api-service-1.0.0.jar
+ *
+ * # 方式3: IDE 中运行
+ * 直接运行 main 方法
+ * }&amp;lt;/pre&amp;gt;
+ *
+ * @author AgentScope Tutorial
+ * @version 1.0.0
+ */
+@SpringBootApplication
+@ConfigurationPropertiesScan  // 启用配置属性扫描
+public class Application {&lt;/p&gt;
+&lt;p&gt;public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;16.5.4 Agent 配置类&lt;/h3&gt;
+&lt;p&gt;**io/agentscope/tutorial/chapter16/config/AgentConfig.java**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter16.config;
+&lt;p&gt;import io.agentscope.core.tool.Toolkit;
+import io.agentscope.tutorial.chapter16.tool.WeatherTool;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;&lt;/p&gt;
+&lt;p&gt;/**
+ * Agent 配置类
+ *
+ * &amp;lt;p&amp;gt;用于注册自定义工具和额外的 Agent 配置。
+ * Memory、Model、ReActAgent 由 agentscope-spring-boot-starter 自动装配。
+ * 这里我们额外注册工具集。
+ *
+ * @see WeatherTool
+ */
+@Configuration
+public class AgentConfig {&lt;/p&gt;
+&lt;p&gt;/**
+     * 注册自定义工具集
+     *
+     * &amp;lt;p&amp;gt;Toolkit 是原型作用域，这里注册的工具会被添加到每个新创建的 Agent 中。
+     * 由于是原型作用域，不同的 Agent 实例会有独立的 Toolkit 副本。
+     *
+     * @return 配置好的工具集
+     */
+    @Bean
+    public Toolkit agentscopeToolkit() {
+        Toolkit toolkit = new Toolkit();
+        // 注册天气查询工具
+        toolkit.register(new WeatherTool());
+        return toolkit;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 注册更多工具的方法示例
+     *
+     * &amp;lt;p&amp;gt;如果需要注册多个工具，可以使用链式调用：
+     * &amp;lt;pre&amp;gt;{@code
+     * toolkit.register(new WeatherTool())
+     *        .register(new SearchTool())
+     *        .register(new CalculatorTool());
+     * }&amp;lt;/pre&amp;gt;
+     *
+     * &amp;lt;p&amp;gt;也可以注册动态工具（通过工具 Schema）：
+     * &amp;lt;pre&amp;gt;{@code
+     * toolkit.registerSchema(ToolSchema.builder()
+     *     .name(&amp;quot;custom_tool&amp;quot;)
+     *     .description(&amp;quot;自定义工具&amp;quot;)
+     *     .parameters(&amp;quot;{\&amp;quot;type\&amp;quot;:\&amp;quot;object\&amp;quot;,\&amp;quot;properties\&amp;quot;:{...}}&amp;quot;)
+     *     .executor((params) -&amp;gt; { /* 执行逻辑 */ })
+     *     .build());
+     * }&amp;lt;/pre&amp;gt;
+     */
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;16.5.5 天气工具&lt;/h3&gt;
+&lt;p&gt;**io/agentscope/tutorial/chapter16/tool/WeatherTool.java**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter16.tool;
+&lt;p&gt;import io.agentscope.core.tool.builtin.CodeInterpreterTool;
+import io.agentscope.core.tool.param.ParamSchema;
+import io.agentscope.core.tool.param.ParamType;
+import io.agentscope.core.tool.param.ValidationType;
+import io.agentscope.core.tool.result.ToolResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;&lt;/p&gt;
+&lt;p&gt;import java.util.Map;&lt;/p&gt;
+&lt;p&gt;/**
+ * 天气查询工具
+ *
+ * &amp;lt;p&amp;gt;演示如何创建自定义工具并注册到 Agent。
+ * 实际应用中应调用真实天气 API（如和风天气、心知天气等）。
+ *
+ * &amp;lt;p&amp;gt;使用方式：
+ * &amp;lt;pre&amp;gt;{@code
+ * Agent: &amp;quot;北京今天天气怎么样？&amp;quot;
+ * -&amp;gt; 调用 get_weather(city=&amp;quot;北京&amp;quot;)
+ * &amp;lt;- 返回天气信息
+ * }&amp;lt;/pre&amp;gt;
+ *
+ * @see CodeInterpreterTool 内置代码解释器工具
+ */
+public class WeatherTool extends CodeInterpreterTool {&lt;/p&gt;
+&lt;p&gt;private static final Logger log = LoggerFactory.getLogger(WeatherTool.class);&lt;/p&gt;
+&lt;p&gt;public WeatherTool() {
+        super(
+            &amp;quot;get_weather&amp;quot;,                    // 工具名称
+            &amp;quot;获取指定城市的当前天气信息，包括温度、湿度、风力等&amp;quot;,  // 工具描述
+            createParamSchema()              // 参数定义
+        );
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建参数 Schema
+     */
+    private static ParamSchema createParamSchema() {
+        return ParamSchema.builder()
+            .param(&amp;quot;city&amp;quot;, ParamType.STRING, true)
+            .description(&amp;quot;城市名称（中文），如：北京、上海、纽约&amp;quot;)
+            .validation(ValidationType.NOT_BLANK, &amp;quot;城市名称不能为空&amp;quot;)
+            .validation(ValidationType.MAX_LENGTH, 20, &amp;quot;城市名称不能超过20个字符&amp;quot;)
+            .build();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 工具执行逻辑
+     *
+     * &amp;lt;p&amp;gt;这里使用模拟数据，实际项目中应调用真实天气 API。
+     * 返回结果需要符合 ToolResult 格式。
+     *
+     * @param params 解析后的参数（由框架自动从 JSON 解析）
+     * @return 工具执行结果
+     */
+    @Override
+    public ToolResult execute(Map&amp;lt;String, Object&amp;gt; params) {
+        // 获取城市参数
+        String city = (String) params.get(&amp;quot;city&amp;quot;);&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;查询天气: city={}&amp;quot;, city);&lt;/p&gt;
+&lt;p&gt;// 模拟天气数据（实际应用中应调用外部 API）
+        String weatherData = getMockWeatherData(city);&lt;/p&gt;
+&lt;p&gt;return ToolResult.success(weatherData);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取模拟天气数据
+     *
+     * &amp;lt;p&amp;gt;在实际应用中，替换为真实天气 API 调用。
+     * 推荐使用：心知天气 API、和风天气 API、中国天气网 API 等。
+     */
+    private String getMockWeatherData(String city) {
+        // 简单的模拟数据
+        return String.format(&amp;quot;&amp;quot;&amp;quot;
+            {
+              &amp;quot;city&amp;quot;: &amp;quot;%s&amp;quot;,
+              &amp;quot;weather&amp;quot;: &amp;quot;晴&amp;quot;,
+              &amp;quot;temperature&amp;quot;: &amp;quot;25°C&amp;quot;,
+              &amp;quot;humidity&amp;quot;: &amp;quot;45%%&amp;quot;,
+              &amp;quot;wind&amp;quot;: &amp;quot;东南风 3级&amp;quot;,
+              &amp;quot;aqi&amp;quot;: &amp;quot;良&amp;quot;,
+              &amp;quot;update_time&amp;quot;: &amp;quot;2026-05-17 10:30:00&amp;quot;,
+              &amp;quot;tips&amp;quot;: &amp;quot;今日天气良好，适合外出活动&amp;quot;
+            }
+            &amp;quot;&amp;quot;&amp;quot;, city);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 执行异常处理
+     *
+     * &amp;lt;p&amp;gt;当工具执行出错时，框架会自动调用此方法。
+     * 可以在这里记录日志或进行其他错误处理。
+     */
+    @Override
+    protected void onError(Exception e, Map&amp;lt;String, Object&amp;gt; params) {
+        log.error(&amp;quot;天气查询工具执行失败: {}&amp;quot;, e.getMessage(), e);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;16.5.6 REST API 控制器&lt;/h3&gt;
+&lt;p&gt;**io/agentscope/tutorial/chapter16/controller/AgentController.java**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter16.controller;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.message.Role;
+import io.agentscope.core.message.TextMsg;
+import io.agentscope.tutorial.chapter16.model.dto.ChatRequest;
+import io.agentscope.tutorial.chapter16.model.dto.ChatResponse;
+import io.agentscope.tutorial.chapter16.service.SessionService;
+import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;&lt;/p&gt;
+&lt;p&gt;import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;&lt;/p&gt;
+&lt;p&gt;/**
+ * Agent REST API 控制器
+ *
+ * &amp;lt;p&amp;gt;提供对话相关的 HTTP 端点，包括：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;POST /api/v1/agent/chat - 发送对话请求（带会话管理）&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;GET /api/v1/agent/tools - 获取可用工具列表&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;GET /api/v1/agent/health - 健康检查&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * &amp;lt;p&amp;gt;与 /v1/chat/completions 的区别：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;/api/v1/agent/chat - 支持会话管理，自动维护上下文&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;/v1/chat/completions - 无状态 API，客户端维护上下文&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * @author AgentScope Tutorial
+ */
+@RestController
+@RequestMapping(&amp;quot;/api/v1/agent&amp;quot;)
+public class AgentController {&lt;/p&gt;
+&lt;p&gt;private static final Logger log = LoggerFactory.getLogger(AgentController.class);&lt;/p&gt;
+&lt;p&gt;/** Agent 实例提供器（原型作用域，每次获取新实例） */
+    private final ObjectProvider&amp;lt;ReActAgent&amp;gt; agentProvider;&lt;/p&gt;
+&lt;p&gt;/** 会话服务 */
+    private final SessionService sessionService;&lt;/p&gt;
+&lt;p&gt;public AgentController(
+            ObjectProvider&amp;lt;ReActAgent&amp;gt; agentProvider,
+            SessionService sessionService) {
+        this.agentProvider = agentProvider;
+        this.sessionService = sessionService;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 发送对话请求（带会话管理）
+     *
+     * &amp;lt;p&amp;gt;此端点自动维护会话历史，新消息会追加到现有会话中。
+     * 适用于需要长期上下文的应用场景。
+     *
+     * @param sessionId 会话 ID（可选，为空则创建新会话）
+     * @param request   聊天请求
+     * @return 聊天响应（包含会话 ID 和 Agent 回复）
+     */
+    @PostMapping(&amp;quot;/chat&amp;quot;)
+    public ResponseEntity&amp;lt;ChatResponse&amp;gt; chat(
+            @RequestParam(required = false) String sessionId,
+            @Valid @RequestBody ChatRequest request) {&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;收到聊天请求: sessionId={}, messageCount={}&amp;quot;,
+                sessionId, request.getMessages().size());&lt;/p&gt;
+&lt;p&gt;// 获取或创建会话
+        String currentSessionId = sessionId;
+        if (currentSessionId == null || currentSessionId.isBlank()) {
+            currentSessionId = sessionService.createSession(&amp;quot;默认会话&amp;quot;);
+            log.info(&amp;quot;创建新会话: sessionId={}&amp;quot;, currentSessionId);
+        }&lt;/p&gt;
+&lt;p&gt;// 保存用户消息到会话
+        request.getMessages().forEach(msg -&amp;gt; {
+            sessionService.addMessage(currentSessionId, msg.getRole(), msg.getContent());
+        });&lt;/p&gt;
+&lt;p&gt;// 获取 Agent 实例（原型作用域）
+        ReActAgent agent = agentProvider.getObject();&lt;/p&gt;
+&lt;p&gt;// 构建消息列表（从会话历史中获取）
+        List&amp;lt;TextMsg&amp;gt; historyMessages = sessionService.getMessages(currentSessionId);
+        List&amp;lt;TextMsg&amp;gt; agentMessages = new ArrayList&amp;lt;&amp;gt;(historyMessages);&lt;/p&gt;
+&lt;p&gt;// 如果请求中有额外消息，追加到列表
+        request.getMessages().forEach(msg -&amp;gt; {
+            Role role = switch (msg.getRole().toLowerCase()) {
+                case &amp;quot;system&amp;quot; -&amp;gt; Role.SYSTEM;
+                case &amp;quot;user&amp;quot; -&amp;gt; Role.USER;
+                case &amp;quot;assistant&amp;quot; -&amp;gt; Role.ASSISTANT;
+                case &amp;quot;tool&amp;quot; -&amp;gt; Role.TOOL;
+                default -&amp;gt; Role.USER;
+            };
+            agentMessages.add(new TextMsg(role, msg.getContent()));
+        });&lt;/p&gt;
+&lt;p&gt;// 调用 Agent
+        long startTime = System.currentTimeMillis();
+        String reply = agent.call(agentMessages).block();
+        long duration = System.currentTimeMillis() - startTime;&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;Agent 响应完成: sessionId={}, duration={}ms, replyLength={}&amp;quot;,
+                currentSessionId, duration, reply != null ? reply.length() : 0);&lt;/p&gt;
+&lt;p&gt;// 保存 Agent 回复到会话
+        if (reply != null) {
+            sessionService.addMessage(currentSessionId, &amp;quot;assistant&amp;quot;, reply);
+        }&lt;/p&gt;
+&lt;p&gt;// 更新会话时间
+        sessionService.updateSessionTime(currentSessionId);&lt;/p&gt;
+&lt;p&gt;// 构建响应
+        ChatResponse response = ChatResponse.builder()
+                .sessionId(currentSessionId)
+                .message(reply != null ? reply : &amp;quot;&amp;quot;)
+                .tokenCount(estimateTokenCount(reply))
+                .duration(duration)
+                .finishReason(&amp;quot;stop&amp;quot;)
+                .build();&lt;/p&gt;
+&lt;p&gt;return ResponseEntity.ok(response);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取可用工具列表
+     *
+     * @return 工具信息列表
+     */
+    @GetMapping(&amp;quot;/tools&amp;quot;)
+    public ResponseEntity&amp;lt;List&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt;&amp;gt; getTools() {
+        ReActAgent agent = agentProvider.getObject();&lt;/p&gt;
+&lt;p&gt;List&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; tools = agent.getToolkit().getTools().stream()
+                .map(tool -&amp;gt; Map.&amp;lt;String, Object&amp;gt;of(
+                        &amp;quot;name&amp;quot;, tool.getName(),
+                        &amp;quot;description&amp;quot;, tool.getDescription(),
+                        &amp;quot;parameters&amp;quot;, tool.getParamSchema() != null ?
+                                tool.getParamSchema().toMap() : Map.of()
+                ))
+                .toList();&lt;/p&gt;
+&lt;p&gt;return ResponseEntity.ok(tools);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 健康检查
+     *
+     * @return 健康状态
+     */
+    @GetMapping(&amp;quot;/health&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; health() {
+        return ResponseEntity.ok(Map.of(
+                &amp;quot;status&amp;quot;, &amp;quot;UP&amp;quot;,
+                &amp;quot;service&amp;quot;, &amp;quot;agentscope-agent-api&amp;quot;,
+                &amp;quot;version&amp;quot;, &amp;quot;1.0.0&amp;quot;
+        ));
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 估算 token 数量（简化估算：中文 ~2字符/token，英文 ~4字符/token）
+     */
+    private int estimateTokenCount(String text) {
+        if (text == null || text.isEmpty()) {
+            return 0;
+        }
+        // 简单估算：总字符数 / 2.5
+        return (int) (text.length() / 2.5);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;16.5.7 聊天请求/响应 DTO&lt;/h3&gt;
+&lt;p&gt;**io/agentscope/tutorial/chapter16/model/dto/ChatRequest.java**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter16.model.dto;
+&lt;p&gt;import jakarta.validation.constraints.NotEmpty;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;&lt;/p&gt;
+&lt;p&gt;import java.util.List;&lt;/p&gt;
+&lt;p&gt;/**
+ * 聊天请求 DTO
+ *
+ * &amp;lt;p&amp;gt;用于 /api/v1/agent/chat 端点。
+ * 支持传入消息历史以进行多轮对话。
+ */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class ChatRequest {&lt;/p&gt;
+&lt;p&gt;/** 消息列表（包含角色和内容） */
+    @NotEmpty(message = &amp;quot;消息列表不能为空&amp;quot;)
+    private List&amp;lt;Message&amp;gt; messages;&lt;/p&gt;
+&lt;p&gt;/** 模型名称（可选，用于覆盖默认配置） */
+    private String model;&lt;/p&gt;
+&lt;p&gt;/** 温度参数（控制随机性，0-2） */
+    private Double temperature;&lt;/p&gt;
+&lt;p&gt;/** 最大生成 token 数 */
+    private Integer maxTokens;&lt;/p&gt;
+&lt;p&gt;/**
+     * 消息结构
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class Message {
+        /** 角色：system | user | assistant | tool */
+        private String role;&lt;/p&gt;
+&lt;p&gt;/** 消息内容 */
+        private String content;&lt;/p&gt;
+&lt;p&gt;/** 工具调用 ID（仅 tool 角色使用） */
+        private String toolCallId;&lt;/p&gt;
+&lt;p&gt;/** 工具名称（仅 tool 角色使用） */
+        private String toolName;
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**io/agentscope/tutorial/chapter16/model/dto/ChatResponse.java**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter16.model.dto;
+&lt;p&gt;import com.fasterxml.jackson.annotation.JsonInclude;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;&lt;/p&gt;
+&lt;p&gt;import java.time.Instant;&lt;/p&gt;
+&lt;p&gt;/**
+ * 聊天响应 DTO
+ *
+ * &amp;lt;p&amp;gt;包含 Agent 回复及元数据信息。
+ */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public class ChatResponse {&lt;/p&gt;
+&lt;p&gt;/** 会话 ID */
+    private String sessionId;&lt;/p&gt;
+&lt;p&gt;/** Agent 回复内容 */
+    private String message;&lt;/p&gt;
+&lt;p&gt;/** 使用的模型名称 */
+    private String model;&lt;/p&gt;
+&lt;p&gt;/** 估算的 token 数量 */
+    private Integer tokenCount;&lt;/p&gt;
+&lt;p&gt;/** 请求耗时（毫秒） */
+    private Long duration;&lt;/p&gt;
+&lt;p&gt;/** 完成原因：stop | length | content_filter | tool_calls */
+    private String finishReason;&lt;/p&gt;
+&lt;p&gt;/** 响应时间戳 */
+    private Instant timestamp;&lt;/p&gt;
+&lt;p&gt;/** 工具调用（如果有） */
+    private Object toolCalls;&lt;/p&gt;
+&lt;p&gt;/** 追加到响应的静态工厂方法 */
+    public static ChatResponseBuilder builder() {
+        return new ChatResponseBuilder().timestamp(Instant.now());
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;16.5.8 会话服务&lt;/h3&gt;
+&lt;p&gt;**io/agentscope/tutorial/chapter16/service/SessionService.java**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter16.service;
+&lt;p&gt;import io.agentscope.core.message.Role;
+import io.agentscope.core.message.TextMsg;
+import io.agentscope.tutorial.chapter16.model.entity.SessionMessage;
+import io.agentscope.tutorial.chapter16.repository.SessionRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;&lt;/p&gt;
+&lt;p&gt;import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;&lt;/p&gt;
+&lt;p&gt;/**
+ * 会话服务
+ *
+ * &amp;lt;p&amp;gt;负责会话的创建、查询、管理和消息的持久化。
+ * 使用 H2 数据库存储会话数据和消息历史。
+ *
+ * @see H2SessionManager H2 会话管理器
+ */
+@Service
+public class SessionService {&lt;/p&gt;
+&lt;p&gt;private static final Logger log = LoggerFactory.getLogger(SessionService.class);&lt;/p&gt;
+&lt;p&gt;private final SessionRepository sessionRepository;
+    private final H2SessionManager h2SessionManager;&lt;/p&gt;
+&lt;p&gt;public SessionService(SessionRepository sessionRepository, H2SessionManager h2SessionManager) {
+        this.sessionRepository = sessionRepository;
+        this.h2SessionManager = h2SessionManager;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建新会话
+     *
+     * @param name 会话名称
+     * @return 会话 ID
+     */
+    @Transactional
+    public String createSession(String name) {
+        String sessionId = UUID.randomUUID().toString();
+        h2SessionManager.createSession(sessionId, name);
+        log.info(&amp;quot;创建会话: id={}, name={}&amp;quot;, sessionId, name);
+        return sessionId;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取会话名称
+     *
+     * @param sessionId 会话 ID
+     * @return 会话名称（如果不存在返回空）
+     */
+    public Optional&amp;lt;String&amp;gt; getSessionName(String sessionId) {
+        return sessionRepository.findNameById(sessionId);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取所有会话
+     *
+     * @return 会话列表（按更新时间倒序）
+     */
+    public List&amp;lt;SessionInfo&amp;gt; getAllSessions() {
+        return sessionRepository.findAllOrderByUpdatedAt().stream()
+                .map(row -&amp;gt; new SessionInfo(
+                        (String) row[0],  // id
+                        (String) row[1],  // name
+                        (java.sql.Timestamp) row[2],  // created_at
+                        (java.sql.Timestamp) row[3]  // updated_at
+                ))
+                .toList();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取会话消息历史
+     *
+     * &amp;lt;p&amp;gt;返回的消息按时间正序排列，可直接用于 Agent 调用。
+     *
+     * @param sessionId 会话 ID
+     * @return 消息列表
+     */
+    public List&amp;lt;TextMsg&amp;gt; getMessages(String sessionId) {
+        return sessionRepository.findMessagesBySessionId(sessionId).stream()
+                .map(row -&amp;gt; {
+                    String roleStr = (String) row[1];
+                    String content = (String) row[2];
+                    Role role = parseRole(roleStr);
+                    return new TextMsg(role, content);
+                })
+                .toList();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 添加消息到会话
+     *
+     * @param sessionId 会话 ID
+     * @param role      角色（system | user | assistant | tool）
+     * @param content   消息内容
+     * @return 自动生成的消息 ID
+     */
+    @Transactional
+    public long addMessage(String sessionId, String role, String content) {
+        long messageId = sessionRepository.insertMessage(
+                sessionId, role, content, null, null);
+        log.debug(&amp;quot;添加消息: sessionId={}, role={}, contentLength={}&amp;quot;,
+                sessionId, role, content != null ? content.length() : 0);
+        return messageId;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 更新会话时间戳
+     *
+     * @param sessionId 会话 ID
+     */
+    @Transactional
+    public void updateSessionTime(String sessionId) {
+        sessionRepository.updateSessionTime(sessionId, Instant.now());
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 删除会话
+     *
+     * &amp;lt;p&amp;gt;会话删除后，所有关联消息也会被删除（级联删除）。
+     *
+     * @param sessionId 会话 ID
+     * @return 是否成功删除
+     */
+    @Transactional
+    public boolean deleteSession(String sessionId) {
+        int deleted = sessionRepository.deleteById(sessionId);
+        log.info(&amp;quot;删除会话: sessionId={}, deleted={}&amp;quot;, sessionId, deleted &amp;gt; 0);
+        return deleted &amp;gt; 0;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 重置会话（清除消息历史）
+     *
+     * @param sessionId 会话 ID
+     */
+    @Transactional
+    public void resetSession(String sessionId) {
+        sessionRepository.deleteMessagesBySessionId(sessionId);
+        updateSessionTime(sessionId);
+        log.info(&amp;quot;重置会话: sessionId={}&amp;quot;, sessionId);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取会话消息数量
+     *
+     * @param sessionId 会话 ID
+     * @return 消息数量
+     */
+    public int getMessageCount(String sessionId) {
+        return sessionRepository.countMessagesBySessionId(sessionId);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 解析角色字符串为 Role 枚举
+     */
+    private Role parseRole(String roleStr) {
+        return switch (roleStr.toLowerCase()) {
+            case &amp;quot;system&amp;quot; -&amp;gt; Role.SYSTEM;
+            case &amp;quot;assistant&amp;quot; -&amp;gt; Role.ASSISTANT;
+            case &amp;quot;tool&amp;quot; -&amp;gt; Role.TOOL;
+            default -&amp;gt; Role.USER;
+        };
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 会话信息记录
+     *
+     * @param id        会话 ID
+     * @param name      会话名称
+     * @param createdAt 创建时间
+     * @param updatedAt 更新时间
+     */
+    public record SessionInfo(
+            String id,
+            String name,
+            Instant createdAt,
+            Instant updatedAt
+    ) {}
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;16.5.9 H2 会话管理器&lt;/h3&gt;
+&lt;p&gt;**io/agentscope/tutorial/chapter16/service/H2SessionManager.java**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter16.service;
+&lt;p&gt;import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;&lt;/p&gt;
+&lt;p&gt;import java.time.Instant;&lt;/p&gt;
+&lt;p&gt;/**
+ * H2 会话管理器
+ *
+ * &amp;lt;p&amp;gt;直接操作 H2 数据库，执行会话相关的 SQL 操作。
+ * 封装了基础的 CRUD 操作，供 SessionService 调用。
+ *
+ * @see SessionService 会话服务（更高层抽象）
+ */
+@Component
+public class H2SessionManager {&lt;/p&gt;
+&lt;p&gt;private static final Logger log = LoggerFactory.getLogger(H2SessionManager.class);&lt;/p&gt;
+&lt;p&gt;private final JdbcTemplate jdbcTemplate;&lt;/p&gt;
+&lt;p&gt;public H2SessionManager(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建会话记录
+     *
+     * @param id   会话 ID
+     * @param name 会话名称
+     */
+    public void createSession(String id, String name) {
+        jdbcTemplate.update(
+            &amp;quot;INSERT INTO agent_sessions (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)&amp;quot;,
+            id, name, Instant.now(), Instant.now()
+        );
+        log.debug(&amp;quot;创建会话记录: id={}, name={}&amp;quot;, id, name);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 检查会话是否存在
+     *
+     * @param sessionId 会话 ID
+     * @return 是否存在
+     */
+    public boolean sessionExists(String sessionId) {
+        Integer count = jdbcTemplate.queryForObject(
+            &amp;quot;SELECT COUNT(*) FROM agent_sessions WHERE id = ?&amp;quot;,
+            Integer.class,
+            sessionId
+        );
+        return count != null &amp;amp;&amp;amp; count &amp;gt; 0;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取会话更新时间
+     *
+     * @param sessionId 会话 ID
+     * @return 更新时间（如果不存在返回 null）
+     */
+    public Instant getSessionUpdatedAt(String sessionId) {
+        return jdbcTemplate.queryForObject(
+            &amp;quot;SELECT updated_at FROM agent_sessions WHERE id = ?&amp;quot;,
+            (rs, rowNum) -&amp;gt; rs.getTimestamp(&amp;quot;updated_at&amp;quot;).toInstant(),
+            sessionId
+        );
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 更新会话的更新时间
+     *
+     * @param sessionId 会话 ID
+     * @param time      新的时间戳
+     */
+    public void updateSessionUpdatedAt(String sessionId, Instant time) {
+        jdbcTemplate.update(
+            &amp;quot;UPDATE agent_sessions SET updated_at = ? WHERE id = ?&amp;quot;,
+            time, sessionId
+        );
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 删除会话及其所有消息
+     *
+     * @param sessionId 会话 ID
+     */
+    public void deleteSession(String sessionId) {
+        // 由于外键约束，会自动级联删除消息
+        int deleted = jdbcTemplate.update(
+            &amp;quot;DELETE FROM agent_sessions WHERE id = ?&amp;quot;,
+            sessionId
+        );
+        log.debug(&amp;quot;删除会话: id={}, rowsAffected={}&amp;quot;, sessionId, deleted);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;16.5.10 会话数据访问&lt;/h3&gt;
+&lt;p&gt;**io/agentscope/tutorial/chapter16/repository/SessionRepository.java**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter16.repository;
+&lt;p&gt;import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Repository;&lt;/p&gt;
+&lt;p&gt;import java.sql.Timestamp;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;&lt;/p&gt;
+&lt;p&gt;/**
+ * 会话数据访问层
+ *
+ * &amp;lt;p&amp;gt;使用 Spring JDBC 访问 H2 数据库。
+ * 相比 JPA/JDBC 模板，JDBC Template 更轻量且性能更好。
+ */
+@Repository
+public class SessionRepository {&lt;/p&gt;
+&lt;p&gt;private final JdbcTemplate jdbcTemplate;&lt;/p&gt;
+&lt;p&gt;public SessionRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 会话操作 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 查询会话名称
+     */
+    public Optional&amp;lt;String&amp;gt; findNameById(String sessionId) {
+        String name = jdbcTemplate.queryForObject(
+            &amp;quot;SELECT name FROM agent_sessions WHERE id = ?&amp;quot;,
+            String.class,
+            sessionId
+        );
+        return Optional.ofNullable(name);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 查询所有会话（按更新时间倒序）
+     */
+    public List&amp;lt;Object[]&amp;gt; findAllOrderByUpdatedAt() {
+        return jdbcTemplate.query(
+            &amp;quot;SELECT id, name, created_at, updated_at FROM agent_sessions ORDER BY updated_at DESC&amp;quot;,
+            (rs, rowNum) -&amp;gt; new Object[]{
+                rs.getString(&amp;quot;id&amp;quot;),
+                rs.getString(&amp;quot;name&amp;quot;),
+                rs.getTimestamp(&amp;quot;created_at&amp;quot;),
+                rs.getTimestamp(&amp;quot;updated_at&amp;quot;)
+            }
+        );
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 更新会话时间
+     */
+    public void updateSessionTime(String sessionId, Instant time) {
+        jdbcTemplate.update(
+            &amp;quot;UPDATE agent_sessions SET updated_at = ? WHERE id = ?&amp;quot;,
+            Timestamp.from(time), sessionId
+        );
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 删除会话
+     */
+    public int deleteById(String sessionId) {
+        return jdbcTemplate.update(
+            &amp;quot;DELETE FROM agent_sessions WHERE id = ?&amp;quot;,
+            sessionId
+        );
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 消息操作 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 查询会话的所有消息（按时间正序）
+     */
+    public List&amp;lt;Object[]&amp;gt; findMessagesBySessionId(String sessionId) {
+        return jdbcTemplate.query(
+            &amp;quot;&amp;quot;&amp;quot;
+            SELECT id, role, content, tool_call_id, tool_name, created_at
+            FROM session_messages
+            WHERE session_id = ?
+            ORDER BY created_at ASC
+            &amp;quot;&amp;quot;&amp;quot;,
+            (rs, rowNum) -&amp;gt; new Object[]{
+                rs.getLong(&amp;quot;id&amp;quot;),
+                rs.getString(&amp;quot;role&amp;quot;),
+                rs.getString(&amp;quot;content&amp;quot;),
+                rs.getString(&amp;quot;tool_call_id&amp;quot;),
+                rs.getString(&amp;quot;tool_name&amp;quot;),
+                rs.getTimestamp(&amp;quot;created_at&amp;quot;)
+            },
+            sessionId
+        );
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 插入消息
+     *
+     * @return 插入行的 ID
+     */
+    public long insertMessage(String sessionId, String role, String content,
+                              String toolCallId, String toolName) {
+        return jdbcTemplate.queryForObject(
+            &amp;quot;&amp;quot;&amp;quot;
+            INSERT INTO session_messages (session_id, role, content, tool_call_id, tool_name, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            &amp;quot;&amp;quot;&amp;quot;,
+            (rs, meta) -&amp;gt; rs.getLong(1),
+            sessionId, role, content, toolCallId, toolName, Timestamp.from(Instant.now())
+        );
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 统计会话消息数量
+     */
+    public int countMessagesBySessionId(String sessionId) {
+        Integer count = jdbcTemplate.queryForObject(
+            &amp;quot;SELECT COUNT(*) FROM session_messages WHERE session_id = ?&amp;quot;,
+            Integer.class,
+            sessionId
+        );
+        return count != null ? count : 0;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 删除会话的所有消息
+     */
+    public int deleteMessagesBySessionId(String sessionId) {
+        return jdbcTemplate.update(
+            &amp;quot;DELETE FROM session_messages WHERE session_id = ?&amp;quot;,
+            sessionId
+        );
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 查询会话最新的一条消息
+     */
+    public Optional&amp;lt;Object[]&amp;gt; findLatestMessage(String sessionId) {
+        List&amp;lt;Object[]&amp;gt; results = jdbcTemplate.query(
+            &amp;quot;&amp;quot;&amp;quot;
+            SELECT id, role, content, tool_call_id, tool_name, created_at
+            FROM session_messages
+            WHERE session_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            &amp;quot;&amp;quot;&amp;quot;,
+            (rs, rowNum) -&amp;gt; new Object[]{
+                rs.getLong(&amp;quot;id&amp;quot;),
+                rs.getString(&amp;quot;role&amp;quot;),
+                rs.getString(&amp;quot;content&amp;quot;),
+                rs.getString(&amp;quot;tool_call_id&amp;quot;),
+                rs.getString(&amp;quot;tool_name&amp;quot;),
+                rs.getTimestamp(&amp;quot;created_at&amp;quot;)
+            },
+            sessionId
+        );
+        return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;16.5.11 会话管理控制器&lt;/h3&gt;
+&lt;p&gt;**io/agentscope/tutorial/chapter16/controller/SessionController.java**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter16.controller;
+&lt;p&gt;import io.agentscope.core.message.TextMsg;
+import io.agentscope.tutorial.chapter16.service.SessionService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;&lt;/p&gt;
+&lt;p&gt;import java.util.List;
+import java.util.Map;&lt;/p&gt;
+&lt;p&gt;/**
+ * 会话管理控制器
+ *
+ * &amp;lt;p&amp;gt;提供会话的 CRUD 操作：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;GET /api/v1/agent/sessions - 获取所有会话&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;GET /api/v1/agent/sessions/{id} - 获取会话详情&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;DELETE /api/v1/agent/sessions/{id} - 删除会话&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;POST /api/v1/agent/sessions/{id}/reset - 重置会话&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;GET /api/v1/agent/sessions/{id}/messages - 获取会话消息历史&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ */
+@RestController
+@RequestMapping(&amp;quot;/api/v1/agent/sessions&amp;quot;)
+public class SessionController {&lt;/p&gt;
+&lt;p&gt;private final SessionService sessionService;&lt;/p&gt;
+&lt;p&gt;public SessionController(SessionService sessionService) {
+        this.sessionService = sessionService;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取所有会话列表
+     */
+    @GetMapping
+    public ResponseEntity&amp;lt;List&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt;&amp;gt; getAllSessions() {
+        List&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; sessions = sessionService.getAllSessions().stream()
+                .map(info -&amp;gt; Map.&amp;lt;String, Object&amp;gt;of(
+                        &amp;quot;id&amp;quot;, info.id(),
+                        &amp;quot;name&amp;quot;, info.name(),
+                        &amp;quot;createdAt&amp;quot;, info.createdAt().toString(),
+                        &amp;quot;updatedAt&amp;quot;, info.updatedAt().toString()
+                ))
+                .toList();
+        return ResponseEntity.ok(sessions);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取会话详情
+     */
+    @GetMapping(&amp;quot;/{sessionId}&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; getSession(@PathVariable String sessionId) {
+        return sessionService.getSessionName(sessionId)
+                .map(name -&amp;gt; ResponseEntity.ok(Map.&amp;lt;String, Object&amp;gt;of(
+                        &amp;quot;id&amp;quot;, sessionId,
+                        &amp;quot;name&amp;quot;, name,
+                        &amp;quot;messageCount&amp;quot;, sessionService.getMessageCount(sessionId)
+                )))
+                .orElse(ResponseEntity.notFound().build());
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 删除会话
+     */
+    @DeleteMapping(&amp;quot;/{sessionId}&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; deleteSession(@PathVariable String sessionId) {
+        boolean deleted = sessionService.deleteSession(sessionId);
+        return ResponseEntity.ok(Map.of(
+                &amp;quot;sessionId&amp;quot;, sessionId,
+                &amp;quot;deleted&amp;quot;, deleted
+        ));
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 重置会话（清除消息历史）
+     */
+    @PostMapping(&amp;quot;/{sessionId}/reset&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; resetSession(@PathVariable String sessionId) {
+        sessionService.resetSession(sessionId);
+        return ResponseEntity.ok(Map.of(
+                &amp;quot;sessionId&amp;quot;, sessionId,
+                &amp;quot;messageCount&amp;quot;, 0
+        ));
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取会话消息历史
+     */
+    @GetMapping(&amp;quot;/{sessionId}/messages&amp;quot;)
+    public ResponseEntity&amp;lt;List&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt;&amp;gt; getMessages(@PathVariable String sessionId) {
+        List&amp;lt;TextMsg&amp;gt; messages = sessionService.getMessages(sessionId);
+        List&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; result = messages.stream()
+                .map(msg -&amp;gt; Map.&amp;lt;String, Object&amp;gt;of(
+                        &amp;quot;role&amp;quot;, msg.getRole().name().toLowerCase(),
+                        &amp;quot;content&amp;quot;, msg.getContent()
+                ))
+                .toList();
+        return ResponseEntity.ok(result);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;16.5.12 消息实体&lt;/h3&gt;
+&lt;p&gt;**io/agentscope/tutorial/chapter16/model/entity/SessionMessage.java**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter16.model.entity;
+&lt;p&gt;import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;&lt;/p&gt;
+&lt;p&gt;import java.time.Instant;&lt;/p&gt;
+&lt;p&gt;/**
+ * 会话消息实体
+ *
+ * &amp;lt;p&amp;gt;与数据库表 session_messages 对应。
+ * 注意：这里不使用 JPA 实体，而是通过 JDBCTemplate 手动操作 SQL，
+ * 因此此类仅作为数据传输对象（DTO）。
+ *
+ * @see io.agentscope.tutorial.chapter16.repository.SessionRepository
+ */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class SessionMessage {&lt;/p&gt;
+&lt;p&gt;/** 消息 ID（自增） */
+    private Long id;&lt;/p&gt;
+&lt;p&gt;/** 所属会话 ID */
+    private String sessionId;&lt;/p&gt;
+&lt;p&gt;/** 消息角色：system | user | assistant | tool */
+    private String role;&lt;/p&gt;
+&lt;p&gt;/** 消息内容 */
+    private String content;&lt;/p&gt;
+&lt;p&gt;/** 工具调用 ID（仅 tool 角色） */
+    private String toolCallId;&lt;/p&gt;
+&lt;p&gt;/** 工具名称（仅 tool 角色） */
+    private String toolName;&lt;/p&gt;
+&lt;p&gt;/** 创建时间 */
+    private Instant createdAt;&lt;/p&gt;
+&lt;p&gt;/**
+     * 判断是否为用户消息
+     */
+    public boolean isUserMessage() {
+        return &amp;quot;user&amp;quot;.equalsIgnoreCase(role);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 判断是否为助手消息
+     */
+    public boolean isAssistantMessage() {
+        return &amp;quot;assistant&amp;quot;.equalsIgnoreCase(role);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 判断是否为工具调用消息
+     */
+    public boolean isToolMessage() {
+        return &amp;quot;tool&amp;quot;.equalsIgnoreCase(role);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;16.5.13 集成测试&lt;/h3&gt;
+&lt;p&gt;**io/agentscope/tutorial/chapter16/AgentApiApplicationTests.java**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter16;
+&lt;p&gt;import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;&lt;/p&gt;
+&lt;p&gt;/**
+ * 应用集成测试
+ *
+ * &amp;lt;p&amp;gt;测试 Spring Boot 应用能否正常启动，以及核心组件是否正确装配。
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@ActiveProfiles(&amp;quot;test&amp;quot;)  // 使用测试配置
+class AgentApiApplicationTests {&lt;/p&gt;
+&lt;p&gt;@Test
+    void contextLoads() {
+        // 验证 Spring 上下文能否成功加载
+        // 如果自动配置失败，这里会抛出异常
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**src/test/resources/application-test.yml**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# 测试环境配置
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=MySQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+&lt;p&gt;sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql&lt;/p&gt;
+&lt;h1&gt;禁用真实 API 调用（测试时使用模拟）&lt;/h1&gt;
+agentscope:
+  dashscope:
+    api-key: test-api-key-for-testing-only
+  agent:
+    enabled: true
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;16.5.14 测试用例&lt;/h3&gt;
+&lt;p&gt;**io/agentscope/tutorial/chapter16/SessionServiceTest.java**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter16;
+&lt;p&gt;import io.agentscope.tutorial.chapter16.service.SessionService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;&lt;/p&gt;
+&lt;p&gt;import java.util.List;&lt;/p&gt;
+&lt;p&gt;import static org.junit.jupiter.api.Assertions.*;&lt;/p&gt;
+&lt;p&gt;/**
+ * 会话服务单元测试
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@ActiveProfiles(&amp;quot;test&amp;quot;)
+class SessionServiceTest {&lt;/p&gt;
+&lt;p&gt;@Autowired
+    private SessionService sessionService;&lt;/p&gt;
+&lt;p&gt;private String testSessionId;&lt;/p&gt;
+&lt;p&gt;@BeforeEach
+    void setUp() {
+        // 每个测试前创建新会话
+        testSessionId = sessionService.createSession(&amp;quot;测试会话&amp;quot;);
+    }&lt;/p&gt;
+&lt;p&gt;@Test
+    void testCreateSession() {
+        assertNotNull(testSessionId);
+        assertFalse(testSessionId.isBlank());
+    }&lt;/p&gt;
+&lt;p&gt;@Test
+    void testAddMessage() {
+        // 添加用户消息
+        long msgId = sessionService.addMessage(testSessionId, &amp;quot;user&amp;quot;, &amp;quot;你好&amp;quot;);
+        assertTrue(msgId &amp;gt; 0);&lt;/p&gt;
+&lt;p&gt;// 验证消息数量
+        int count = sessionService.getMessageCount(testSessionId);
+        assertEquals(1, count);
+    }&lt;/p&gt;
+&lt;p&gt;@Test
+    void testGetMessages() {
+        // 添加测试消息
+        sessionService.addMessage(testSessionId, &amp;quot;user&amp;quot;, &amp;quot;你好&amp;quot;);
+        sessionService.addMessage(testSessionId, &amp;quot;assistant&amp;quot;, &amp;quot;你好！有什么可以帮助你的吗？&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 获取消息
+        List&amp;lt;io.agentscope.core.message.TextMsg&amp;gt; messages = sessionService.getMessages(testSessionId);
+        assertEquals(2, messages.size());
+        assertEquals(&amp;quot;user&amp;quot;, messages.get(0).getRole().name().toLowerCase());
+        assertEquals(&amp;quot;你好&amp;quot;, messages.get(0).getContent());
+        assertEquals(&amp;quot;assistant&amp;quot;, messages.get(1).getRole().name().toLowerCase());
+    }&lt;/p&gt;
+&lt;p&gt;@Test
+    void testResetSession() {
+        // 添加消息
+        sessionService.addMessage(testSessionId, &amp;quot;user&amp;quot;, &amp;quot;测试&amp;quot;);
+        assertEquals(1, sessionService.getMessageCount(testSessionId));&lt;/p&gt;
+&lt;p&gt;// 重置会话
+        sessionService.resetSession(testSessionId);
+        assertEquals(0, sessionService.getMessageCount(testSessionId));
+    }&lt;/p&gt;
+&lt;p&gt;@Test
+    void testDeleteSession() {
+        boolean deleted = sessionService.deleteSession(testSessionId);
+        assertTrue(deleted);
+        assertEquals(0, sessionService.getMessageCount(testSessionId));
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;16.6 运行与测试&lt;/h2&gt;
+&lt;h3&gt;16.6.1 启动服务&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 方式一：Maven 运行
+cd tutorial/chapter16
+mvn spring-boot:run
+&lt;h1&gt;方式二：设置 API Key 后运行&lt;/h1&gt;
+export DASHSCOPE_API_KEY=your-actual-api-key
+mvn spring-boot:run
+&lt;h1&gt;方式三：打包后运行&lt;/h1&gt;
+mvn clean package -DskipTests
+java -jar target/chapter16-agent-api-service-1.0.0.jar
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;16.6.2 API 测试&lt;/h3&gt;
+&lt;p&gt;**健康检查**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;curl http://localhost:8080/api/v1/agent/health
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**发送对话请求**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;curl -X POST http://localhost:8080/api/v1/agent/chat \
+  -H &amp;quot;Content-Type: application/json&amp;quot; \
+  -d '{
+    &amp;quot;messages&amp;quot;: [
+      {&amp;quot;role&amp;quot;: &amp;quot;user&amp;quot;, &amp;quot;content&amp;quot;: &amp;quot;你好，请介绍一下自己&amp;quot;}
+    ]
+  }'
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**使用 Chat Completions API（OpenAI 兼容）**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;curl -X POST http://localhost:8080/v1/chat/completions \
+  -H &amp;quot;Content-Type: application/json&amp;quot; \
+  -d '{
+    &amp;quot;model&amp;quot;: &amp;quot;qwen-plus&amp;quot;,
+    &amp;quot;messages&amp;quot;: [
+      {&amp;quot;role&amp;quot;: &amp;quot;user&amp;quot;, &amp;quot;content&amp;quot;: &amp;quot;北京今天天气怎么样？&amp;quot;}
+    ]
+  }'
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**流式响应**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;curl -X POST http://localhost:8080/v1/chat/completions \
+  -H &amp;quot;Content-Type: application/json&amp;quot; \
+  -H &amp;quot;Accept: text/event-stream&amp;quot; \
+  -d '{
+    &amp;quot;model&amp;quot;: &amp;quot;qwen-plus&amp;quot;,
+    &amp;quot;messages&amp;quot;: [
+      {&amp;quot;role&amp;quot;: &amp;quot;user&amp;quot;, &amp;quot;content&amp;quot;: &amp;quot;请讲一个笑话&amp;quot;}
+    ],
+    &amp;quot;stream&amp;quot;: true
+  }'
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**会话管理**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 获取所有会话
+curl http://localhost:8080/api/v1/agent/sessions
+&lt;h1&gt;获取特定会话消息&lt;/h1&gt;
+curl http://localhost:8080/api/v1/agent/sessions/{sessionId}/messages
+&lt;h1&gt;删除会话&lt;/h1&gt;
+curl -X DELETE http://localhost:8080/api/v1/agent/sessions/{sessionId}
+&lt;h1&gt;重置会话&lt;/h1&gt;
+curl -X POST http://localhost:8080/api/v1/agent/sessions/{sessionId}/reset
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**查询天气（使用工具）**:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;curl -X POST http://localhost:8080/v1/chat/completions \
+  -H &amp;quot;Content-Type: application/json&amp;quot; \
+  -d '{
+    &amp;quot;model&amp;quot;: &amp;quot;qwen-plus&amp;quot;,
+    &amp;quot;messages&amp;quot;: [
+      {&amp;quot;role&amp;quot;: &amp;quot;user&amp;quot;, &amp;quot;content&amp;quot;: &amp;quot;北京今天天气怎么样？&amp;quot;}
+    ],
+    &amp;quot;tools&amp;quot;: [
+      {
+        &amp;quot;type&amp;quot;: &amp;quot;function&amp;quot;,
+        &amp;quot;function&amp;quot;: {
+          &amp;quot;name&amp;quot;: &amp;quot;get_weather&amp;quot;,
+          &amp;quot;description&amp;quot;: &amp;quot;获取指定城市的天气信息&amp;quot;,
+          &amp;quot;parameters&amp;quot;: {
+            &amp;quot;type&amp;quot;: &amp;quot;object&amp;quot;,
+            &amp;quot;properties&amp;quot;: {
+              &amp;quot;city&amp;quot;: {&amp;quot;type&amp;quot;: &amp;quot;string&amp;quot;, &amp;quot;description&amp;quot;: &amp;quot;城市名称&amp;quot;}
+            },
+            &amp;quot;required&amp;quot;: [&amp;quot;city&amp;quot;]
+          }
+        }
+      }
+    ]
+  }'
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;16.6.3 H2 控制台&lt;/h3&gt;
+&lt;p&gt;开发环境下可以访问 H2 Web 控制台查看会话数据：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;URL: http://localhost:8080/h2-console
+JDBC URL: jdbc:h2:mem:agent_sessions
+User: sa
+Password: (空)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;16.7 小结&lt;/h2&gt;
+&lt;p&gt;本章介绍了 AgentScope Java 与 Spring Boot 3 的深度集成：&lt;/p&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;知识点&lt;/th&gt;&lt;th&gt;内容&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;**Starter 模块**&lt;/td&gt;&lt;td&gt;agentscope-spring-boot-starter 提供核心自动装配&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**自动装配机制**&lt;/td&gt;&lt;td&gt;原型作用域 Bean、条件注解、多模型支持&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**配置属性**&lt;/td&gt;&lt;td&gt;agentscope.* 前缀的层次化配置&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**REST API**&lt;/td&gt;&lt;td&gt;/api/v1/agent/* 端点，支持会话管理&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**Chat Completions**&lt;/td&gt;&lt;td&gt;/v1/chat/completions 端点，OpenAI 兼容&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**会话持久化**&lt;/td&gt;&lt;td&gt;H2 数据库存储会话和消息历史&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**工具注册**&lt;/td&gt;&lt;td&gt;自定义工具通过 AgentConfig 注册到 Toolkit&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;通过 starters 的自动装配，你可以用最少的配置快速搭建 Agent 服务，同时通过自定义配置覆盖默认行为，实现灵活的业务扩展。&lt;/p&gt;
+</body>
+</html>

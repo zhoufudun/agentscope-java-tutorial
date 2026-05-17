@@ -1,0 +1,1626 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第六章：模型集成</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        h3 { color: #7f8c8d; }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+        }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+        table {
+            border-collapse: collapse;
+            margin: 20px 0;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th { background: #3498db; color: white; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        ul { padding-left: 20px; }
+        li { margin: 5px 0; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            color: #666;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+&lt;h1&gt;第六章：模型集成&lt;/h1&gt;
+&lt;p&gt;AgentScope Java 支持多种大语言模型（LLM）提供商，通过统一的 &lt;code&gt;Model&lt;/code&gt; 接口和可插拔的 &lt;code&gt;Formatter&lt;/code&gt; 机制，实现了灵活的多模型集成。本章将详细介绍模型客户端架构，以及如何配置和使用各种模型提供商。&lt;/p&gt;
+&lt;h2&gt;6.1 模型客户端架构&lt;/h2&gt;
+&lt;h3&gt;核心接口设计&lt;/h3&gt;
+&lt;p&gt;AgentScope Java 的模型层采用清晰的接口分离设计：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;┌─────────────────────────────────────────────────────────────────┐
+│                        ReActAgent                                │
+│                    （使用 Model 接口）                           │
+└─────────────────────────┬───────────────────────────────────────┘
+                          │ stream(messages, tools, options)
+                          ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     Model 接口                                   │
+│  - stream(): Flux&amp;lt;ChatResponse&amp;gt;                                 │
+│  - getModelName(): String                                        │
+└─────────────────────────┬───────────────────────────────────────┘
+                          │
+          ┌───────────────┼───────────────┬───────────────┐
+          ▼               ▼               ▼               ▼
+   ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐
+   │DashScope   │  │ OpenAI     │  │ Ollama     │  │ Gemini     │
+   │ChatModel   │  │ ChatModel  │  │ ChatModel  │  │ ChatModel  │
+   └────────────┘  └────────────┘  └────────────┘  └────────────┘
+          │               │               │               │
+          ▼               ▼               ▼               ▼
+   ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐
+   │Formatter   │  │Formatter   │  │Formatter   │  │Formatter   │
+   │(DAShScope) │  │(OpenAI)    │  │(Ollama)    │  │(Gemini)    │
+   └────────────┘  └────────────┘  └────────────┘  └────────────┘
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;Model 接口定义&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// io.agentscope.core.model.Model
+public interface Model {
+    /**
+     * 流式获取聊天完成响应。
+     *
+     * @param messages AgentScope 消息列表
+     * @param tools 工具模式列表（可为 null）
+     * @param options 生成选项（可为 null 使用默认值）
+     * @return ChatResponse 的响应流
+     */
+    Flux&amp;lt;ChatResponse&amp;gt; stream(List&amp;lt;Msg&amp;gt; messages, List&amp;lt;ToolSchema&amp;gt; tools, GenerateOptions options);
+&lt;p&gt;/**
+     * 获取模型名称，用于日志和标识。
+     */
+    String getModelName();
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;Formatter 格式化器接口&lt;/h3&gt;
+&lt;code&gt;Formatter&lt;/code&gt; 接口负责在 AgentScope 消息格式和提供商特定格式之间进行转换：
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// io.agentscope.core.formatter.Formatter
+public interface Formatter&amp;lt;TReq, TResp, TParams&amp;gt; {
+    /**
+     * 将 AgentScope 消息格式化为提供商请求格式。
+     */
+    List&amp;lt;TReq&amp;gt; format(List&amp;lt;Msg&amp;gt; msgs);
+&lt;p&gt;/**
+     * 解析提供商响应为 AgentScope ChatResponse。
+     */
+    ChatResponse parseResponse(TResp response, Instant startTime);&lt;/p&gt;
+&lt;p&gt;/**
+     * 应用生成选项到请求参数。
+     */
+    void applyOptions(TParams paramsBuilder, GenerateOptions options, GenerateOptions defaultOptions);&lt;/p&gt;
+&lt;p&gt;/**
+     * 应用工具模式到请求参数。
+     */
+    void applyTools(TParams paramsBuilder, List&amp;lt;ToolSchema&amp;gt; tools);&lt;/p&gt;
+&lt;p&gt;/**
+     * 应用工具选择配置。
+     */
+    default void applyToolChoice(TParams paramsBuilder, ToolChoice toolChoice) {}&lt;/p&gt;
+&lt;p&gt;/**
+     * 应用工具模式（含提供商检测）。
+     */
+    default void applyTools(TParams paramsBuilder, List&amp;lt;ToolSchema&amp;gt; tools,
+                           String baseUrl, String modelName) {
+        applyTools(paramsBuilder, tools);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;GenerateOptions 生成选项&lt;/h3&gt;
+&lt;code&gt;GenerateOptions&lt;/code&gt; 提供统一的生成配置，包括：
+&lt;ul&gt;&lt;li&gt;&lt;code&gt;temperature&lt;/code&gt; - 采样温度&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;maxTokens&lt;/code&gt; - 最大 token 数&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;topP&lt;/code&gt; - Top-P 采样&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;stop&lt;/code&gt; - 停止序列&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;apiKey&lt;/code&gt; / &lt;code&gt;baseUrl&lt;/code&gt; - 运行时覆盖&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;thinkingBudget&lt;/code&gt; - 思考预算（部分模型支持）&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;cacheControl&lt;/code&gt; - 缓存控制&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;模型选择策略&lt;/h3&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;场景&lt;/th&gt;&lt;th&gt;推荐模型&lt;/th&gt;&lt;th&gt;理由&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;中文对话&lt;/td&gt;&lt;td&gt;DashScope (qwen-plus)&lt;/td&gt;&lt;td&gt;优化中文，理解文化背景&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;代码生成&lt;/td&gt;&lt;td&gt;OpenAI (gpt-4)&lt;/td&gt;&lt;td&gt;代码能力强&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;本地部署&lt;/td&gt;&lt;td&gt;Ollama&lt;/td&gt;&lt;td&gt;完全离线，隐私保护&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;多模态&lt;/td&gt;&lt;td&gt;Gemini / DashScope VL&lt;/td&gt;&lt;td&gt;支持图像理解&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;成本敏感&lt;/td&gt;&lt;td&gt;Ollama / DeepSeek&lt;/td&gt;&lt;td&gt;本地或低价&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;6.2 DashScope（阿里云百炼）&lt;/h2&gt;
+&lt;a href=&quot;https://www.aliyun.com/product/dashscope&quot;&gt;DashScope&lt;/a&gt; 是阿里云的模型服务平台，提供了通义千问系列模型，支持文本和视觉任务。
+&lt;h3&gt;核心类&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;io.agentscope.core.model.DashScopeChatModel
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;配置示例&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 创建 DashScope 模型（基础配置）
+Model dashscopeModel = DashScopeChatModel.builder()
+    .apiKey(System.getenv(&amp;quot;DASHSCOPE_API_KEY&amp;quot;))
+    .modelName(&amp;quot;qwen-plus&amp;quot;)          // qwen-plus, qwen-max, qwen-vl-plus 等
+    .stream(true)                     // 启用流式输出
+    .build();
+&lt;p&gt;// 配置思考模式
+Model thinkingModel = DashScopeChatModel.builder()
+    .apiKey(System.getenv(&amp;quot;DASHSCOPE_API_KEY&amp;quot;))
+    .modelName(&amp;quot;qwen-plus&amp;quot;)
+    .stream(true)
+    .enableThinking(true)             // 启用思考模式
+    .defaultOptions(GenerateOptions.builder()
+        .thinkingBudget(2048)        // 思考 token 预算
+        .build())
+    .build();&lt;/p&gt;
+&lt;p&gt;// 配置搜索增强
+Model searchModel = DashScopeChatModel.builder()
+    .apiKey(System.getenv(&amp;quot;DASHSCOPE_API_KEY&amp;quot;))
+    .modelName(&amp;quot;qwen-plus&amp;quot;)
+    .stream(true)
+    .enableSearch(true)               // 启用搜索增强
+    .build();&lt;/p&gt;
+&lt;p&gt;// 配置视觉模型（支持图片理解）
+Model visionModel = DashScopeChatModel.builder()
+    .apiKey(System.getenv(&amp;quot;DASHSCOPE_API_KEY&amp;quot;))
+    .modelName(&amp;quot;qwen-vl-plus&amp;quot;)
+    .stream(true)
+    .build();&lt;/p&gt;
+&lt;p&gt;// 配置加密传输（企业安全需求）
+Model encryptedModel = DashScopeChatModel.builder()
+    .apiKey(System.getenv(&amp;quot;DASHSCOPE_API_KEY&amp;quot;))
+    .modelName(&amp;quot;qwen-max&amp;quot;)
+    .stream(true)
+    .enableEncrypt(true)             // 启用加密传输
+    .build();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;DashScope 支持的模型&lt;/h3&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;模型名称&lt;/th&gt;&lt;th&gt;类型&lt;/th&gt;&lt;th&gt;说明&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;qwen-plus&lt;/td&gt;&lt;td&gt;文本&lt;/td&gt;&lt;td&gt;高性能，性价比优&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;qwen-max&lt;/td&gt;&lt;td&gt;文本&lt;/td&gt;&lt;td&gt;最强能力，适合复杂任务&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;qwen-turbo&lt;/td&gt;&lt;td&gt;文本&lt;/td&gt;&lt;td&gt;快速响应，低延迟&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;qwen-vl-plus&lt;/td&gt;&lt;td&gt;视觉&lt;/td&gt;&lt;td&gt;图像理解，多模态&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;qwen-vl-max&lt;/td&gt;&lt;td&gt;视觉&lt;/td&gt;&lt;td&gt;最强视觉能力&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;qwq-32b&lt;/td&gt;&lt;td&gt;推理&lt;/td&gt;&lt;td&gt;开源推理模型&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;qwen-coder-plus&lt;/td&gt;&lt;td&gt;代码&lt;/td&gt;&lt;td&gt;代码专用模型&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;h3&gt;格式化器配置&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 使用默认格式化器
+Formatter&amp;lt;DashScopeMessage, DashScopeResponse, DashScopeRequest&amp;gt; formatter =
+    new DashScopeChatFormatter();
+&lt;p&gt;// 使用多代理格式化器（支持复杂对话场景）
+Formatter&amp;lt;DashScopeMessage, DashScopeResponse, DashScopeRequest&amp;gt; multiAgentFormatter =
+    new DashScopeMultiAgentFormatter();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;6.3 OpenAI 兼容接口&lt;/h2&gt;
+&lt;p&gt;OpenAI 兼容接口可用于连接任何遵循 OpenAI API 格式的服务商，包括：
+&lt;ul&gt;&lt;li&gt;OpenAI GPT 系列&lt;/li&gt;
+&lt;li&gt;DeepSeek&lt;/li&gt;
+&lt;li&gt;Zhipu GLM&lt;/li&gt;
+&lt;li&gt;Azure OpenAI&lt;/li&gt;
+&lt;li&gt;其他兼容 API 的服务商&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;核心类&lt;/h3&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;io.agentscope.core.model.OpenAIChatModel
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;配置示例&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 基础 OpenAI 配置
+Model openaiModel = OpenAIChatModel.builder()
+    .apiKey(System.getenv(&amp;quot;OPENAI_API_KEY&amp;quot;))
+    .modelName(&amp;quot;gpt-4o&amp;quot;)
+    .stream(true)
+    .baseUrl(&amp;quot;https://api.openai.com/v1&amp;quot;)
+    .build();
+&lt;p&gt;// DeepSeek 配置
+Model deepseekModel = OpenAIChatModel.builder()
+    .apiKey(System.getenv(&amp;quot;DEEPSEEK_API_KEY&amp;quot;))
+    .modelName(&amp;quot;deepseek-chat&amp;quot;)
+    .stream(true)
+    .baseUrl(&amp;quot;https://api.deepseek.com/v1&amp;quot;)
+    .formatter(new DeepSeekFormatter())  // 使用 DeepSeek 专用格式化器
+    .build();&lt;/p&gt;
+&lt;p&gt;// Zhipu GLM 配置
+Model glmModel = OpenAIChatModel.builder()
+    .apiKey(System.getenv(&amp;quot;ZHIPU_API_KEY&amp;quot;))
+    .modelName(&amp;quot;glm-4&amp;quot;)
+    .stream(true)
+    .baseUrl(&amp;quot;https://open.bigmodel.cn/api/paas/v4&amp;quot;)
+    .formatter(new GLMFormatter())       // 使用 GLM 专用格式化器
+    .build();&lt;/p&gt;
+&lt;p&gt;// Azure OpenAI 配置
+Model azureModel = OpenAIChatModel.builder()
+    .apiKey(System.getenv(&amp;quot;AZURE_OPENAI_KEY&amp;quot;))
+    .modelName(&amp;quot;gpt-4&amp;quot;)
+    .stream(true)
+    .baseUrl(&amp;quot;https://YOUR_RESOURCE.openai.azure.com&amp;quot;)
+    .endpointPath(&amp;quot;/openai/deployments/YOUR_DEPLOYMENT/chat/completions?api-version=2024-02-15-preview&amp;quot;)
+    .build();&lt;/p&gt;
+&lt;p&gt;// 自定义端点路径
+Model customModel = OpenAIChatModel.builder()
+    .apiKey(&amp;quot;your-api-key&amp;quot;)
+    .modelName(&amp;quot;llama3&amp;quot;)
+    .stream(true)
+    .baseUrl(&amp;quot;https://your-api-server.com&amp;quot;)
+    .endpointPath(&amp;quot;/api/v1/chat/completions&amp;quot;)  // 自定义路径
+    .build();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;常用格式化器&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// OpenAI 标准格式化器
+OpenAIChatFormatter formatter = new OpenAIChatFormatter();
+&lt;p&gt;// DeepSeek 格式化器（处理特定差异）
+DeepSeekFormatter deepseekFormatter = new DeepSeekFormatter();&lt;/p&gt;
+&lt;p&gt;// GLM 格式化器（处理智谱AI的特殊参数）
+GLMFormatter glmFormatter = new GLMFormatter();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;OpenAI 兼容提供商对比&lt;/h3&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;提供商&lt;/th&gt;&lt;th&gt;baseUrl&lt;/th&gt;&lt;th&gt;模型名称&lt;/th&gt;&lt;th&gt;格式化器&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;OpenAI&lt;/td&gt;&lt;td&gt;api.openai.com/v1&lt;/td&gt;&lt;td&gt;gpt-4o, gpt-4-turbo&lt;/td&gt;&lt;td&gt;OpenAIChatFormatter&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;DeepSeek&lt;/td&gt;&lt;td&gt;api.deepseek.com/v1&lt;/td&gt;&lt;td&gt;deepseek-chat&lt;/td&gt;&lt;td&gt;DeepSeekFormatter&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Zhipu GLM&lt;/td&gt;&lt;td&gt;open.bigmodel.cn/api/paas/v4&lt;/td&gt;&lt;td&gt;glm-4, glm-4-flash&lt;/td&gt;&lt;td&gt;GLMFormatter&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Azure&lt;/td&gt;&lt;td&gt;你的资源.openai.azure.com&lt;/td&gt;&lt;td&gt;你的部署名&lt;/td&gt;&lt;td&gt;OpenAIChatFormatter&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;6.4 Ollama 本地模型&lt;/h2&gt;
+&lt;a href=&quot;https://ollama.com/&quot;&gt;Ollama&lt;/a&gt; 允许你在本地运行开源大语言模型，支持 Llama 3、Mistral、Qwen 等多种模型。
+&lt;h3&gt;安装 Ollama&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# macOS/Linux
+curl -fsSL https://ollama.com/install.sh | sh
+&lt;h1&gt;Windows (使用 WSL 或 Docker)&lt;/h1&gt;
+docker run -d -p 11434:11434 ollama/ollama
+&lt;h1&gt;下载模型&lt;/h1&gt;
+ollama pull llama3.2
+ollama pull qwen2.5:7b
+ollama pull mistral
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;核心类&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;io.agentscope.core.model.OllamaChatModel
+io.agentscope.core.model.ollama.OllamaOptions
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;配置示例&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 基础 Ollama 配置（假设 Ollama 运行在 localhost:11434）
+Model ollamaModel = OllamaChatModel.builder()
+    .modelName(&amp;quot;llama3.2&amp;quot;)
+    .baseUrl(&amp;quot;http://localhost:11434&amp;quot;)
+    .build();
+&lt;p&gt;// 配置更多参数
+Model configuredOllama = OllamaChatModel.builder()
+    .modelName(&amp;quot;qwen2.5:7b&amp;quot;)
+    .baseUrl(&amp;quot;http://localhost:11434&amp;quot;)
+    .defaultOptions(OllamaOptions.builder()
+        .temperature(0.7)
+        .numCtx(4096)              // 上下文窗口大小
+        .topP(0.9)
+        .repeatPenalty(1.1)
+        .seed(42)                  // 固定随机种子（可复现）
+        .numKeep(32)               // 保持的 token 数
+        .build())
+    .build();&lt;/p&gt;
+&lt;p&gt;// 使用工具调用（需要支持 function calling 的模型）
+Model toolOllama = OllamaChatModel.builder()
+    .modelName(&amp;quot;llama3.2&amp;quot;)
+    .baseUrl(&amp;quot;http://localhost:11434&amp;quot;)
+    .defaultOptions(OllamaOptions.builder()
+        .numCtx(8192)              // 更大的上下文以支持工具
+        .build())
+    .build();&lt;/p&gt;
+&lt;p&gt;// 使用多代理格式化器
+OllamaMultiAgentFormatter multiAgentFormatter = new OllamaMultiAgentFormatter();
+Model multiAgentOllama = OllamaChatModel.builder()
+    .modelName(&amp;quot;llama3.2&amp;quot;)
+    .baseUrl(&amp;quot;http://localhost:11434&amp;quot;)
+    .formatter(multiAgentFormatter)
+    .build();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;OllamaOptions 常用配置&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;OllamaOptions options = OllamaOptions.builder()
+    .temperature(0.8)              // 采样温度（0-2）
+    .topP(0.9)                    // Top-P 采样
+    .numCtx(4096)                 // 上下文 token 数
+    .numKeep(256)                 // 保持的最近 token
+    .seed(-1)                     // 随机种子，-1 为随机
+    .numPredict(256)              // 最大生成 token 数
+    .repeatPenalty(1.1)          // 重复惩罚
+    .tfsZ(0.5)                    // TFS-Z 采样
+    .numBatch(512)                // 批处理大小
+    .repeatLastN(64)             // 重复检测窗口
+    .mirostat(0)                  // Mirostat 采样模式
+    .mirostatTau(5.0)            // Mirostat 目标熵
+    .mirostatEta(0.1)            // Mirostat 学习率
+    .penaltyPrompt(&amp;quot;&amp;quot;)           // 惩罚提示
+    .debug(false)                 // 调试模式
+    .stop(null)                  // 停止序列
+    .build();
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;Ollama 模型推荐&lt;/h3&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;模型&lt;/th&gt;&lt;th&gt;参数量&lt;/th&gt;&lt;th&gt;最低内存&lt;/th&gt;&lt;th&gt;适用场景&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;llama3.2&lt;/td&gt;&lt;td&gt;3B&lt;/td&gt;&lt;td&gt;4GB&lt;/td&gt;&lt;td&gt;快速响应，资源受限&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;llama3.2:3b&lt;/td&gt;&lt;td&gt;3B&lt;/td&gt;&lt;td&gt;4GB&lt;/td&gt;&lt;td&gt;通用对话&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;qwen2.5:7b&lt;/td&gt;&lt;td&gt;7B&lt;/td&gt;&lt;td&gt;8GB&lt;/td&gt;&lt;td&gt;中文优化&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;mistral&lt;/td&gt;&lt;td&gt;7B&lt;/td&gt;&lt;td&gt;8GB&lt;/td&gt;&lt;td&gt;英文任务&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;codellama&lt;/td&gt;&lt;td&gt;7B&lt;/td&gt;&lt;td&gt;8GB&lt;/td&gt;&lt;td&gt;代码生成&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;nomic-embed-text&lt;/td&gt;&lt;td&gt;137M&lt;/td&gt;&lt;td&gt;1GB&lt;/td&gt;&lt;td&gt;向量嵌入&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;6.5 Google Gemini&lt;/h2&gt;
+&lt;p&gt;Gemini 是 Google 的多模态 AI 模型，支持文本、图像、视频和音频理解。&lt;/p&gt;
+&lt;h3&gt;前提条件&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;!-- pom.xml 添加 Gemini SDK 依赖 --&amp;gt;
+&amp;lt;dependency&amp;gt;
+    &amp;lt;groupId&amp;gt;com.google.genai&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;genai-java&amp;lt;/artifactId&amp;gt;
+    &amp;lt;version&amp;gt;0.11.0&amp;lt;/version&amp;gt;
+&amp;lt;/dependency&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;核心类&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;io.agentscope.core.model.GeminiChatModel
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;配置示例&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 基础 Gemini 配置（使用 API Key）
+Model geminiModel = GeminiChatModel.builder()
+    .apiKey(System.getenv(&amp;quot;GEMINI_API_KEY&amp;quot;))
+    .modelName(&amp;quot;gemini-2.0-flash&amp;quot;)    // gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash
+    .streamEnabled(true)
+    .build();
+&lt;p&gt;// Gemini Flash（快速响应）
+Model flashModel = GeminiChatModel.builder()
+    .apiKey(System.getenv(&amp;quot;GEMINI_API_KEY&amp;quot;))
+    .modelName(&amp;quot;gemini-2.0-flash&amp;quot;)
+    .streamEnabled(true)
+    .build();&lt;/p&gt;
+&lt;p&gt;// Gemini Pro（复杂任务）
+Model proModel = GeminiChatModel.builder()
+    .apiKey(System.getenv(&amp;quot;GEMINI_API_KEY&amp;quot;))
+    .modelName(&amp;quot;gemini-1.5-pro&amp;quot;)
+    .streamEnabled(false)
+    .defaultOptions(GenerateOptions.builder()
+        .maxTokens(8192)
+        .temperature(0.9)
+        .build())
+    .build();&lt;/p&gt;
+&lt;p&gt;// 自定义 Base URL（代理场景）
+Model proxiedGemini = GeminiChatModel.builder()
+    .apiKey(System.getenv(&amp;quot;GEMINI_API_KEY&amp;quot;))
+    .baseUrl(&amp;quot;https://generativelanguage.googleapis.com&amp;quot;)
+    .modelName(&amp;quot;gemini-2.0-flash&amp;quot;)
+    .streamEnabled(true)
+    .build();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;Vertex AI 配置（企业用户）&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;import com.google.auth.oauth2.GoogleCredentials;
+import com.google.genai.types.ClientOptions;
+&lt;p&gt;// 使用服务账号凭证
+GoogleCredentials credentials = GoogleCredentials.fromStream(
+    new FileInputStream(&amp;quot;path/to/service-account.json&amp;quot;)
+);&lt;/p&gt;
+&lt;p&gt;Model vertexModel = GeminiChatModel.builder()
+    .project(&amp;quot;your-gcp-project&amp;quot;)
+    .location(&amp;quot;us-central1&amp;quot;)
+    .vertexAI(true)
+    .credentials(credentials)
+    .modelName(&amp;quot;gemini-1.5-pro&amp;quot;)
+    .streamEnabled(true)
+    .build();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;Gemini 模型选择&lt;/h3&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;模型&lt;/th&gt;&lt;th&gt;特点&lt;/th&gt;&lt;th&gt;适用场景&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;gemini-2.0-flash&lt;/td&gt;&lt;td&gt;快速响应，新版本&lt;/td&gt;&lt;td&gt;实时对话，摘要&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;gemini-2.0-flash-lite&lt;/td&gt;&lt;td&gt;最便宜&lt;/td&gt;&lt;td&gt;高频调用，简单任务&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;gemini-1.5-flash&lt;/td&gt;&lt;td&gt;性价比&lt;/td&gt;&lt;td&gt;通用任务&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;gemini-1.5-pro&lt;/td&gt;&lt;td&gt;长上下文&lt;/td&gt;&lt;td&gt;复杂推理，代码&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;gemini-1.5-pro-002&lt;/td&gt;&lt;td&gt;稳定性优化&lt;/td&gt;&lt;td&gt;生产环境&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;gemini-exp&lt;/td&gt;&lt;td&gt;实验版本&lt;/td&gt;&lt;td&gt;测试新功能&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;6.6 消息格式化器配置&lt;/h2&gt;
+&lt;p&gt;Formatter 是模型集成的核心组件，负责在 AgentScope 内部消息格式和提供商特定 API 格式之间进行转换。&lt;/p&gt;
+&lt;h3&gt;格式化器架构&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;AgentScope Msg ──format()──► 提供商请求格式 ──API 调用──► 提供商响应
+                         ◄──parseResponse()──                       │
+                                                                   ▼
+                                              ChatResponse（统一格式）
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;可用格式化器一览&lt;/h3&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;提供商&lt;/th&gt;&lt;th&gt;格式化器类&lt;/th&gt;&lt;th&gt;包路径&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;DashScope&lt;/td&gt;&lt;td&gt;DashScopeChatFormatter&lt;/td&gt;&lt;td&gt;io.agentscope.core.formatter.dashscope&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;DashScope 多代理&lt;/td&gt;&lt;td&gt;DashScopeMultiAgentFormatter&lt;/td&gt;&lt;td&gt;io.agentscope.core.formatter.dashscope&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;OpenAI&lt;/td&gt;&lt;td&gt;OpenAIChatFormatter&lt;/td&gt;&lt;td&gt;io.agentscope.core.formatter.openai&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;DeepSeek&lt;/td&gt;&lt;td&gt;DeepSeekFormatter&lt;/td&gt;&lt;td&gt;io.agentscope.core.formatter.openai&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;GLM&lt;/td&gt;&lt;td&gt;GLMFormatter&lt;/td&gt;&lt;td&gt;io.agentscope.core.formatter.openai&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Ollama&lt;/td&gt;&lt;td&gt;OllamaChatFormatter&lt;/td&gt;&lt;td&gt;io.agentscope.core.formatter.ollama&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Ollama 多代理&lt;/td&gt;&lt;td&gt;OllamaMultiAgentFormatter&lt;/td&gt;&lt;td&gt;io.agentscope.core.formatter.ollama&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Gemini&lt;/td&gt;&lt;td&gt;GeminiChatFormatter&lt;/td&gt;&lt;td&gt;io.agentscope.core.formatter.gemini&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Anthropic&lt;/td&gt;&lt;td&gt;AnthropicChatFormatter&lt;/td&gt;&lt;td&gt;io.agentscope.core.formatter.anthropic&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;h3&gt;自定义格式化器&lt;/h3&gt;
+&lt;p&gt;如需支持新的模型提供商，可实现 &lt;code&gt;Formatter&lt;/code&gt; 接口：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;/**
+ * 自定义模型格式化器示例
+ */
+public class CustomModelFormatter implements
+        Formatter&amp;lt;CustomMessage, CustomResponse, CustomRequest.Builder&amp;gt; {
+&lt;p&gt;private final ObjectMapper objectMapper = new ObjectMapper();&lt;/p&gt;
+&lt;p&gt;@Override
+    public List&amp;lt;CustomMessage&amp;gt; format(List&amp;lt;Msg&amp;gt; msgs) {
+        return msgs.stream()
+            .map(this::convertToCustomMessage)
+            .collect(Collectors.toList());
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public ChatResponse parseResponse(CustomResponse response, Instant startTime) {
+        String content = response.getContent();
+        ChatUsage usage = ChatUsage.builder()
+            .promptTokens(response.getPromptTokens())
+            .completionTokens(response.getCompletionTokens())
+            .totalTokens(response.getTotalTokens())
+            .build();&lt;/p&gt;
+&lt;p&gt;return ChatResponse.builder()
+            .id(response.getId())
+            .model(response.getModel())
+            .content(ChatContent.ofText(content))
+            .usage(usage)
+            .build();
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public void applyOptions(CustomRequest.Builder builder,
+                            GenerateOptions options,
+                            GenerateOptions defaultOptions) {
+        if (options != null) {
+            if (options.getTemperature() != null) {
+                builder.temperature(options.getTemperature());
+            }
+            if (options.getMaxTokens() != null) {
+                builder.maxTokens(options.getMaxTokens());
+            }
+        }
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public void applyTools(CustomRequest.Builder builder, List&amp;lt;ToolSchema&amp;gt; tools) {
+        if (tools != null &amp;amp;&amp;amp; !tools.isEmpty()) {
+            List&amp;lt;CustomTool&amp;gt; customTools = tools.stream()
+                .map(this::convertToCustomTool)
+                .collect(Collectors.toList());
+            builder.tools(customTools);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;private CustomMessage convertToCustomMessage(Msg msg) {
+        // 实现消息转换逻辑
+        return null; // 实现细节
+    }&lt;/p&gt;
+&lt;p&gt;private CustomTool convertToCustomTool(ToolSchema schema) {
+        // 实现工具转换逻辑
+        return null; // 实现细节
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;格式化器配置最佳实践&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 1. 使用默认格式化器（推荐）
+// 大多数场景下，使用提供商默认的格式化器即可
+&lt;p&gt;// 2. 明确指定格式化器（当有多个选项时）
+DashScopeChatFormatter dashFormatter = new DashScopeChatFormatter();
+DashScopeChatModel model = DashScopeChatModel.builder()
+    .apiKey(apiKey)
+    .modelName(&amp;quot;qwen-plus&amp;quot;)
+    .formatter(dashFormatter)  // 明确指定
+    .build();&lt;/p&gt;
+&lt;p&gt;// 3. 在 ReActAgent 中配置格式化器
+ReActAgent agent = ReActAgent.builder()
+    .name(&amp;quot;Assistant&amp;quot;)
+    .sysPrompt(&amp;quot;你是 AI 助手&amp;quot;)
+    .model(dashscopeModel)
+    .build();&lt;/p&gt;
+&lt;p&gt;// 4. 运行时通过 GenerateOptions 传递
+GenerateOptions options = GenerateOptions.builder()
+    .temperature(0.7)
+    .maxTokens(1000)
+    .build();&lt;/p&gt;
+&lt;p&gt;agent.run(userMsg, options);
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;6.7 【案例】多模型切换对比系统&lt;/h2&gt;
+&lt;p&gt;本案例实现一个完整的 Spring Boot 应用，支持配置多种模型客户端、模型切换对比和 H2 嵌入式数据库存储。&lt;/p&gt;
+&lt;h3&gt;项目结构&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;src/main/java/io/agentscope/tutorial/chapter06/
+├── Chapter06Application.java          # Spring Boot 启动类
+├── config/
+│   └── ModelConfig.java                # 模型配置类
+├── controller/
+│   └── ModelCompareController.java     # Web 控制器
+├── entity/
+│   ├── ModelProvider.java             # 模型提供商实体
+│   └── ChatConfig.java                # 聊天配置实体
+├── repository/
+│   ├── ModelProviderRepository.java    # 提供商数据访问
+│   └── ChatConfigRepository.java      # 配置数据访问
+└── service/
+    ├── ModelService.java              # 模型服务
+    ├── DashScopeService.java          # DashScope 服务
+    ├── OpenAIService.java             # OpenAI 服务
+    └── OllamaService.java             # Ollama 服务
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;pom.xml 依赖配置&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot;?&amp;gt;
+&amp;lt;project xmlns=&amp;quot;http://maven.apache.org/POM/4.0.0&amp;quot;
+         xmlns:xsi=&amp;quot;http://www.w3.org/2001/XMLSchema-instance&amp;quot;
+         xsi:schemaLocation=&amp;quot;http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd&amp;quot;&amp;gt;
+    &amp;lt;modelVersion&amp;gt;4.0.0&amp;lt;/modelVersion&amp;gt;
+&lt;p&gt;&amp;lt;parent&amp;gt;
+        &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+        &amp;lt;artifactId&amp;gt;spring-boot-starter-parent&amp;lt;/artifactId&amp;gt;
+        &amp;lt;version&amp;gt;3.3.0&amp;lt;/version&amp;gt;
+        &amp;lt;relativePath/&amp;gt;
+    &amp;lt;/parent&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;groupId&amp;gt;io.agentscope.tutorial&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;chapter06-model-integration&amp;lt;/artifactId&amp;gt;
+    &amp;lt;version&amp;gt;1.0.0&amp;lt;/version&amp;gt;
+    &amp;lt;name&amp;gt;chapter06-model-integration&amp;lt;/name&amp;gt;
+    &amp;lt;description&amp;gt;AgentScope Java Chapter 06 - Model Integration Example&amp;lt;/description&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;properties&amp;gt;
+        &amp;lt;java.version&amp;gt;21&amp;lt;/java.version&amp;gt;
+        &amp;lt;agentscope.version&amp;gt;1.0.0&amp;lt;/agentscope.version&amp;gt;
+    &amp;lt;/properties&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;dependencies&amp;gt;
+        &amp;lt;!-- Spring Boot Web --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-starter-web&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- Spring Data JPA --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-starter-data-jpa&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- H2 数据库 --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;com.h2database&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;h2&amp;lt;/artifactId&amp;gt;
+            &amp;lt;scope&amp;gt;runtime&amp;lt;/scope&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- AgentScope Core --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-core&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;${agentscope.version}&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- Lombok --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.projectlombok&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;lombok&amp;lt;/artifactId&amp;gt;
+            &amp;lt;optional&amp;gt;true&amp;lt;/optional&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- 测试 --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-starter-test&amp;lt;/artifactId&amp;gt;
+            &amp;lt;scope&amp;gt;test&amp;lt;/scope&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+    &amp;lt;/dependencies&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;build&amp;gt;
+        &amp;lt;plugins&amp;gt;
+            &amp;lt;plugin&amp;gt;
+                &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+                &amp;lt;artifactId&amp;gt;spring-boot-maven-plugin&amp;lt;/artifactId&amp;gt;
+                &amp;lt;configuration&amp;gt;
+                    &amp;lt;excludes&amp;gt;
+                        &amp;lt;exclude&amp;gt;
+                            &amp;lt;groupId&amp;gt;org.projectlombok&amp;lt;/groupId&amp;gt;
+                            &amp;lt;artifactId&amp;gt;lombok&amp;lt;/artifactId&amp;gt;
+                        &amp;lt;/exclude&amp;gt;
+                    &amp;lt;/excludes&amp;gt;
+                &amp;lt;/configuration&amp;gt;
+            &amp;lt;/plugin&amp;gt;
+        &amp;lt;/plugins&amp;gt;
+    &amp;lt;/build&amp;gt;
+&amp;lt;/project&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;application.yaml 配置&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;server:
+  port: 8080
+&lt;p&gt;spring:
+  application:
+    name: chapter06-model-integration&lt;/p&gt;
+&lt;p&gt;# H2 数据库配置（嵌入式）
+  datasource:
+    url: jdbc:h2:mem:modeldb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:&lt;/p&gt;
+&lt;p&gt;# JPA 配置
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.H2Dialect&lt;/p&gt;
+&lt;p&gt;# H2 控制台（开发时启用）
+  h2:
+    console:
+      enabled: true
+      path: /h2-console&lt;/p&gt;
+&lt;h1&gt;自定义模型配置&lt;/h1&gt;
+model:
+  # DashScope 配置
+  dashscope:
+    api-key: ${DASHSCOPE_API_KEY:demo-key}
+    base-url: https://dashscope.aliyuncs.com/api/v1
+    default-model: qwen-plus
+&lt;p&gt;# OpenAI 配置
+  openai:
+    api-key: ${OPENAI_API_KEY:demo-key}
+    base-url: https://api.openai.com/v1
+    default-model: gpt-4o&lt;/p&gt;
+&lt;p&gt;# Ollama 配置
+  ollama:
+    base-url: http://localhost:11434
+    default-model: llama3.2&lt;/p&gt;
+&lt;p&gt;# Gemini 配置
+  gemini:
+    api-key: ${GEMINI_API_KEY:demo-key}
+    default-model: gemini-2.0-flash&lt;/p&gt;
+&lt;h1&gt;日志配置&lt;/h1&gt;
+logging:
+  level:
+    io.agentscope: DEBUG
+    root: INFO
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;实体类&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// io.agentscope.tutorial.chapter06.entity.ModelProvider
+package io.agentscope.tutorial.chapter06.entity;
+&lt;p&gt;import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;&lt;/p&gt;
+&lt;p&gt;import java.time.LocalDateTime;&lt;/p&gt;
+&lt;p&gt;/**
+ * 模型提供商实体类
+ * 用于存储不同模型提供商的信息
+ */
+@Entity
+@Table(name = &amp;quot;model_provider&amp;quot;)
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class ModelProvider {&lt;/p&gt;
+&lt;p&gt;@Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;&lt;/p&gt;
+&lt;p&gt;/**
+     * 提供商名称 (如: dashscope, openai, ollama, gemini)
+     */
+    @Column(nullable = false, unique = true)
+    private String name;&lt;/p&gt;
+&lt;p&gt;/**
+     * 显示名称
+     */
+    @Column(nullable = false)
+    private String displayName;&lt;/p&gt;
+&lt;p&gt;/**
+     * API Key（加密存储）
+     */
+    @Column
+    private String apiKey;&lt;/p&gt;
+&lt;p&gt;/**
+     * Base URL
+     */
+    @Column
+    private String baseUrl;&lt;/p&gt;
+&lt;p&gt;/**
+     * 是否启用
+     */
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean enabled = true;&lt;/p&gt;
+&lt;p&gt;/**
+     * 优先级（数字越小优先级越高）
+     */
+    @Column(nullable = false)
+    @Builder.Default
+    private Integer priority = 100;&lt;/p&gt;
+&lt;p&gt;/**
+     * 备注
+     */
+    @Column
+    private String remark;&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建时间
+     */
+    @Column(nullable = false, updatable = false)
+    @Builder.Default
+    private LocalDateTime createTime = LocalDateTime.now();&lt;/p&gt;
+&lt;p&gt;/**
+     * 更新时间
+     */
+    @Column(nullable = false)
+    @Builder.Default
+    private LocalDateTime updateTime = LocalDateTime.now();
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// io.agentscope.tutorial.chapter06.entity.ChatConfig
+package io.agentscope.tutorial.chapter06.entity;
+&lt;p&gt;import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;&lt;/p&gt;
+&lt;p&gt;import java.time.LocalDateTime;&lt;/p&gt;
+&lt;p&gt;/**
+ * 聊天配置实体类
+ * 用于存储用户的聊天配置和历史
+ */
+@Entity
+@Table(name = &amp;quot;chat_config&amp;quot;)
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class ChatConfig {&lt;/p&gt;
+&lt;p&gt;@Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;&lt;/p&gt;
+&lt;p&gt;/**
+     * 配置名称
+     */
+    @Column(nullable = false)
+    private String name;&lt;/p&gt;
+&lt;p&gt;/**
+     * 模型提供商类型
+     */
+    @Column(nullable = false)
+    private String providerType;&lt;/p&gt;
+&lt;p&gt;/**
+     * 模型名称
+     */
+    @Column(nullable = false)
+    private String modelName;&lt;/p&gt;
+&lt;p&gt;/**
+     * Temperature 参数
+     */
+    @Column
+    @Builder.Default
+    private Double temperature = 0.7;&lt;/p&gt;
+&lt;p&gt;/**
+     * 最大 Token 数
+     */
+    @Column
+    @Builder.Default
+    private Integer maxTokens = 2000;&lt;/p&gt;
+&lt;p&gt;/**
+     * 系统提示词
+     */
+    @Column(length = 4000)
+    private String systemPrompt;&lt;/p&gt;
+&lt;p&gt;/**
+     * 是否启用流式输出
+     */
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean streamEnabled = true;&lt;/p&gt;
+&lt;p&gt;/**
+     * 是否为默认配置
+     */
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean isDefault = false;&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建时间
+     */
+    @Column(nullable = false, updatable = false)
+    @Builder.Default
+    private LocalDateTime createTime = LocalDateTime.now();&lt;/p&gt;
+&lt;p&gt;/**
+     * 更新时间
+     */
+    @Column(nullable = false)
+    @Builder.Default
+    private LocalDateTime updateTime = LocalDateTime.now();&lt;/p&gt;
+&lt;p&gt;@PreUpdate
+    public void preUpdate() {
+        this.updateTime = LocalDateTime.now();
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;Repository 接口&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// io.agentscope.tutorial.chapter06.repository.ModelProviderRepository
+package io.agentscope.tutorial.chapter06.repository;
+&lt;p&gt;import io.agentscope.tutorial.chapter06.entity.ModelProvider;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;&lt;/p&gt;
+&lt;p&gt;import java.util.List;
+import java.util.Optional;&lt;/p&gt;
+&lt;p&gt;/**
+ * 模型提供商数据访问层
+ */
+@Repository
+public interface ModelProviderRepository extends JpaRepository&amp;lt;ModelProvider, Long&amp;gt; {&lt;/p&gt;
+&lt;p&gt;/**
+     * 根据名称查找提供商
+     */
+    Optional&amp;lt;ModelProvider&amp;gt; findByName(String name);&lt;/p&gt;
+&lt;p&gt;/**
+     * 查找所有启用的提供商
+     */
+    List&amp;lt;ModelProvider&amp;gt; findByEnabledTrueOrderByPriorityAsc();&lt;/p&gt;
+&lt;p&gt;/**
+     * 检查提供商是否存在
+     */
+    boolean existsByName(String name);
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// io.agentscope.tutorial.chapter06.repository.ChatConfigRepository
+package io.agentscope.tutorial.chapter06.repository;
+&lt;p&gt;import io.agentscope.tutorial.chapter06.entity.ChatConfig;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;&lt;/p&gt;
+&lt;p&gt;import java.util.List;
+import java.util.Optional;&lt;/p&gt;
+&lt;p&gt;/**
+ * 聊天配置数据访问层
+ */
+@Repository
+public interface ChatConfigRepository extends JpaRepository&amp;lt;ChatConfig, Long&amp;gt; {&lt;/p&gt;
+&lt;p&gt;/**
+     * 查找所有非默认配置
+     */
+    List&amp;lt;ChatConfig&amp;gt; findByIsDefaultFalse();&lt;/p&gt;
+&lt;p&gt;/**
+     * 查找指定提供商的配置
+     */
+    List&amp;lt;ChatConfig&amp;gt; findByProviderType(String providerType);&lt;/p&gt;
+&lt;p&gt;/**
+     * 查找默认配置
+     */
+    Optional&amp;lt;ChatConfig&amp;gt; findByIsDefaultTrue();&lt;/p&gt;
+&lt;p&gt;/**
+     * 根据名称查找配置
+     */
+    Optional&amp;lt;ChatConfig&amp;gt; findByName(String name);
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;模型服务类&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// io.agentscope.tutorial.chapter06.service.ModelService
+package io.agentscope.tutorial.chapter06.service;
+&lt;p&gt;import io.agentscope.core.formatter.Formatter;
+import io.agentscope.core.formatter.dashscope.DashScopeChatFormatter;
+import io.agentscope.core.formatter.gemini.GeminiChatFormatter;
+import io.agentscope.core.formatter.ollama.OllamaChatFormatter;
+import io.agentscope.core.formatter.openai.DeepSeekFormatter;
+import io.agentscope.core.formatter.openai.GLMFormatter;
+import io.agentscope.core.formatter.openai.OpenAIChatFormatter;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.model.*;
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;&lt;/p&gt;
+&lt;p&gt;import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;&lt;/p&gt;
+&lt;p&gt;/**
+ * 模型服务 - 统一管理多种模型客户端
+ *
+ * &amp;lt;p&amp;gt;支持模型的热切换和动态配置
+ */
+@Service
+@Slf4j
+@RequiredArgsConstructor
+public class ModelService {&lt;/p&gt;
+&lt;p&gt;private final ModelProviderRepository providerRepository;
+    private final ChatConfigRepository configRepository;&lt;/p&gt;
+&lt;p&gt;// 模型客户端缓存（线程安全）
+    private final Map&amp;lt;String, Model&amp;gt; modelCache = new ConcurrentHashMap&amp;lt;&amp;gt;();&lt;/p&gt;
+&lt;p&gt;@Value(&amp;quot;${model.dashscope.api-key:demo}&amp;quot;)
+    private String dashscopeApiKey;&lt;/p&gt;
+&lt;p&gt;@Value(&amp;quot;${model.dashscope.base-url:https://dashscope.aliyuncs.com/api/v1}&amp;quot;)
+    private String dashscopeBaseUrl;&lt;/p&gt;
+&lt;p&gt;@Value(&amp;quot;${model.dashscope.default-model:qwen-plus}&amp;quot;)
+    private String dashscopeDefaultModel;&lt;/p&gt;
+&lt;p&gt;@Value(&amp;quot;${model.openai.api-key:demo}&amp;quot;)
+    private String openaiApiKey;&lt;/p&gt;
+&lt;p&gt;@Value(&amp;quot;${model.openai.base-url:https://api.openai.com/v1}&amp;quot;)
+    private String openaiBaseUrl;&lt;/p&gt;
+&lt;p&gt;@Value(&amp;quot;${model.openai.default-model:gpt-4o}&amp;quot;)
+    private String openaiDefaultModel;&lt;/p&gt;
+&lt;p&gt;@Value(&amp;quot;${model.ollama.base-url:http://localhost:11434}&amp;quot;)
+    private String ollamaBaseUrl;&lt;/p&gt;
+&lt;p&gt;@Value(&amp;quot;${model.ollama.default-model:llama3.2}&amp;quot;)
+    private String ollamaDefaultModel;&lt;/p&gt;
+&lt;p&gt;@Value(&amp;quot;${model.gemini.api-key:demo}&amp;quot;)
+    private String geminiApiKey;&lt;/p&gt;
+&lt;p&gt;@Value(&amp;quot;${model.gemini.default-model:gemini-2.0-flash}&amp;quot;)
+    private String geminiDefaultModel;&lt;/p&gt;
+&lt;p&gt;/**
+     * 初始化默认模型客户端
+     */
+    @PostConstruct
+    public void init() {
+        log.info(&amp;quot;初始化模型服务...&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 初始化 DashScope 模型
+        registerDashScopeModel(&amp;quot;qwen-plus&amp;quot;);
+        registerDashScopeModel(&amp;quot;qwen-max&amp;quot;);
+        registerDashScopeModel(&amp;quot;qwen-turbo&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 初始化 OpenAI 模型
+        registerOpenAIModel(&amp;quot;gpt-4o&amp;quot;, openaiBaseUrl, new OpenAIChatFormatter());
+        registerOpenAIModel(&amp;quot;deepseek-chat&amp;quot;, &amp;quot;https://api.deepseek.com/v1&amp;quot;, new DeepSeekFormatter());
+        registerOpenAIModel(&amp;quot;glm-4&amp;quot;, &amp;quot;https://open.bigmodel.cn/api/paas/v4&amp;quot;, new GLMFormatter());&lt;/p&gt;
+&lt;p&gt;// 初始化 Ollama 模型
+        registerOllamaModel(&amp;quot;llama3.2&amp;quot;);
+        registerOllamaModel(&amp;quot;qwen2.5:7b&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 初始化 Gemini 模型
+        registerGeminiModel(&amp;quot;gemini-2.0-flash&amp;quot;);
+        registerGeminiModel(&amp;quot;gemini-1.5-pro&amp;quot;);&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;模型服务初始化完成，已注册 {} 个模型&amp;quot;, modelCache.size());
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 模型注册方法 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 注册 DashScope 模型
+     */
+    public void registerDashScopeModel(String modelName) {
+        String cacheKey = &amp;quot;dashscope:&amp;quot; + modelName;
+        Model model = DashScopeChatModel.builder()
+                .apiKey(dashscopeApiKey)
+                .baseUrl(dashscopeBaseUrl)
+                .modelName(modelName)
+                .stream(true)
+                .formatter(new DashScopeChatFormatter())
+                .defaultOptions(GenerateOptions.builder()
+                        .temperature(0.7)
+                        .maxTokens(2000)
+                        .build())
+                .build();
+        modelCache.put(cacheKey, model);
+        log.info(&amp;quot;注册 DashScope 模型: {}&amp;quot;, modelName);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 注册 OpenAI 兼容模型
+     */
+    public void registerOpenAIModel(String modelName, String baseUrl, Formatter formatter) {
+        String cacheKey = &amp;quot;openai:&amp;quot; + modelName;
+        Model model = OpenAIChatModel.builder()
+                .apiKey(openaiApiKey)
+                .baseUrl(baseUrl)
+                .modelName(modelName)
+                .stream(true)
+                .formatter(formatter)
+                .build();
+        modelCache.put(cacheKey, model);
+        log.info(&amp;quot;注册 OpenAI 兼容模型: {} -&amp;gt; {}&amp;quot;, modelName, baseUrl);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 注册 Ollama 模型
+     */
+    public void registerOllamaModel(String modelName) {
+        String cacheKey = &amp;quot;ollama:&amp;quot; + modelName;
+        Model model = OllamaChatModel.builder()
+                .modelName(modelName)
+                .baseUrl(ollamaBaseUrl)
+                .build();
+        modelCache.put(cacheKey, model);
+        log.info(&amp;quot;注册 Ollama 模型: {}&amp;quot;, modelName);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 注册 Gemini 模型
+     */
+    public void registerGeminiModel(String modelName) {
+        String cacheKey = &amp;quot;gemini:&amp;quot; + modelName;
+        Model model = GeminiChatModel.builder()
+                .apiKey(geminiApiKey)
+                .modelName(modelName)
+                .streamEnabled(true)
+                .formatter(new GeminiChatFormatter())
+                .build();
+        modelCache.put(cacheKey, model);
+        log.info(&amp;quot;注册 Gemini 模型: {}&amp;quot;, modelName);
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 模型获取方法 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 根据提供商和模型名获取模型客户端
+     */
+    public Model getModel(String provider, String modelName) {
+        String cacheKey = provider + &amp;quot;:&amp;quot; + modelName;
+        return modelCache.get(cacheKey);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取所有已注册的模型
+     */
+    public Map&amp;lt;String, Model&amp;gt; getAllModels() {
+        return new HashMap&amp;lt;&amp;gt;(modelCache);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取指定提供商的模型
+     */
+    public Map&amp;lt;String, Model&amp;gt; getModelsByProvider(String provider) {
+        Map&amp;lt;String, Model&amp;gt; result = new HashMap&amp;lt;&amp;gt;();
+        modelCache.forEach((key, model) -&amp;gt; {
+            if (key.startsWith(provider + &amp;quot;:&amp;quot;)) {
+                result.put(key, model);
+            }
+        });
+        return result;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 切换默认模型
+     */
+    public void switchDefaultModel(String provider, String modelName) {
+        String cacheKey = provider + &amp;quot;:&amp;quot; + modelName;
+        if (!modelCache.containsKey(cacheKey)) {
+            throw new IllegalArgumentException(&amp;quot;模型不存在: &amp;quot; + cacheKey);
+        }
+        log.info(&amp;quot;切换默认模型: {} -&amp;gt; {}&amp;quot;, provider, modelName);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 移除模型
+     */
+    public void removeModel(String provider, String modelName) {
+        String cacheKey = provider + &amp;quot;:&amp;quot; + modelName;
+        modelCache.remove(cacheKey);
+        log.info(&amp;quot;移除模型: {}&amp;quot;, cacheKey);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 检查模型是否可用
+     */
+    public boolean isModelAvailable(String provider, String modelName) {
+        return modelCache.containsKey(provider + &amp;quot;:&amp;quot; + modelName);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取所有支持的提供商
+     */
+    public List&amp;lt;String&amp;gt; getSupportedProviders() {
+        return List.of(&amp;quot;dashscope&amp;quot;, &amp;quot;openai&amp;quot;, &amp;quot;ollama&amp;quot;, &amp;quot;gemini&amp;quot;);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;控制层实现&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// io.agentscope.tutorial.chapter06.controller.ModelCompareController
+package io.agentscope.tutorial.chapter06.controller;
+&lt;p&gt;import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.model.ChatResponse;
+import io.agentscope.core.model.GenerateOptions;
+import io.agentscope.core.model.Model;
+import io.agentscope.tutorial.chapter06.entity.ChatConfig;
+import io.agentscope.tutorial.chapter06.entity.ModelProvider;
+import io.agentscope.tutorial.chapter06.repository.ChatConfigRepository;
+import io.agentscope.tutorial.chapter06.repository.ModelProviderRepository;
+import io.agentscope.tutorial.chapter06.service.ModelService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;&lt;/p&gt;
+&lt;p&gt;import java.util.*;&lt;/p&gt;
+&lt;p&gt;/**
+ * 模型对比控制器
+ * 提供模型配置、切换和对话功能
+ */
+@RestController
+@RequestMapping(&amp;quot;/api/models&amp;quot;)
+@RequiredArgsConstructor
+@Slf4j
+public class ModelCompareController {&lt;/p&gt;
+&lt;p&gt;private final ModelService modelService;
+    private final ModelProviderRepository providerRepository;
+    private final ChatConfigRepository configRepository;&lt;/p&gt;
+&lt;p&gt;// ==================== 模型管理接口 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取所有支持的模型提供商
+     */
+    @GetMapping(&amp;quot;/providers&amp;quot;)
+    public ResponseEntity&amp;lt;List&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt;&amp;gt; getProviders() {
+        List&amp;lt;ModelProvider&amp;gt; providers = providerRepository.findByEnabledTrueOrderByPriorityAsc();
+        List&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; result = new ArrayList&amp;lt;&amp;gt;();&lt;/p&gt;
+&lt;p&gt;for (ModelProvider provider : providers) {
+            Map&amp;lt;String, Object&amp;gt; map = new HashMap&amp;lt;&amp;gt;();
+            map.put(&amp;quot;id&amp;quot;, provider.getId());
+            map.put(&amp;quot;name&amp;quot;, provider.getName());
+            map.put(&amp;quot;displayName&amp;quot;, provider.getDisplayName());
+            map.put(&amp;quot;enabled&amp;quot;, provider.getEnabled());
+            map.put(&amp;quot;priority&amp;quot;, provider.getPriority());&lt;/p&gt;
+&lt;p&gt;// 获取该提供商下的所有模型
+            Map&amp;lt;String, Model&amp;gt; models = modelService.getModelsByProvider(provider.getName());
+            List&amp;lt;String&amp;gt; modelNames = new ArrayList&amp;lt;&amp;gt;(models.keySet());
+            // 提取模型名（去掉 provider: 前缀）
+            modelNames.replaceAll(s -&amp;gt; s.substring(s.indexOf(':') + 1));
+            map.put(&amp;quot;models&amp;quot;, modelNames);&lt;/p&gt;
+&lt;p&gt;result.add(map);
+        }
+        return ResponseEntity.ok(result);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取指定提供商的所有模型
+     */
+    @GetMapping(&amp;quot;/providers/{provider}/models&amp;quot;)
+    public ResponseEntity&amp;lt;List&amp;lt;String&amp;gt;&amp;gt; getModelsByProvider(@PathVariable String provider) {
+        Map&amp;lt;String, Model&amp;gt; models = modelService.getModelsByProvider(provider);
+        List&amp;lt;String&amp;gt; modelNames = new ArrayList&amp;lt;&amp;gt;(models.keySet());
+        modelNames.replaceAll(s -&amp;gt; s.substring(s.indexOf(':') + 1));
+        return ResponseEntity.ok(modelNames);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 注册新模型
+     */
+    @PostMapping(&amp;quot;/register&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; registerModel(
+            @RequestBody Map&amp;lt;String, String&amp;gt; request) {
+        String provider = request.get(&amp;quot;provider&amp;quot;);
+        String modelName = request.get(&amp;quot;modelName&amp;quot;);&lt;/p&gt;
+&lt;p&gt;try {
+            switch (provider.toLowerCase()) {
+                case &amp;quot;dashscope&amp;quot; -&amp;gt; modelService.registerDashScopeModel(modelName);
+                case &amp;quot;ollama&amp;quot; -&amp;gt; modelService.registerOllamaModel(modelName);
+                case &amp;quot;gemini&amp;quot; -&amp;gt; modelService.registerGeminiModel(modelName);
+                default -&amp;gt; {
+                    return ResponseEntity.badRequest().body(Map.of(
+                            &amp;quot;success&amp;quot;, false,
+                            &amp;quot;message&amp;quot;, &amp;quot;不支持的提供商: &amp;quot; + provider
+                    ));
+                }
+            }&lt;/p&gt;
+&lt;p&gt;return ResponseEntity.ok(Map.of(
+                    &amp;quot;success&amp;quot;, true,
+                    &amp;quot;message&amp;quot;, &amp;quot;模型注册成功&amp;quot;,
+                    &amp;quot;modelKey&amp;quot;, provider + &amp;quot;:&amp;quot; + modelName
+            ));
+        } catch (Exception e) {
+            log.error(&amp;quot;注册模型失败&amp;quot;, e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                    &amp;quot;success&amp;quot;, false,
+                    &amp;quot;message&amp;quot;, &amp;quot;注册失败: &amp;quot; + e.getMessage()
+            ));
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 移除模型
+     */
+    @DeleteMapping(&amp;quot;/remove&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; removeModel(
+            @RequestBody Map&amp;lt;String, String&amp;gt; request) {
+        String provider = request.get(&amp;quot;provider&amp;quot;);
+        String modelName = request.get(&amp;quot;modelName&amp;quot;);&lt;/p&gt;
+&lt;p&gt;modelService.removeModel(provider, modelName);&lt;/p&gt;
+&lt;p&gt;return ResponseEntity.ok(Map.of(
+                &amp;quot;success&amp;quot;, true,
+                &amp;quot;message&amp;quot;, &amp;quot;模型移除成功&amp;quot;
+        ));
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 对话接口 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 单模型对话
+     */
+    @PostMapping(&amp;quot;/chat&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; chat(
+            @RequestBody Map&amp;lt;String, Object&amp;gt; request) {
+        String provider = (String) request.get(&amp;quot;provider&amp;quot;);
+        String modelName = (String) request.get(&amp;quot;modelName&amp;quot;);
+        String message = (String) request.get(&amp;quot;message&amp;quot;);
+        Double temperature = request.containsKey(&amp;quot;temperature&amp;quot;)
+                ? (Double) request.get(&amp;quot;temperature&amp;quot;) : 0.7;
+        Integer maxTokens = request.containsKey(&amp;quot;maxTokens&amp;quot;)
+                ? (Integer) request.get(&amp;quot;maxTokens&amp;quot;) : 2000;&lt;/p&gt;
+&lt;p&gt;Model model = modelService.getModel(provider, modelName);
+        if (model == null) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    &amp;quot;success&amp;quot;, false,
+                    &amp;quot;message&amp;quot;, &amp;quot;模型不存在: &amp;quot; + provider + &amp;quot;:&amp;quot; + modelName
+            ));
+        }&lt;/p&gt;
+&lt;p&gt;try {
+            Msg userMsg = Msg.builder()
+                    .role(MsgRole.USER)
+                    .content(TextBlock.builder().text(message).build())
+                    .build();&lt;/p&gt;
+&lt;p&gt;GenerateOptions options = GenerateOptions.builder()
+                    .temperature(temperature)
+                    .maxTokens(maxTokens)
+                    .build();&lt;/p&gt;
+&lt;p&gt;// 执行对话
+            ChatResponse response = model.stream(List.of(userMsg), null, options)
+                    .blockLast();&lt;/p&gt;
+&lt;p&gt;if (response != null) {
+                return ResponseEntity.ok(Map.of(
+                        &amp;quot;success&amp;quot;, true,
+                        &amp;quot;model&amp;quot;, modelName,
+                        &amp;quot;provider&amp;quot;, provider,
+                        &amp;quot;response&amp;quot;, response.getContent().getText(),
+                        &amp;quot;usage&amp;quot;, response.getUsage()
+                ));
+            } else {
+                return ResponseEntity.ok(Map.of(
+                        &amp;quot;success&amp;quot;, false,
+                        &amp;quot;message&amp;quot;, &amp;quot;未获取到响应&amp;quot;
+                ));
+            }
+        } catch (Exception e) {
+            log.error(&amp;quot;对话请求失败&amp;quot;, e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                    &amp;quot;success&amp;quot;, false,
+                    &amp;quot;message&amp;quot;, &amp;quot;请求失败: &amp;quot; + e.getMessage()
+            ));
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 流式对话
+     */
+    @PostMapping(&amp;quot;/chat/stream&amp;quot;)
+    public Flux&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; streamChat(
+            @RequestBody Map&amp;lt;String, Object&amp;gt; request) {
+        String provider = (String) request.get(&amp;quot;provider&amp;quot;);
+        String modelName = (String) request.get(&amp;quot;modelName&amp;quot;);
+        String message = (String) request.get(&amp;quot;message&amp;quot;);
+        Double temperature = request.containsKey(&amp;quot;temperature&amp;quot;)
+                ? (Double) request.get(&amp;quot;temperature&amp;quot;) : 0.7;&lt;/p&gt;
+&lt;p&gt;Model model = modelService.getModel(provider, modelName);
+        if (model == null) {
+            return Flux.just(Map.of(
+                    &amp;quot;error&amp;quot;, true,
+                    &amp;quot;message&amp;quot;, &amp;quot;模型不存在&amp;quot;
+            ));
+        }&lt;/p&gt;
+&lt;p&gt;Msg userMsg = Msg.builder()
+                .role(MsgRole.USER)
+                .content(TextBlock.builder().text(message).build())
+                .build();&lt;/p&gt;
+&lt;p&gt;GenerateOptions options = GenerateOptions.builder()
+                .temperature(temperature)
+                .build();&lt;/p&gt;
+&lt;p&gt;return model.stream(List.of(userMsg), null, options)
+                .map(response -&amp;gt; Map.of(
+                        &amp;quot;content&amp;quot;, response.getContent().getText(),
+                        &amp;quot;done&amp;quot;, response.isDone(),
+                        &amp;quot;usage&amp;quot;, response.getUsage()
+                ));
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 模型对比接口 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 多模型对比（同一问题发给多个模型）
+     */
+    @PostMapping(&amp;quot;/compare&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; compareModels(
+            @RequestBody Map&amp;lt;String, Object&amp;gt; request) {
+        @SuppressWarnings(&amp;quot;unchecked&amp;quot;)
+        List&amp;lt;Map&amp;lt;String, String&amp;gt;&amp;gt; modelList = (List&amp;lt;Map&amp;lt;String, String&amp;gt;&amp;gt;) request.get(&amp;quot;models&amp;quot;);
+        String message = (String) request.get(&amp;quot;message&amp;quot;);
+        String systemPrompt = (String) request.getOrDefault(&amp;quot;systemPrompt&amp;quot;, &amp;quot;你是一个有用的AI助手。&amp;quot;);&lt;/p&gt;
+&lt;p&gt;List&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; results = new ArrayList&amp;lt;&amp;gt;();&lt;/p&gt;
+&lt;p&gt;for (Map&amp;lt;String, String&amp;gt; modelConfig : modelList) {
+            String provider = modelConfig.get(&amp;quot;provider&amp;quot;);
+            String modelName = modelConfig.get(&amp;quot;modelName&amp;quot;);&lt;/p&gt;
+&lt;p&gt;Map&amp;lt;String, Object&amp;gt; result = new HashMap&amp;lt;&amp;gt;();
+            result.put(&amp;quot;provider&amp;quot;, provider);
+            result.put(&amp;quot;modelName&amp;quot;, modelName);&lt;/p&gt;
+&lt;p&gt;try {
+                long startTime = System.currentTimeMillis();&lt;/p&gt;
+&lt;p&gt;Model model = modelService.getModel(provider, modelName);
+                if (model == null) {
+                    result.put(&amp;quot;success&amp;quot;, false);
+                    result.put(&amp;quot;error&amp;quot;, &amp;quot;模型不存在&amp;quot;);
+                    results.add(result);
+                    continue;
+                }&lt;/p&gt;
+&lt;p&gt;List&amp;lt;Msg&amp;gt; messages = List.of(
+                        Msg.builder()
+                                .role(MsgRole.SYSTEM)
+                                .content(TextBlock.builder().text(systemPrompt).build())
+                                .build(),
+                        Msg.builder()
+                                .role(MsgRole.USER)
+                                .content(TextBlock.builder().text(message).build())
+                                .build()
+                );&lt;/p&gt;
+&lt;p&gt;GenerateOptions options = GenerateOptions.builder()
+                        .temperature(0.7)
+                        .maxTokens(1000)
+                        .build();&lt;/p&gt;
+&lt;p&gt;ChatResponse response = model.stream(messages, null, options)
+                        .blockLast();&lt;/p&gt;
+&lt;p&gt;long duration = System.currentTimeMillis() - startTime;&lt;/p&gt;
+&lt;p&gt;if (response != null) {
+                    result.put(&amp;quot;success&amp;quot;, true);
+                    result.put(&amp;quot;response&amp;quot;, response.getContent().getText());
+                    result.put(&amp;quot;duration&amp;quot;, duration);
+                    result.put(&amp;quot;usage&amp;quot;, response.getUsage());
+                } else {
+                    result.put(&amp;quot;success&amp;quot;, false);
+                    result.put(&amp;quot;error&amp;quot;, &amp;quot;未获取到响应&amp;quot;);
+                }
+            } catch (Exception e) {
+                result.put(&amp;quot;success&amp;quot;, false);
+                result.put(&amp;quot;error&amp;quot;, e.getMessage());
+            }&lt;/p&gt;
+&lt;p&gt;results.add(result);
+        }&lt;/p&gt;
+&lt;p&gt;return ResponseEntity.ok(Map.of(
+                &amp;quot;question&amp;quot;, message,
+                &amp;quot;results&amp;quot;, results
+        ));
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 配置管理接口 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 保存聊天配置
+     */
+    @PostMapping(&amp;quot;/config/save&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; saveConfig(
+            @RequestBody ChatConfig config) {
+        try {
+            if (config.getId() == null) {
+                config.setCreateTime(java.time.LocalDateTime.now());
+            }
+            config.setUpdateTime(java.time.LocalDateTime.now());&lt;/p&gt;
+&lt;p&gt;ChatConfig saved = configRepository.save(config);
+            return ResponseEntity.ok(Map.of(
+                    &amp;quot;success&amp;quot;, true,
+                    &amp;quot;data&amp;quot;, saved
+            ));
+        } catch (Exception e) {
+            log.error(&amp;quot;保存配置失败&amp;quot;, e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                    &amp;quot;success&amp;quot;, false,
+                    &amp;quot;message&amp;quot;, e.getMessage()
+            ));
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取所有聊天配置
+     */
+    @GetMapping(&amp;quot;/config/list&amp;quot;)
+    public ResponseEntity&amp;lt;List&amp;lt;ChatConfig&amp;gt;&amp;gt; listConfigs() {
+        return ResponseEntity.ok(configRepository.findAll());
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取默认配置
+     */
+    @GetMapping(&amp;quot;/config/default&amp;quot;)
+    public ResponseEntity&amp;lt;Optional&amp;lt;ChatConfig&amp;gt;&amp;gt; getDefaultConfig() {
+        return ResponseEntity.ok(configRepository.findByIsDefaultTrue());
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 设置默认配置
+     */
+    @PostMapping(&amp;quot;/config/set-default/{id}&amp;quot;)
+    public ResponseEntity&amp;lt;Map&amp;lt;String, Object&amp;gt;&amp;gt; setDefaultConfig(@PathVariable Long id) {
+        // 清除现有默认
+        configRepository.findByIsDefaultTrue().ifPresent(config -&amp;gt; {
+            config.setIsDefault(false);
+            configRepository.save(config);
+        });&lt;/p&gt;
+&lt;p&gt;// 设置新默认
+        configRepository.findById(id).ifPresent(config -&amp;gt; {
+            config.setIsDefault(true);
+            configRepository.save(config);
+        });&lt;/p&gt;
+&lt;p&gt;return ResponseEntity.ok(Map.of(&amp;quot;success&amp;quot;, true));
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;Spring Boot 启动类&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// io.agentscope.tutorial.chapter06.Chapter06Application
+package io.agentscope.tutorial.chapter06;
+&lt;p&gt;import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;&lt;/p&gt;
+&lt;p&gt;/**
+ * AgentScope Java 教程 - 第六章：模型集成
+ *
+ * &amp;lt;p&amp;gt;本应用演示如何配置和使用多种模型客户端，
+ * 支持 DashScope、OpenAI、Ollama、Gemini 等多种提供商。
+ *
+ * &amp;lt;p&amp;gt;访问地址：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;API 端点: http://localhost:8080/api/models&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;H2 控制台: http://localhost:8080/h2-console&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * @author AgentScope Tutorial
+ */
+@SpringBootApplication
+public class Chapter06Application {&lt;/p&gt;
+&lt;p&gt;public static void main(String[] args) {
+        SpringApplication.run(Chapter06Application.class, args);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;数据初始化器（可选）&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// io.agentscope.tutorial.chapter06.config.DataInitializer
+package io.agentscope.tutorial.chapter06.config;
+&lt;p&gt;import io.agentscope.tutorial.chapter06.entity.ChatConfig;
+import io.agentscope.tutorial.chapter06.entity.ModelProvider;
+import io.agentscope.tutorial.chapter06.repository.ChatConfigRepository;
+import io.agentscope.tutorial.chapter06.repository.ModelProviderRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.stereotype.Component;&lt;/p&gt;
+&lt;p&gt;/**
+ * 数据初始化器
+ * 在应用启动时初始化默认的模型提供商配置
+ */
+@Component
+@RequiredArgsConstructor
+@Slf4j
+public class DataInitializer implements CommandLineRunner {&lt;/p&gt;
+&lt;p&gt;private final ModelProviderRepository providerRepository;
+    private final ChatConfigRepository configRepository;&lt;/p&gt;
+&lt;p&gt;@Override
+    public void run(String... args) {
+        initializeProviders();
+        initializeDefaultConfigs();
+    }&lt;/p&gt;
+&lt;p&gt;private void initializeProviders() {
+        log.info(&amp;quot;初始化模型提供商配置...&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// DashScope
+        if (!providerRepository.existsByName(&amp;quot;dashscope&amp;quot;)) {
+            providerRepository.save(ModelProvider.builder()
+                    .name(&amp;quot;dashscope&amp;quot;)
+                    .displayName(&amp;quot;阿里云百炼 (DashScope)&amp;quot;)
+                    .baseUrl(&amp;quot;https://dashscope.aliyuncs.com/api/v1&amp;quot;)
+                    .enabled(true)
+                    .priority(10)
+                    .remark(&amp;quot;通义千问系列模型，支持文本和视觉任务&amp;quot;)
+                    .build());
+        }&lt;/p&gt;
+&lt;p&gt;// OpenAI
+        if (!providerRepository.existsByName(&amp;quot;openai&amp;quot;)) {
+            providerRepository.save(ModelProvider.builder()
+                    .name(&amp;quot;openai&amp;quot;)
+                    .displayName(&amp;quot;OpenAI&amp;quot;)
+                    .baseUrl(&amp;quot;https://api.openai.com/v1&amp;quot;)
+                    .enabled(true)
+                    .priority(20)
+                    .remark(&amp;quot;GPT 系列模型，强大的推理和生成能力&amp;quot;)
+                    .build());
+        }&lt;/p&gt;
+&lt;p&gt;// Ollama
+        if (!providerRepository.existsByName(&amp;quot;ollama&amp;quot;)) {
+            providerRepository.save(ModelProvider.builder()
+                    .name(&amp;quot;ollama&amp;quot;)
+                    .displayName(&amp;quot;Ollama (本地)&amp;quot;)
+                    .baseUrl(&amp;quot;http://localhost:11434&amp;quot;)
+                    .enabled(true)
+                    .priority(30)
+                    .remark(&amp;quot;本地开源模型，隐私保护&amp;quot;)
+                    .build());
+        }&lt;/p&gt;
+&lt;p&gt;// Gemini
+        if (!providerRepository.existsByName(&amp;quot;gemini&amp;quot;)) {
+            providerRepository.save(ModelProvider.builder()
+                    .name(&amp;quot;gemini&amp;quot;)
+                    .displayName(&amp;quot;Google Gemini&amp;quot;)
+                    .baseUrl(&amp;quot;https://generativelanguage.googleapis.com&amp;quot;)
+                    .enabled(true)
+                    .priority(40)
+                    .remark(&amp;quot;Google 多模态模型，支持图像和视频理解&amp;quot;)
+                    .build());
+        }&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;模型提供商初始化完成&amp;quot;);
+    }&lt;/p&gt;
+&lt;p&gt;private void initializeDefaultConfigs() {
+        log.info(&amp;quot;初始化默认聊天配置...&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// DashScope 默认配置
+        if (configRepository.findByName(&amp;quot;DashScope 默认配置&amp;quot;).isEmpty()) {
+            configRepository.save(ChatConfig.builder()
+                    .name(&amp;quot;DashScope 默认配置&amp;quot;)
+                    .providerType(&amp;quot;dashscope&amp;quot;)
+                    .modelName(&amp;quot;qwen-plus&amp;quot;)
+                    .temperature(0.7)
+                    .maxTokens(2000)
+                    .systemPrompt(&amp;quot;你是一个有帮助的AI助手。请用中文回答问题。&amp;quot;)
+                    .streamEnabled(true)
+                    .isDefault(true)
+                    .build());
+        }&lt;/p&gt;
+&lt;p&gt;// OpenAI 默认配置
+        if (configRepository.findByName(&amp;quot;OpenAI 默认配置&amp;quot;).isEmpty()) {
+            configRepository.save(ChatConfig.builder()
+                    .name(&amp;quot;OpenAI 默认配置&amp;quot;)
+                    .providerType(&amp;quot;openai&amp;quot;)
+                    .modelName(&amp;quot;gpt-4o&amp;quot;)
+                    .temperature(0.7)
+                    .maxTokens(2000)
+                    .systemPrompt(&amp;quot;You are a helpful AI assistant. Please answer in the same language as the user.&amp;quot;)
+                    .streamEnabled(true)
+                    .isDefault(false)
+                    .build());
+        }&lt;/p&gt;
+&lt;p&gt;log.info(&amp;quot;默认聊天配置初始化完成&amp;quot;);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;API 使用示例&lt;/h3&gt;
+#### 1. 获取所有模型提供商
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;curl http://localhost:8080/api/models/providers
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;响应：
+&lt;pre&gt;&lt;code class=&quot;language-json&quot;&gt;[
+  {
+    &amp;quot;id&amp;quot;: 1,
+    &amp;quot;name&amp;quot;: &amp;quot;dashscope&amp;quot;,
+    &amp;quot;displayName&amp;quot;: &amp;quot;阿里云百炼 (DashScope)&amp;quot;,
+    &amp;quot;enabled&amp;quot;: true,
+    &amp;quot;priority&amp;quot;: 10,
+    &amp;quot;models&amp;quot;: [&amp;quot;qwen-plus&amp;quot;, &amp;quot;qwen-max&amp;quot;, &amp;quot;qwen-turbo&amp;quot;]
+  },
+  ...
+]
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+#### 2. 单模型对话
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;curl -X POST http://localhost:8080/api/models/chat \
+  -H &amp;quot;Content-Type: application/json&amp;quot; \
+  -d '{
+    &amp;quot;provider&amp;quot;: &amp;quot;dashscope&amp;quot;,
+    &amp;quot;modelName&amp;quot;: &amp;quot;qwen-plus&amp;quot;,
+    &amp;quot;message&amp;quot;: &amp;quot;请介绍一下你自己&amp;quot;,
+    &amp;quot;temperature&amp;quot;: 0.7
+  }'
+&lt;/code&gt;&lt;/pre&gt;
+#### 3. 多模型对比
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;curl -X POST http://localhost:8080/api/models/compare \
+  -H &amp;quot;Content-Type: application/json&amp;quot; \
+  -d '{
+    &amp;quot;models&amp;quot;: [
+      {&amp;quot;provider&amp;quot;: &amp;quot;dashscope&amp;quot;, &amp;quot;modelName&amp;quot;: &amp;quot;qwen-plus&amp;quot;},
+      {&amp;quot;provider&amp;quot;: &amp;quot;openai&amp;quot;, &amp;quot;modelName&amp;quot;: &amp;quot;gpt-4o&amp;quot;},
+      {&amp;quot;provider&amp;quot;: &amp;quot;gemini&amp;quot;, &amp;quot;modelName&amp;quot;: &amp;quot;gemini-2.0-flash&amp;quot;}
+    ],
+    &amp;quot;message&amp;quot;: &amp;quot;解释什么是大语言模型&amp;quot;,
+    &amp;quot;systemPrompt&amp;quot;: &amp;quot;你是一个技术专家，请简洁明了地回答。&amp;quot;
+  }'
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;响应：
+&lt;pre&gt;&lt;code class=&quot;language-json&quot;&gt;{
+  &amp;quot;question&amp;quot;: &amp;quot;解释什么是大语言模型&amp;quot;,
+  &amp;quot;results&amp;quot;: [
+    {
+      &amp;quot;provider&amp;quot;: &amp;quot;dashscope&amp;quot;,
+      &amp;quot;modelName&amp;quot;: &amp;quot;qwen-plus&amp;quot;,
+      &amp;quot;success&amp;quot;: true,
+      &amp;quot;response&amp;quot;: &amp;quot;大语言模型（Large Language Model, LLM）是一种...&amp;quot;,
+      &amp;quot;duration&amp;quot;: 1234,
+      &amp;quot;usage&amp;quot;: {&amp;quot;promptTokens&amp;quot;: 50, &amp;quot;completionTokens&amp;quot;: 200, &amp;quot;totalTokens&amp;quot;: 250}
+    },
+    {
+      &amp;quot;provider&amp;quot;: &amp;quot;openai&amp;quot;,
+      &amp;quot;modelName&amp;quot;: &amp;quot;gpt-4o&amp;quot;,
+      &amp;quot;success&amp;quot;: true,
+      &amp;quot;response&amp;quot;: &amp;quot;A large language model (LLM) is a type of...&amp;quot;,
+      &amp;quot;duration&amp;quot;: 1500,
+      &amp;quot;usage&amp;quot;: {&amp;quot;promptTokens&amp;quot;: 45, &amp;quot;completionTokens&amp;quot;: 180, &amp;quot;totalTokens&amp;quot;: 225}
+    }
+  ]
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+#### 4. 注册新模型
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;curl -X POST http://localhost:8080/api/models/register \
+  -H &amp;quot;Content-Type: application/json&amp;quot; \
+  -d '{
+    &amp;quot;provider&amp;quot;: &amp;quot;dashscope&amp;quot;,
+    &amp;quot;modelName&amp;quot;: &amp;quot;qwen-coder-plus&amp;quot;
+  }'
+&lt;/code&gt;&lt;/pre&gt;
+#### 5. 保存聊天配置
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;curl -X POST http://localhost:8080/api/models/config/save \
+  -H &amp;quot;Content-Type: application/json&amp;quot; \
+  -d '{
+    &amp;quot;name&amp;quot;: &amp;quot;我的自定义配置&amp;quot;,
+    &amp;quot;providerType&amp;quot;: &amp;quot;dashscope&amp;quot;,
+    &amp;quot;modelName&amp;quot;: &amp;quot;qwen-max&amp;quot;,
+    &amp;quot;temperature&amp;quot;: 0.5,
+    &amp;quot;maxTokens&amp;quot;: 3000,
+    &amp;quot;systemPrompt&amp;quot;: &amp;quot;你是一个专业的数据分析助手。&amp;quot;,
+    &amp;quot;streamEnabled&amp;quot;: true,
+    &amp;quot;isDefault&amp;quot;: false
+  }'
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;6.8 本章小结&lt;/h2&gt;
+&lt;p&gt;本章介绍了 AgentScope Java 的模型集成架构：&lt;/p&gt;
+&lt;h3&gt;核心要点&lt;/h3&gt;
+&lt;p&gt;1. **Model 接口**：统一的模型接口，支持流式和非流式调用
+2. **Formatter 机制**：可插拔的格式化器，处理不同提供商的格式转换
+3. **多提供商支持**：DashScope、OpenAI、Ollama、Gemini 等开箱即用
+4. **GenerateOptions**：统一的生成选项配置&lt;/p&gt;
+&lt;h3&gt;关键类总结&lt;/h3&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;类名&lt;/th&gt;&lt;th&gt;用途&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;Model&lt;/code&gt;&lt;/td&gt;&lt;td&gt;模型接口，定义聊天能力&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;DashScopeChatModel&lt;/code&gt;&lt;/td&gt;&lt;td&gt;阿里云百炼模型&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;OpenAIChatModel&lt;/code&gt;&lt;/td&gt;&lt;td&gt;OpenAI 兼容模型&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;OllamaChatModel&lt;/code&gt;&lt;/td&gt;&lt;td&gt;本地 Ollama 模型&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;GeminiChatModel&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Google Gemini 模型&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;Formatter&lt;/code&gt;&lt;/td&gt;&lt;td&gt;消息格式化接口&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;GenerateOptions&lt;/code&gt;&lt;/td&gt;&lt;td&gt;生成选项配置&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;h3&gt;下一步&lt;/h3&gt;
+&lt;ul&gt;&lt;li&gt;尝试不同的模型提供商&lt;/li&gt;
+&lt;li&gt;配置自定义 Formatter&lt;/li&gt;
+&lt;li&gt;实现模型对比和选择策略&lt;/li&gt;
+&lt;li&gt;探索工具调用和 Agent 配合&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;相关资源&lt;/h3&gt;
+&lt;ul&gt;&lt;li&gt;&lt;a href=&quot;https://help.aliyun.com/zh/dashscope/&quot;&gt;DashScope 文档&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://platform.openai.com/docs&quot;&gt;OpenAI API 文档&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/ollama/ollama&quot;&gt;Ollama 官方文档&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://ai.google.dev/docs&quot;&gt;Gemini API 文档&lt;/a&gt;&lt;/li&gt;&lt;/ul&gt;
+</body>
+</html>

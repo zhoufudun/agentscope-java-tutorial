@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第十八章：其他框架集成</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        h3 { color: #7f8c8d; }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+        }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+        table {
+            border-collapse: collapse;
+            margin: 20px 0;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th { background: #3498db; color: white; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        ul { padding-left: 20px; }
+        li { margin: 5px 0; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            color: #666;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+&lt;h1&gt;第十八章：其他框架集成&lt;/h1&gt;
+&lt;p&gt;AgentScope Java 不仅支持 Spring Boot，还提供了与 Micronaut 和 Quarkus 两大现代云原生框架的无缝集成。本章将详细介绍这两个框架的集成方式，并提供完整的快速启动案例。&lt;/p&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;18.1 Micronaut 集成&lt;/h2&gt;
+&lt;h3&gt;18.1.1 Micronaut 扩展概述&lt;/h3&gt;
+&lt;p&gt;Micronaut 是一款现代化的 Java 框架，以其快速的启动时间、低内存占用和强大的依赖注入能力著称。AgentScope 提供了官方的 Micronaut 扩展，支持通过 &lt;code&gt;application.yml&lt;/code&gt; 进行零配置集成。&lt;/p&gt;
+&lt;h3&gt;18.1.2 添加依赖&lt;/h3&gt;
+&lt;p&gt;在 &lt;code&gt;pom.xml&lt;/code&gt; 中添加 Micronaut 扩展依赖：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;dependency&amp;gt;
+    &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;agentscope-micronaut-extension&amp;lt;/artifactId&amp;gt;
+    &amp;lt;version&amp;gt;${agentscope.version}&amp;lt;/version&amp;gt;
+&amp;lt;/dependency&amp;gt;
+&amp;lt;dependency&amp;gt;
+    &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;agentscope-core&amp;lt;/artifactId&amp;gt;
+&amp;lt;/dependency&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;18.1.3 配置 application.yml&lt;/h3&gt;
+&lt;p&gt;Micronaut 使用 YAML 格式的配置文件，支持层级化的配置结构：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;micronaut:
+  application:
+    name: agentscope-demo
+  server:
+    port: 8080
+&lt;h1&gt;AgentScope 配置&lt;/h1&gt;
+agentscope:
+  model:
+    provider: dashscope  # 可选: dashscope, openai, gemini, anthropic
+&lt;p&gt;# DashScope 配置（默认）
+  dashscope:
+    enabled: true
+    api-key: ${DASHSCOPE_API_KEY:your-api-key}
+    model-name: qwen-plus
+    stream: false
+    enable-thinking: false&lt;/p&gt;
+&lt;p&gt;# OpenAI 配置（可选）
+  openai:
+    enabled: false
+    api-key: ${OPENAI_API_KEY:}
+    model-name: gpt-4-mini
+    stream: false&lt;/p&gt;
+&lt;p&gt;# Gemini 配置（可选）
+  gemini:
+    enabled: false
+    api-key: ${GEMINI_API_KEY:}
+    model-name: gemini-2.0-flash
+    stream: false&lt;/p&gt;
+&lt;p&gt;# Anthropic 配置（可选）
+  anthropic:
+    enabled: false
+    api-key: ${ANTHROPIC_API_KEY:}
+    model-name: claude-sonnet-4-20250514
+    stream: false&lt;/p&gt;
+&lt;p&gt;# Agent 配置
+  agent:
+    name: &amp;quot;MicronautAssistant&amp;quot;
+    sys-prompt: |
+      你是一个由 AgentScope 驱动的智能助手，
+      可以在 Micronaut 环境中运行。
+    max-iters: 10
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;18.1.4 使用 Bean&lt;/h3&gt;
+&lt;p&gt;通过 Micronaut 的依赖注入获取 Agent 实例：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter18;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.TextBlock;
+import io.micronaut.context.ApplicationContext;&lt;/p&gt;
+&lt;p&gt;/**
+ * Micronaut 集成示例 - 展示如何在 Micronaut 中使用 AgentScope。
+ *
+ * &amp;lt;p&amp;gt;本示例演示：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;通过 ApplicationContext 获取 AgentScope Bean&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;配置文件的自动加载&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;简单的对话调用&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ */
+public class MicronautApplication {&lt;/p&gt;
+&lt;p&gt;public static void main(String[] args) {
+        System.out.println(&amp;quot;\n========== AgentScope Micronaut 集成示例 ==========\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 启动 Micronaut ApplicationContext
+        try (ApplicationContext context = ApplicationContext.run()) {
+            // 从 Micronaut 容器获取 ReActAgent（通过 application.yml 自动配置）
+            ReActAgent agent = context.getBean(ReActAgent.class);&lt;/p&gt;
+&lt;p&gt;System.out.println(&amp;quot;✓ Agent 通过 Micronaut 依赖注入创建成功&amp;quot;);
+            System.out.println(&amp;quot;✓ 配置已从 application.yml 加载\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 演示多轮对话
+            String[] questions = {
+                &amp;quot;你好，请介绍一下你自己&amp;quot;,
+                &amp;quot;你支持哪些框架集成？&amp;quot;,
+                &amp;quot;谢谢，再见&amp;quot;
+            };&lt;/p&gt;
+&lt;p&gt;for (String question : questions) {
+                System.out.println(&amp;quot;用户: &amp;quot; + question);&lt;/p&gt;
+&lt;p&gt;// 构建用户消息
+                Msg userMsg = Msg.builder()
+                        .role(MsgRole.USER)
+                        .content(TextBlock.builder().text(question).build())
+                        .build();&lt;/p&gt;
+&lt;p&gt;// 调用 Agent 并获取响应
+                Msg response = agent.call(userMsg).block();
+                System.out.println(&amp;quot;Agent: &amp;quot; + (response != null ? response.getContent() : &amp;quot;无响应&amp;quot;));
+                System.out.println();
+            }&lt;/p&gt;
+&lt;p&gt;System.out.println(&amp;quot;========== 示例完成 ==========\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;} catch (Exception e) {
+            System.err.println(&amp;quot;错误: &amp;quot; + e.getMessage());
+            e.printStackTrace();
+            System.exit(1);
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;18.1.5 Micronaut 扩展核心类&lt;/h3&gt;
+&lt;p&gt;Micronaut 扩展的核心架构包括：&lt;/p&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;类名&lt;/th&gt;&lt;th&gt;功能描述&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;AgentscopeFactory&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Bean 工厂，负责创建 ReActAgent 实例&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;AgentscopeProperties&lt;/code&gt;&lt;/td&gt;&lt;td&gt;配置属性类，映射 &lt;code&gt;agentscope.*&lt;/code&gt; 配置&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;ModelProviderType&lt;/code&gt;&lt;/td&gt;&lt;td&gt;模型提供者枚举（DashScope、OpenAI、Gemini、Anthropic）&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;AgentProperties&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Agent 配置属性&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;DashScopeProperties&lt;/code&gt; / &lt;code&gt;OpenAIProperties&lt;/code&gt; / 等&lt;/td&gt;&lt;td&gt;各模型配置属性&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;18.2 Quarkus 集成&lt;/h2&gt;
+&lt;h3&gt;18.2.1 Quarkus 扩展概述&lt;/h3&gt;
+&lt;p&gt;Quarkus 是专为云原生场景设计的 Java 框架，以 GraalVM 原生编译和超快速启动著称。AgentScope 提供了完整的 Quarkus 扩展，支持构建时优化和原生镜像（Native Image）构建。&lt;/p&gt;
+&lt;h3&gt;18.2.2 添加依赖&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;dependency&amp;gt;
+    &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;agentscope-quarkus-extension&amp;lt;/artifactId&amp;gt;
+    &amp;lt;version&amp;gt;${agentscope.version}&amp;lt;/version&amp;gt;
+&amp;lt;/dependency&amp;gt;
+&amp;lt;dependency&amp;gt;
+    &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;agentscope-core&amp;lt;/artifactId&amp;gt;
+&amp;lt;/dependency&amp;gt;
+&amp;lt;dependency&amp;gt;
+    &amp;lt;groupId&amp;gt;io.quarkus&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;quarkus-rest&amp;lt;/artifactId&amp;gt;
+&amp;lt;/dependency&amp;gt;
+&amp;lt;dependency&amp;gt;
+    &amp;lt;groupId&amp;gt;io.quarkus&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;quarkus-rest-jackson&amp;lt;/artifactId&amp;gt;
+&amp;lt;/dependency&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;18.2.3 配置 application.properties&lt;/h3&gt;
+&lt;p&gt;Quarkus 使用 &lt;code&gt;.properties&lt;/code&gt; 格式的配置文件：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-properties&quot;&gt;# AgentScope 配置
+agentscope.model.provider=dashscope
+agentscope.dashscope.api-key=${DASHSCOPE_API_KEY:your-api-key}
+agentscope.dashscope.model-name=qwen-plus
+agentscope.dashscope.stream=false
+&lt;h1&gt;Agent 配置&lt;/h1&gt;
+agentscope.agent.name=QuarkusAssistant
+agentscope.agent.sys-prompt=你是一个运行在 Quarkus 上的智能助手。
+agentscope.agent.max-iters=10
+&lt;h1&gt;Quarkus HTTP 配置&lt;/h1&gt;
+quarkus.http.port=8080
+quarkus.http.host=0.0.0.0
+&lt;h1&gt;日志配置&lt;/h1&gt;
+quarkus.log.level=INFO
+quarkus.log.category.&amp;quot;io.agentscope&amp;quot;.level=DEBUG
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;18.2.4 REST API 实现&lt;/h3&gt;
+&lt;p&gt;通过 CDI 注入使用 Agent：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter18;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.TextBlock;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;&lt;/p&gt;
+&lt;p&gt;/**
+ * Quarkus REST 资源 - 展示 AgentScope 与 Quarkus REST 的集成。
+ *
+ * &amp;lt;p&amp;gt;提供两个端点：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;POST /agent/chat - 聊天接口&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;GET /agent/health - 健康检查&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * &amp;lt;p&amp;gt;调用示例：
+ * &amp;lt;pre&amp;gt;
+ * curl -X POST http://localhost:8080/agent/chat \
+ *   -H &amp;quot;Content-Type: application/json&amp;quot; \
+ *   -d '{&amp;quot;message&amp;quot;:&amp;quot;你好&amp;quot;}
+ * &amp;lt;/pre&amp;gt;
+ */
+@Path(&amp;quot;/agent&amp;quot;)
+@Produces(MediaType.APPLICATION_JSON)
+@Consumes(MediaType.APPLICATION_JSON)
+public class QuarkusAgentResource {&lt;/p&gt;
+&lt;p&gt;/**
+     * 注入的 ReActAgent - 从 application.properties 自动配置。
+     */
+    @Inject
+    ReActAgent agent;&lt;/p&gt;
+&lt;p&gt;/**
+     * 聊天端点 - 接收用户消息并返回 Agent 响应。
+     *
+     * @param request 包含用户消息的请求
+     * @return Agent 的响应
+     */
+    @POST
+    @Path(&amp;quot;/chat&amp;quot;)
+    public Response chat(ChatRequest request) {
+        // 参数验证
+        if (request.message() == null || request.message().isBlank()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorResponse(&amp;quot;消息不能为空&amp;quot;))
+                    .build();
+        }&lt;/p&gt;
+&lt;p&gt;try {
+            // 构建用户消息
+            Msg userMsg = Msg.builder()
+                    .role(MsgRole.USER)
+                    .content(TextBlock.builder().text(request.message()).build())
+                    .build();&lt;/p&gt;
+&lt;p&gt;// 调用 Agent
+            Msg response = agent.call(userMsg).block();&lt;/p&gt;
+&lt;p&gt;// 提取文本内容
+            String responseText = response != null ? response.getTextContent() : &amp;quot;无响应&amp;quot;;&lt;/p&gt;
+&lt;p&gt;return Response.ok(new ChatResponse(responseText)).build();&lt;/p&gt;
+&lt;p&gt;} catch (Exception e) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(new ErrorResponse(&amp;quot;处理请求时发生错误: &amp;quot; + e.getMessage()))
+                    .build();
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 健康检查端点 - 返回 Agent 状态信息。
+     *
+     * @return 健康状态
+     */
+    @GET
+    @Path(&amp;quot;/health&amp;quot;)
+    public Response health() {
+        return Response.ok(
+                new HealthResponse(&amp;quot;AgentScope Agent 已就绪&amp;quot;, agent.getName())
+        ).build();
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 内部类：请求/响应 DTO ====================&lt;/p&gt;
+&lt;p&gt;/** 聊天请求 */
+    public record ChatRequest(String message) {}&lt;/p&gt;
+&lt;p&gt;/** 聊天响应 */
+    public record ChatResponse(String response) {}&lt;/p&gt;
+&lt;p&gt;/** 错误响应 */
+    public record ErrorResponse(String error) {}&lt;/p&gt;
+&lt;p&gt;/** 健康检查响应 */
+    public record HealthResponse(String status, String agentName) {}
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;18.2.5 运行 Quarkus 应用&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 开发模式（热重载）
+export DASHSCOPE_API_KEY=your-api-key
+mvn quarkus:dev
+&lt;h1&gt;生产环境打包&lt;/h1&gt;
+mvn package
+java -jar target/quarkus-app/quarkus-run.jar
+&lt;h1&gt;构建原生镜像（需要 GraalVM）&lt;/h1&gt;
+mvn package -Pnative
+./target/quarkus-example-*-runner
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;18.2.6 测试用例&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter18;
+&lt;p&gt;import static io.restassured.RestAssured.given;
+import static org.hamcrest.CoreMatchers.*;&lt;/p&gt;
+&lt;p&gt;import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.QuarkusTestProfile;
+import io.quarkus.test.junit.TestProfile;
+import jakarta.ws.rs.core.MediaType;
+import org.junit.jupiter.api.Test;
+import java.util.Map;&lt;/p&gt;
+&lt;p&gt;/**
+ * AgentResource 集成测试。
+ *
+ * &amp;lt;p&amp;gt;验证 REST 端点的正确性，包括：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;成功请求的响应格式&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;错误情况的处理&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;边界条件的容错&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ */
+@QuarkusTest
+@TestProfile(QuarkusAgentResourceTest.TestProfile.class)
+class QuarkusAgentResourceTest {&lt;/p&gt;
+&lt;p&gt;/**
+     * 测试健康检查端点。
+     */
+    @Test
+    void testHealthEndpoint() {
+        given().when()
+                .get(&amp;quot;/agent/health&amp;quot;)
+                .then()
+                .statusCode(200)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(&amp;quot;status&amp;quot;, is(&amp;quot;AgentScope Agent 已就绪&amp;quot;))
+                .body(&amp;quot;agentName&amp;quot;, notNullValue());
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 测试有效消息的聊天请求。
+     */
+    @Test
+    void testChatWithValidMessage() {
+        given().contentType(MediaType.APPLICATION_JSON)
+                .body(&amp;quot;{\&amp;quot;message\&amp;quot;:\&amp;quot;你好\&amp;quot;}&amp;quot;)
+                .when()
+                .post(&amp;quot;/agent/chat&amp;quot;)
+                .then()
+                .statusCode(200)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(&amp;quot;response&amp;quot;, notNullValue());
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 测试空消息被拒绝。
+     */
+    @Test
+    void testEmptyMessageRejected() {
+        given().contentType(MediaType.APPLICATION_JSON)
+                .body(&amp;quot;{\&amp;quot;message\&amp;quot;:\&amp;quot;\&amp;quot;}&amp;quot;)
+                .when()
+                .post(&amp;quot;/agent/chat&amp;quot;)
+                .then()
+                .statusCode(400)
+                .body(&amp;quot;error&amp;quot;, is(&amp;quot;消息不能为空&amp;quot;));
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 测试空白字符消息被拒绝。
+     */
+    @Test
+    void testWhitespaceMessageRejected() {
+        given().contentType(MediaType.APPLICATION_JSON)
+                .body(&amp;quot;{\&amp;quot;message\&amp;quot;:\&amp;quot;   \&amp;quot;}&amp;quot;)
+                .when()
+                .post(&amp;quot;/agent/chat&amp;quot;)
+                .then()
+                .statusCode(400)
+                .body(&amp;quot;error&amp;quot;, is(&amp;quot;消息不能为空&amp;quot;));
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 测试缺失消息字段的请求。
+     */
+    @Test
+    void testMissingMessageField() {
+        given().contentType(MediaType.APPLICATION_JSON)
+                .body(&amp;quot;{}&amp;quot;)
+                .when()
+                .post(&amp;quot;/agent/chat&amp;quot;)
+                .then()
+                .statusCode(400);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 测试长消息的处理。
+     */
+    @Test
+    void testLongMessage() {
+        String longMessage = &amp;quot;测试消息 &amp;quot;.repeat(100);
+        given().contentType(MediaType.APPLICATION_JSON)
+                .body(&amp;quot;{\&amp;quot;message\&amp;quot;:\&amp;quot;&amp;quot; + longMessage + &amp;quot;\&amp;quot;}&amp;quot;)
+                .when()
+                .post(&amp;quot;/agent/chat&amp;quot;)
+                .then()
+                .statusCode(200)
+                .body(&amp;quot;response&amp;quot;, notNullValue());
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 测试特殊字符的处理。
+     */
+    @Test
+    void testSpecialCharacters() {
+        given().contentType(MediaType.APPLICATION_JSON)
+                .body(&amp;quot;{\&amp;quot;message\&amp;quot;:\&amp;quot;Hello! @#$%^&amp;amp;*() 中文测试 🚀\&amp;quot;}&amp;quot;)
+                .when()
+                .post(&amp;quot;/agent/chat&amp;quot;)
+                .then()
+                .statusCode(200)
+                .body(&amp;quot;response&amp;quot;, notNullValue());
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 测试多行消息的处理。
+     */
+    @Test
+    void testMultilineMessage() {
+        given().contentType(MediaType.APPLICATION_JSON)
+                .body(&amp;quot;{\&amp;quot;message\&amp;quot;:\&amp;quot;第一行\\n第二行\\n第三行\&amp;quot;}&amp;quot;)
+                .when()
+                .post(&amp;quot;/agent/chat&amp;quot;)
+                .then()
+                .statusCode(200)
+                .body(&amp;quot;response&amp;quot;, notNullValue());
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 测试配置文件。
+     */
+    public static class TestProfile implements QuarkusTestProfile {
+        @Override
+        public Map&amp;lt;String, String&amp;gt; getConfigOverrides() {
+            return Map.of(
+                    &amp;quot;agentscope.model.provider&amp;quot;, &amp;quot;dashscope&amp;quot;,
+                    &amp;quot;agentscope.dashscope.api-key&amp;quot;, &amp;quot;test-api-key&amp;quot;,
+                    &amp;quot;agentscope.dashscope.model-name&amp;quot;, &amp;quot;qwen-plus&amp;quot;,
+                    &amp;quot;agentscope.agent.name&amp;quot;, &amp;quot;TestAgent&amp;quot;,
+                    &amp;quot;agentscope.agent.sys-prompt&amp;quot;, &amp;quot;你是一个测试助手，请保持回答简洁。&amp;quot;
+            );
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;18.2.7 Quarkus 扩展核心类&lt;/h3&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;类名&lt;/th&gt;&lt;th&gt;功能描述&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;AgentScopeConfig&lt;/code&gt;&lt;/td&gt;&lt;td&gt;使用 &lt;code&gt;@ConfigMapping&lt;/code&gt; 映射配置到强类型对象&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;AgentScopeProducer&lt;/code&gt;&lt;/td&gt;&lt;td&gt;CDI Producer，生成 Model 和 ReActAgent Bean&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;AgentScopeRecorder&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Quarkus 构建时 recorder，用于可观测性和热部署&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;---&lt;/p&gt;
+&lt;h2&gt;18.3 【案例】各框架快速集成示例&lt;/h2&gt;
+&lt;h3&gt;案例概述&lt;/h3&gt;
+&lt;p&gt;本案例展示如何在 Spring Boot、Micronaut 和 Quarkus 三个主流框架中快速集成 AgentScope。我们将创建一个智能助手，支持基本的问答功能，并对比三个框架的配置方式。&lt;/p&gt;
+&lt;h3&gt;18.3.1 项目结构&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;chapter18-examples/
+├── pom.xml                          # 父 POM
+├── spring-boot-example/             # Spring Boot 示例
+│   ├── pom.xml
+│   └── src/main/java/.../SpringBootAgentDemo.java
+├── micronaut-example/               # Micronaut 示例
+│   ├── pom.xml
+│   ├── src/main/java/.../MicronautAgentDemo.java
+│   └── src/main/resources/application.yml
+└── quarkus-example/                  # Quarkus 示例
+    ├── pom.xml
+    ├── src/main/java/.../QuarkusAgentDemo.java
+    ├── src/main/resources/application.properties
+    └── src/test/java/.../QuarkusAgentDemoTest.java
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;18.3.2 父 POM 配置&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot;?&amp;gt;
+&amp;lt;project xmlns=&amp;quot;http://maven.apache.org/POM/4.0.0&amp;quot;
+         xmlns:xsi=&amp;quot;http://www.w3.org/2001/XMLSchema-instance&amp;quot;
+         xsi:schemaLocation=&amp;quot;http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd&amp;quot;&amp;gt;
+    &amp;lt;modelVersion&amp;gt;4.0.0&amp;lt;/modelVersion&amp;gt;
+&lt;p&gt;&amp;lt;groupId&amp;gt;io.agentscope.tutorial&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;chapter18-examples&amp;lt;/artifactId&amp;gt;
+    &amp;lt;version&amp;gt;1.0.0&amp;lt;/version&amp;gt;
+    &amp;lt;packaging&amp;gt;pom&amp;lt;/packaging&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;name&amp;gt;AgentScope Java - 第十八章示例&amp;lt;/name&amp;gt;
+    &amp;lt;description&amp;gt;演示 Spring Boot、Micronaut、Quarkus 框架集成&amp;lt;/description&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;properties&amp;gt;
+        &amp;lt;maven.compiler.source&amp;gt;21&amp;lt;/maven.compiler.source&amp;gt;
+        &amp;lt;maven.compiler.target&amp;gt;21&amp;lt;/maven.compiler.target&amp;gt;
+        &amp;lt;project.build.sourceEncoding&amp;gt;UTF-8&amp;lt;/project.build.sourceEncoding&amp;gt;
+        &amp;lt;agentscope.version&amp;gt;1.0.0&amp;lt;/agentscope.version&amp;gt;
+        &amp;lt;micronaut.version&amp;gt;4.5.0&amp;lt;/micronaut.version&amp;gt;
+        &amp;lt;quarkus.version&amp;gt;3.30.6&amp;lt;/quarkus.version&amp;gt;
+        &amp;lt;spring-boot.version&amp;gt;3.5.0&amp;lt;/spring-boot.version&amp;gt;
+    &amp;lt;/properties&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;modules&amp;gt;
+        &amp;lt;module&amp;gt;spring-boot-example&amp;lt;/module&amp;gt;
+        &amp;lt;module&amp;gt;micronaut-example&amp;lt;/module&amp;gt;
+        &amp;lt;module&amp;gt;quarkus-example&amp;lt;/module&amp;gt;
+    &amp;lt;/modules&amp;gt;
+&amp;lt;/project&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;18.3.3 Spring Boot 示例&lt;/h3&gt;
+#### POM 配置
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;project&amp;gt;
+    &amp;lt;groupId&amp;gt;io.agentscope.tutorial&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;spring-boot-example&amp;lt;/artifactId&amp;gt;
+&lt;p&gt;&amp;lt;properties&amp;gt;
+        &amp;lt;spring-boot.version&amp;gt;3.5.0&amp;lt;/spring-boot.version&amp;gt;
+    &amp;lt;/properties&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;dependencyManagement&amp;gt;
+        &amp;lt;dependencies&amp;gt;
+            &amp;lt;dependency&amp;gt;
+                &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+                &amp;lt;artifactId&amp;gt;spring-boot-dependencies&amp;lt;/artifactId&amp;gt;
+                &amp;lt;version&amp;gt;${spring-boot.version}&amp;lt;/version&amp;gt;
+                &amp;lt;type&amp;gt;pom&amp;lt;/type&amp;gt;
+                &amp;lt;scope&amp;gt;import&amp;lt;/scope&amp;gt;
+            &amp;lt;/dependency&amp;gt;
+        &amp;lt;/dependencies&amp;gt;
+    &amp;lt;/dependencyManagement&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;dependencies&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-spring-boot-starter&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;${agentscope.version}&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-starter-web&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+    &amp;lt;/dependencies&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;build&amp;gt;
+        &amp;lt;plugins&amp;gt;
+            &amp;lt;plugin&amp;gt;
+                &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+                &amp;lt;artifactId&amp;gt;spring-boot-maven-plugin&amp;lt;/artifactId&amp;gt;
+            &amp;lt;/plugin&amp;gt;
+        &amp;lt;/plugins&amp;gt;
+    &amp;lt;/build&amp;gt;
+&amp;lt;/project&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+#### 配置 application.yml
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;spring:
+  application:
+    name: agentscope-spring-boot
+&lt;p&gt;agentscope:
+  model:
+    provider: dashscope
+  dashscope:
+    api-key: ${DASHSCOPE_API_KEY}
+    model-name: qwen-plus
+  agent:
+    name: SpringBootAssistant
+    sys-prompt: 你是一个运行在 Spring Boot 上的智能助手。
+    max-iters: 10
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+#### 代码实现
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter18;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.TextBlock;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;&lt;/p&gt;
+&lt;p&gt;/**
+ * Spring Boot AgentScope 集成示例。
+ *
+ * &amp;lt;p&amp;gt;演示在 Spring Boot 中使用 AgentScope 的完整流程。
+ */
+@SpringBootApplication
+public class SpringBootAgentDemo implements CommandLineRunner {&lt;/p&gt;
+&lt;p&gt;public static void main(String[] args) {
+        SpringApplication.run(SpringBootAgentDemo.class, args);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 注入 AgentScope 自动配置的 ReActAgent。
+     */
+    @Bean
+    ReActAgent agent() {
+        // Agent 由 agentscope-spring-boot-starter 自动配置
+        // 此处仅演示手动创建方式供参考
+        return null; // 使用注入的 agent
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public void run(String... args) {
+        // 获取自动配置的 Agent
+        ReActAgent agent = applicationContext.getBean(ReActAgent.class);&lt;/p&gt;
+&lt;p&gt;System.out.println(&amp;quot;\n========== Spring Boot AgentScope 集成示例 ==========\n&amp;quot;);
+        System.out.println(&amp;quot;✓ Agent 已通过 Spring Boot 自动配置创建&amp;quot;);
+        System.out.println(&amp;quot;Agent 名称: &amp;quot; + agent.getName() + &amp;quot;\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 执行问答
+        String[] questions = {
+            &amp;quot;你好，请介绍一下你自己&amp;quot;,
+            &amp;quot;你运行在哪个框架上？&amp;quot;,
+            &amp;quot;再见&amp;quot;
+        };&lt;/p&gt;
+&lt;p&gt;for (String question : questions) {
+            System.out.println(&amp;quot;用户: &amp;quot; + question);&lt;/p&gt;
+&lt;p&gt;Msg userMsg = Msg.builder()
+                    .role(MsgRole.USER)
+                    .content(TextBlock.builder().text(question).build())
+                    .build();&lt;/p&gt;
+&lt;p&gt;Msg response = agent.call(userMsg).block();
+            System.out.println(&amp;quot;Agent: &amp;quot; + (response != null ? response.getContent() : &amp;quot;无响应&amp;quot;));
+            System.out.println();
+        }&lt;/p&gt;
+&lt;p&gt;System.out.println(&amp;quot;========== 示例完成 ==========\n&amp;quot;);
+        System.exit(0);
+    }&lt;/p&gt;
+&lt;p&gt;@javax.inject.Inject
+    org.springframework.context.ApplicationContext applicationContext;
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;18.3.4 Micronaut 示例&lt;/h3&gt;
+#### POM 配置
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;project&amp;gt;
+    &amp;lt;groupId&amp;gt;io.agentscope.tutorial&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;micronaut-example&amp;lt;/artifactId&amp;gt;
+&lt;p&gt;&amp;lt;properties&amp;gt;
+        &amp;lt;exec.mainClass&amp;gt;io.agentscope.tutorial.chapter18.MicronautAgentDemo&amp;lt;/exec.mainClass&amp;gt;
+    &amp;lt;/properties&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;dependencyManagement&amp;gt;
+        &amp;lt;dependencies&amp;gt;
+            &amp;lt;dependency&amp;gt;
+                &amp;lt;groupId&amp;gt;io.micronaut.platform&amp;lt;/groupId&amp;gt;
+                &amp;lt;artifactId&amp;gt;micronaut-platform&amp;lt;/artifactId&amp;gt;
+                &amp;lt;version&amp;gt;${micronaut.version}&amp;lt;/version&amp;gt;
+                &amp;lt;type&amp;gt;pom&amp;lt;/type&amp;gt;
+                &amp;lt;scope&amp;gt;import&amp;lt;/scope&amp;gt;
+            &amp;lt;/dependency&amp;gt;
+        &amp;lt;/dependencies&amp;gt;
+    &amp;lt;/dependencyManagement&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;dependencies&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-micronaut-extension&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;${agentscope.version}&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-core&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;${agentscope.version}&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+    &amp;lt;/dependencies&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;build&amp;gt;
+        &amp;lt;plugins&amp;gt;
+            &amp;lt;plugin&amp;gt;
+                &amp;lt;groupId&amp;gt;org.codehaus.mojo&amp;lt;/groupId&amp;gt;
+                &amp;lt;artifactId&amp;gt;exec-maven-plugin&amp;lt;/artifactId&amp;gt;
+                &amp;lt;version&amp;gt;3.6.3&amp;lt;/version&amp;gt;
+                &amp;lt;configuration&amp;gt;
+                    &amp;lt;mainClass&amp;gt;${exec.mainClass}&amp;lt;/mainClass&amp;gt;
+                &amp;lt;/configuration&amp;gt;
+            &amp;lt;/plugin&amp;gt;
+        &amp;lt;/plugins&amp;gt;
+    &amp;lt;/build&amp;gt;
+&amp;lt;/project&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+#### 配置 application.yml
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;micronaut:
+  application:
+    name: agentscope-micronaut
+  server:
+    port: 8080
+&lt;p&gt;agentscope:
+  model:
+    provider: dashscope
+  dashscope:
+    enabled: true
+    api-key: ${DASHSCOPE_API_KEY:your-api-key}
+    model-name: qwen-plus
+    stream: false
+  agent:
+    enabled: true
+    name: MicronautAssistant
+    sys-prompt: |
+      你是一个运行在 Micronaut 框架上的智能助手。
+      Micronaut 以其快速的启动和低内存占用著称。
+    max-iters: 10&lt;/p&gt;
+&lt;p&gt;logger:
+  levels:
+    io.agentscope: INFO
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+#### 代码实现
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter18;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.TextBlock;
+import io.micronaut.context.ApplicationContext;&lt;/p&gt;
+&lt;p&gt;/**
+ * Micronaut AgentScope 集成示例。
+ *
+ * &amp;lt;p&amp;gt;演示在 Micronaut 中通过 ApplicationContext 获取 AgentScope Bean。
+ *
+ * &amp;lt;p&amp;gt;运行方式：
+ * &amp;lt;pre&amp;gt;
+ * DASHSCOPE_API_KEY=your-key mvn compile exec:java
+ * &amp;lt;/pre&amp;gt;
+ */
+public class MicronautAgentDemo {&lt;/p&gt;
+&lt;p&gt;public static void main(String[] args) {
+        System.out.println(&amp;quot;\n========== Micronaut AgentScope 集成示例 ==========\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 启动 Micronaut 容器
+        try (ApplicationContext context = ApplicationContext.run()) {
+            // 从容器获取自动配置的 ReActAgent
+            ReActAgent agent = context.getBean(ReActAgent.class);&lt;/p&gt;
+&lt;p&gt;System.out.println(&amp;quot;✓ Agent 通过 Micronaut 依赖注入创建成功&amp;quot;);
+            System.out.println(&amp;quot;✓ 配置已从 application.yml 加载&amp;quot;);
+            System.out.println(&amp;quot;Agent 名称: &amp;quot; + agent.getName() + &amp;quot;\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 问答演示
+            String[] questions = {
+                &amp;quot;你好，请介绍一下你自己&amp;quot;,
+                &amp;quot;你运行在哪个框架上？&amp;quot;,
+                &amp;quot;Micronaut 有哪些优势？&amp;quot;,
+                &amp;quot;再见&amp;quot;
+            };&lt;/p&gt;
+&lt;p&gt;for (String question : questions) {
+                System.out.println(&amp;quot;用户: &amp;quot; + question);&lt;/p&gt;
+&lt;p&gt;Msg userMsg = Msg.builder()
+                        .role(MsgRole.USER)
+                        .content(TextBlock.builder().text(question).build())
+                        .build();&lt;/p&gt;
+&lt;p&gt;Msg response = agent.call(userMsg).block();
+                System.out.println(&amp;quot;Agent: &amp;quot; + (response != null ? response.getContent() : &amp;quot;无响应&amp;quot;));
+                System.out.println();
+            }&lt;/p&gt;
+&lt;p&gt;System.out.println(&amp;quot;========== 示例完成 ==========\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;} catch (Exception e) {
+            System.err.println(&amp;quot;执行错误: &amp;quot; + e.getMessage());
+            e.printStackTrace();
+            System.exit(1);
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;18.3.5 Quarkus 示例&lt;/h3&gt;
+#### POM 配置
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;project&amp;gt;
+    &amp;lt;groupId&amp;gt;io.agentscope.tutorial&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;quarkus-example&amp;lt;/artifactId&amp;gt;
+&lt;p&gt;&amp;lt;properties&amp;gt;
+        &amp;lt;quarkus.version&amp;gt;3.30.6&amp;lt;/quarkus.version&amp;gt;
+    &amp;lt;/properties&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;dependencyManagement&amp;gt;
+        &amp;lt;dependencies&amp;gt;
+            &amp;lt;dependency&amp;gt;
+                &amp;lt;groupId&amp;gt;io.quarkus&amp;lt;/groupId&amp;gt;
+                &amp;lt;artifactId&amp;gt;quarkus-bom&amp;lt;/artifactId&amp;gt;
+                &amp;lt;version&amp;gt;${quarkus.version}&amp;lt;/version&amp;gt;
+                &amp;lt;type&amp;gt;pom&amp;lt;/type&amp;gt;
+                &amp;lt;scope&amp;gt;import&amp;lt;/scope&amp;gt;
+            &amp;lt;/dependency&amp;gt;
+        &amp;lt;/dependencies&amp;gt;
+    &amp;lt;/dependencyManagement&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;dependencies&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-quarkus-extension&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;${agentscope.version}&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-core&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;${agentscope.version}&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.quarkus&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;quarkus-rest&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.quarkus&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;quarkus-rest-jackson&amp;lt;/artifactId&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.quarkus&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;quarkus-junit5&amp;lt;/artifactId&amp;gt;
+            &amp;lt;scope&amp;gt;test&amp;lt;/scope&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.rest-assured&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;rest-assured&amp;lt;/artifactId&amp;gt;
+            &amp;lt;scope&amp;gt;test&amp;lt;/scope&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+    &amp;lt;/dependencies&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;build&amp;gt;
+        &amp;lt;plugins&amp;gt;
+            &amp;lt;plugin&amp;gt;
+                &amp;lt;groupId&amp;gt;io.quarkus&amp;lt;/groupId&amp;gt;
+                &amp;lt;artifactId&amp;gt;quarkus-maven-plugin&amp;lt;/artifactId&amp;gt;
+                &amp;lt;version&amp;gt;${quarkus.version}&amp;lt;/version&amp;gt;
+            &amp;lt;/plugin&amp;gt;
+        &amp;lt;/plugins&amp;gt;
+    &amp;lt;/build&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;profiles&amp;gt;
+        &amp;lt;profile&amp;gt;
+            &amp;lt;id&amp;gt;native&amp;lt;/id&amp;gt;
+            &amp;lt;properties&amp;gt;
+                &amp;lt;quarkus.native.enabled&amp;gt;true&amp;lt;/quarkus.native.enabled&amp;gt;
+            &amp;lt;/properties&amp;gt;
+        &amp;lt;/profile&amp;gt;
+    &amp;lt;/profiles&amp;gt;
+&amp;lt;/project&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+#### 配置 application.properties
+&lt;pre&gt;&lt;code class=&quot;language-properties&quot;&gt;# AgentScope 配置
+agentscope.model.provider=dashscope
+agentscope.dashscope.api-key=${DASHSCOPE_API_KEY:your-api-key}
+agentscope.dashscope.model-name=qwen-plus
+agentscope.dashscope.stream=false
+&lt;h1&gt;Agent 配置&lt;/h1&gt;
+agentscope.agent.name=QuarkusAssistant
+agentscope.agent.sys-prompt=你是一个运行在 Quarkus 框架上的智能助手。Quarkus 专为云原生设计。
+agentscope.agent.max-iters=10
+&lt;h1&gt;Quarkus HTTP&lt;/h1&gt;
+quarkus.http.port=8080
+quarkus.http.host=0.0.0.0
+&lt;h1&gt;日志&lt;/h1&gt;
+quarkus.log.level=INFO
+quarkus.log.category.&amp;quot;io.agentscope&amp;quot;.level=DEBUG
+&lt;/code&gt;&lt;/pre&gt;
+#### REST 端点实现
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter18;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.TextBlock;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;&lt;/p&gt;
+&lt;p&gt;/**
+ * Quarkus AgentScope REST 端点示例。
+ *
+ * &amp;lt;p&amp;gt;提供基于 HTTP 的 Agent 对话接口。
+ *
+ * &amp;lt;p&amp;gt;端点：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;POST /agent/chat - 聊天接口&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;GET /agent/health - 健康检查&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * &amp;lt;p&amp;gt;运行方式：
+ * &amp;lt;pre&amp;gt;
+ * DASHSCOPE_API_KEY=your-key mvn quarkus:dev
+ * &amp;lt;/pre&amp;gt;
+ */
+@Path(&amp;quot;/agent&amp;quot;)
+@Produces(MediaType.APPLICATION_JSON)
+@Consumes(MediaType.APPLICATION_JSON)
+public class QuarkusAgentDemo {&lt;/p&gt;
+&lt;p&gt;@Inject
+    ReActAgent agent;&lt;/p&gt;
+&lt;p&gt;/**
+     * 聊天端点。
+     */
+    @POST
+    @Path(&amp;quot;/chat&amp;quot;)
+    public Response chat(ChatRequest request) {
+        if (request.message() == null || request.message().isBlank()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorResponse(&amp;quot;消息不能为空&amp;quot;))
+                    .build();
+        }&lt;/p&gt;
+&lt;p&gt;try {
+            Msg userMsg = Msg.builder()
+                    .role(MsgRole.USER)
+                    .content(TextBlock.builder().text(request.message()).build())
+                    .build();&lt;/p&gt;
+&lt;p&gt;Msg response = agent.call(userMsg).block();
+            String text = response != null ? response.getTextContent() : &amp;quot;无响应&amp;quot;;&lt;/p&gt;
+&lt;p&gt;return Response.ok(new ChatResponse(text)).build();&lt;/p&gt;
+&lt;p&gt;} catch (Exception e) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(new ErrorResponse(&amp;quot;处理请求时发生错误&amp;quot;))
+                    .build();
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 健康检查端点。
+     */
+    @GET
+    @Path(&amp;quot;/health&amp;quot;)
+    public Response health() {
+        return Response.ok(
+                new HealthResponse(&amp;quot;AgentScope Agent 已就绪&amp;quot;, agent.getName())
+        ).build();
+    }&lt;/p&gt;
+&lt;p&gt;// DTO 记录类
+    public record ChatRequest(String message) {}
+    public record ChatResponse(String response) {}
+    public record ErrorResponse(String error) {}
+    public record HealthResponse(String status, String agentName) {}
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+#### 测试类
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter18;
+&lt;p&gt;import static io.restassured.RestAssured.given;
+import static org.hamcrest.CoreMatchers.*;&lt;/p&gt;
+&lt;p&gt;import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.QuarkusTestProfile;
+import io.quarkus.test.junit.TestProfile;
+import jakarta.ws.rs.core.MediaType;
+import org.junit.jupiter.api.Test;
+import java.util.Map;&lt;/p&gt;
+&lt;p&gt;/**
+ * QuarkusAgentDemo 集成测试。
+ */
+@QuarkusTest
+@TestProfile(QuarkusAgentDemoTest.TestProfile.class)
+class QuarkusAgentDemoTest {&lt;/p&gt;
+&lt;p&gt;@Test
+    void testHealthEndpoint() {
+        given().when()
+                .get(&amp;quot;/agent/health&amp;quot;)
+                .then()
+                .statusCode(200)
+                .body(&amp;quot;status&amp;quot;, is(&amp;quot;AgentScope Agent 已就绪&amp;quot;))
+                .body(&amp;quot;agentName&amp;quot;, notNullValue());
+    }&lt;/p&gt;
+&lt;p&gt;@Test
+    void testChatWithValidMessage() {
+        given().contentType(MediaType.APPLICATION_JSON)
+                .body(&amp;quot;{\&amp;quot;message\&amp;quot;:\&amp;quot;你好\&amp;quot;}&amp;quot;)
+                .when()
+                .post(&amp;quot;/agent/chat&amp;quot;)
+                .then()
+                .statusCode(200)
+                .body(&amp;quot;response&amp;quot;, notNullValue());
+    }&lt;/p&gt;
+&lt;p&gt;@Test
+    void testEmptyMessage() {
+        given().contentType(MediaType.APPLICATION_JSON)
+                .body(&amp;quot;{\&amp;quot;message\&amp;quot;:\&amp;quot;\&amp;quot;}&amp;quot;)
+                .when()
+                .post(&amp;quot;/agent/chat&amp;quot;)
+                .then()
+                .statusCode(400)
+                .body(&amp;quot;error&amp;quot;, is(&amp;quot;消息不能为空&amp;quot;));
+    }&lt;/p&gt;
+&lt;p&gt;@Test
+    void testSpecialCharacters() {
+        given().contentType(MediaType.APPLICATION_JSON)
+                .body(&amp;quot;{\&amp;quot;message\&amp;quot;:\&amp;quot;测试表情 🚀 和特殊字符 @#$%\&amp;quot;}&amp;quot;)
+                .when()
+                .post(&amp;quot;/agent/chat&amp;quot;)
+                .then()
+                .statusCode(200)
+                .body(&amp;quot;response&amp;quot;, notNullValue());
+    }&lt;/p&gt;
+&lt;p&gt;public static class TestProfile implements QuarkusTestProfile {
+        @Override
+        public Map&amp;lt;String, String&amp;gt; getConfigOverrides() {
+            return Map.of(
+                    &amp;quot;agentscope.model.provider&amp;quot;, &amp;quot;dashscope&amp;quot;,
+                    &amp;quot;agentscope.dashscope.api-key&amp;quot;, &amp;quot;test-key&amp;quot;,
+                    &amp;quot;agentscope.dashscope.model-name&amp;quot;, &amp;quot;qwen-plus&amp;quot;,
+                    &amp;quot;agentscope.agent.name&amp;quot;, &amp;quot;TestAgent&amp;quot;,
+                    &amp;quot;agentscope.agent.sys-prompt&amp;quot;, &amp;quot;你是一个测试助手。&amp;quot;
+            );
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;18.3.6 框架对比总结&lt;/h3&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;特性&lt;/th&gt;&lt;th&gt;Spring Boot&lt;/th&gt;&lt;th&gt;Micronaut&lt;/th&gt;&lt;th&gt;Quarkus&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;**依赖注入**&lt;/td&gt;&lt;td&gt;@Autowired / 构造器注入&lt;/td&gt;&lt;td&gt;构造器注入（自动）&lt;/td&gt;&lt;td&gt;@Inject（CDI）&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**配置格式**&lt;/td&gt;&lt;td&gt;&lt;code&gt;application.yml&lt;/code&gt;&lt;/td&gt;&lt;td&gt;&lt;code&gt;application.yml&lt;/code&gt;&lt;/td&gt;&lt;td&gt;&lt;code&gt;application.properties&lt;/code&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**启动速度**&lt;/td&gt;&lt;td&gt;较慢&lt;/td&gt;&lt;td&gt;快速&lt;/td&gt;&lt;td&gt;最快（支持 Native）&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**内存占用**&lt;/td&gt;&lt;td&gt;较高&lt;/td&gt;&lt;td&gt;低&lt;/td&gt;&lt;td&gt;极低（Native）&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**自动配置**&lt;/td&gt;&lt;td&gt;Spring Boot Starter&lt;/td&gt;&lt;td&gt;Micronaut 扩展&lt;/td&gt;&lt;td&gt;Quarkus 扩展&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**原生编译**&lt;/td&gt;&lt;td&gt;不支持&lt;/td&gt;&lt;td&gt;不支持&lt;/td&gt;&lt;td&gt;原生支持（GraalVM）&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**适合场景**&lt;/td&gt;&lt;td&gt;企业应用&lt;/td&gt;&lt;td&gt;微服务&lt;/td&gt;&lt;td&gt;Serverless / 云原生&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**API 风格**&lt;/td&gt;&lt;td&gt;Spring MVC&lt;/td&gt;&lt;td&gt;Netty (非阻塞)&lt;/td&gt;&lt;td&gt;REST / Reactive&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**配置层级**&lt;/td&gt;&lt;td&gt;嵌套 YAML&lt;/td&gt;&lt;td&gt;嵌套 YAML&lt;/td&gt;&lt;td&gt;扁平 Properties&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**测试支持**&lt;/td&gt;&lt;td&gt;Spring Test&lt;/td&gt;&lt;td&gt;Micronaut Test&lt;/td&gt;&lt;td&gt;Quarkus Test&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;h3&gt;18.3.7 运行示例&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 设置 API Key
+export DASHSCOPE_API_KEY=your-api-key
+&lt;h1&gt;Spring Boot&lt;/h1&gt;
+cd spring-boot-example &amp;amp;&amp;amp; mvn spring-boot:run
+&lt;h1&gt;Micronaut&lt;/h1&gt;
+cd micronaut-example &amp;amp;&amp;amp; mvn compile exec:java
+&lt;h1&gt;Quarkus (开发模式)&lt;/h1&gt;
+cd quarkus-example &amp;amp;&amp;amp; mvn quarkus:dev
+&lt;h1&gt;Quarkus (打包运行)&lt;/h1&gt;
+cd quarkus-example &amp;amp;&amp;amp; mvn package &amp;amp;&amp;amp; java -jar target/quarkus-app/quarkus-run.jar
+&lt;h1&gt;Quarkus (原生镜像)&lt;/h1&gt;
+cd quarkus-example &amp;amp;&amp;amp; mvn package -Pnative
+./target/quarkus-example-*-runner
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;18.3.8 快速选择建议&lt;/h3&gt;
+&lt;ul&gt;&lt;li&gt;**企业级应用**：选择 **Spring Boot**，生态最完善，社区活跃&lt;/li&gt;
+&lt;li&gt;**微服务 / Lambda**：选择 **Quarkus**，启动最快，原生支持好&lt;/li&gt;
+&lt;li&gt;**轻量级服务 / 移动端**：选择 **Micronaut**，内存占用低，启动快速&lt;/li&gt;
+&lt;/ul&gt;
+---
+&lt;h2&gt;本章小结&lt;/h2&gt;
+&lt;p&gt;本章介绍了 AgentScope Java 与 Micronaut 和 Quarkus 两大现代框架的集成方式：&lt;/p&gt;
+&lt;p&gt;1. **Micronaut 集成**：通过 &lt;code&gt;agentscope-micronaut-extension&lt;/code&gt; 扩展，支持 YAML 配置和构造器注入
+2. **Quarkus 集成**：通过 &lt;code&gt;agentscope-quarkus-extension&lt;/code&gt; 扩展，支持属性配置和 CDI 注入，提供原生镜像支持
+3. **框架对比**：从启动速度、内存占用、适用场景等维度对比了三个框架的差异&lt;/p&gt;
+&lt;p&gt;三个框架的集成方式高度统一，核心都是通过各自的扩展模块实现 AgentScope 的自动配置，开发者可以根据项目需求灵活选择。&lt;/p&gt;
+</body>
+</html>

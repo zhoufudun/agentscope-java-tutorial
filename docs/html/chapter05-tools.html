@@ -1,0 +1,1899 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第五章：工具系统</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        h3 { color: #7f8c8d; }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: "Consolas", "Monaco", monospace;
+        }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+        table {
+            border-collapse: collapse;
+            margin: 20px 0;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th { background: #3498db; color: white; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        ul { padding-left: 20px; }
+        li { margin: 5px 0; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            color: #666;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+&lt;h1&gt;第五章：工具系统&lt;/h1&gt;
+&lt;p&gt;&gt; 本章讲解 AgentScope Java 框架的工具系统，包括内置工具、自定义工具开发、工具注册与调用机制、参数验证，以及完整的实战案例。&lt;/p&gt;
+&lt;h2&gt;5.1 内置工具概览&lt;/h2&gt;
+&lt;p&gt;AgentScope Java 提供了一系列开箱即用的内置工具，涵盖文件操作、代码执行、多模态等常见场景。&lt;/p&gt;
+&lt;h3&gt;5.1.1 文件操作工具&lt;/h3&gt;
+&lt;p&gt;框架内置了 &lt;code&gt;ReadFileTool&lt;/code&gt; 和 &lt;code&gt;WriteFileTool&lt;/code&gt;，支持安全的文件读写操作。&lt;/p&gt;
+&lt;p&gt;**ReadFileTool（文件读取工具）**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 位于：io.agentscope.core.tool.file.ReadFileTool
+// 主要功能：
+// - view_text_file: 按行范围读取文件内容，支持负索引（从尾部计算）
+// - list_directory: 列出目录内容（文件与子目录分类展示）
+&lt;p&gt;// 无限制模式（可读写任意路径）
+ReadFileTool readTool = new ReadFileTool();&lt;/p&gt;
+&lt;p&gt;// 安全限制模式（仅允许访问指定目录）
+ReadFileTool readTool = new ReadFileTool(&amp;quot;/data/workspace&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 调用示例
+Mono&amp;lt;ToolResultBlock&amp;gt; result = readTool.viewTextFile(&amp;quot;path/to/file.txt&amp;quot;, &amp;quot;1,100&amp;quot;);
+Mono&amp;lt;ToolResultBlock&amp;gt; result = readTool.viewTextFile(&amp;quot;path/to/file.txt&amp;quot;, &amp;quot;-100,-1&amp;quot;); // 最后100行
+Mono&amp;lt;ToolResultBlock&amp;gt; result = readTool.listDirectory(&amp;quot;/data/workspace&amp;quot;);
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**WriteFileTool（文件写入工具）**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 位于：io.agentscope.core.tool.file.WriteFileTool
+// 主要功能：
+// - write_file: 向指定路径写入文本内容
+// - append_file: 向文件追加内容
+&lt;p&gt;WriteFileTool writeTool = new WriteFileTool(&amp;quot;/data/workspace&amp;quot;); // 限制工作目录
+Mono&amp;lt;ToolResultBlock&amp;gt; result = writeTool.writeFile(&amp;quot;output.txt&amp;quot;, &amp;quot;Hello World&amp;quot;);
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;文件工具的核心安全机制由 &lt;code&gt;FileToolUtils&lt;/code&gt; 提供：
+&lt;ul&gt;&lt;li&gt;路径遍历攻击防护（禁止 &lt;code&gt;../&lt;/code&gt; 逃逸）&lt;/li&gt;
+&lt;li&gt;基础目录限制&lt;/li&gt;
+&lt;li&gt;文件类型与大小检查&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;5.1.2 代码执行工具&lt;/h3&gt;&lt;/p&gt;
+&lt;p&gt;**ShellCommandTool（Shell 命令工具）**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 位于：io.agentscope.core.tool.coding.ShellCommandTool
+// 支持跨平台命令验证：
+// - UnixCommandValidator: Linux/macOS 命令白名单
+// - CommandValidator: Windows 命令验证
+&lt;p&gt;ShellCommandTool shellTool = ShellCommandTool.builder()
+    .baseDir(&amp;quot;/data/workspace&amp;quot;)
+    .allowedCommands(Set.of(&amp;quot;ls&amp;quot;, &amp;quot;cat&amp;quot;, &amp;quot;grep&amp;quot;, &amp;quot;find&amp;quot;))
+    .timeout(Duration.ofSeconds(30))
+    .build();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;5.1.3 多模态工具&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// DashScope 多模态工具
+import io.agentscope.core.tool.multimodal.DashScopeMultiModalTool;
+&lt;p&gt;// OpenAI 多模态工具
+import io.agentscope.core.tool.multimodal.OpenAIMultiModalTool;
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;5.1.4 MCP 工具（Model Context Protocol）&lt;/h3&gt;
+&lt;p&gt;MCP 工具用于连接外部 MCP 服务器，访问远程提供的工具集。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;import io.agentscope.core.tool.mcp.McpClientBuilder;
+import io.agentscope.core.tool.mcp.McpClientWrapper;
+&lt;p&gt;// 构建 MCP 客户端
+McpClientWrapper mcpClient = McpClientBuilder.builder()
+    .name(&amp;quot;filesystem-mcp&amp;quot;)
+    .url(&amp;quot;http://localhost:8080/mcp&amp;quot;)
+    .build()
+    .sync(); // 或 .async()&lt;/p&gt;
+&lt;p&gt;// 注册 MCP 客户端的所有工具
+toolkit.registerMcpClient(mcpClient);&lt;/p&gt;
+&lt;p&gt;// 或者使用 Builder API 进行精细控制
+toolkit.registration()
+    .mcpClient(mcpClient)
+    .enableTools(List.of(&amp;quot;read_file&amp;quot;, &amp;quot;write_file&amp;quot;))
+    .disableTools(List.of(&amp;quot;delete_file&amp;quot;))
+    .group(&amp;quot;mcp_tools&amp;quot;)
+    .presetParameters(Map.of(
+        &amp;quot;read_file&amp;quot;, Map.of(&amp;quot;baseDir&amp;quot;, &amp;quot;/data/workspace&amp;quot;)
+    ))
+    .apply();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;5.1.5 子代理工具（SubAgent as Tool）&lt;/h3&gt;
+&lt;p&gt;将另一个 Agent 作为工具调用，实现复杂任务的分解与协作。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;import io.agentscope.core.tool.subagent.SubAgentConfig;
+import io.agentscope.core.tool.subagent.SubAgentProvider;
+&lt;p&gt;toolkit.registration()
+    .subAgent(
+        () -&amp;gt; ReActAgent.builder()
+            .name(&amp;quot;ResearchAgent&amp;quot;)
+            .model(model)
+            .toolkit(specializedToolkit)
+            .build(),
+        SubAgentConfig.builder()
+            .toolName(&amp;quot;do_research&amp;quot;)
+            .description(&amp;quot;深入研究给定主题并返回报告&amp;quot;)
+            .session(new JsonSession(Path.of(&amp;quot;sessions/research&amp;quot;)))
+            .build()
+    )
+    .group(&amp;quot;research&amp;quot;)
+    .apply();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h2&gt;5.2 自定义工具开发规范&lt;/h2&gt;
+&lt;p&gt;AgentScope Java 支持两种自定义工具的方式：**注解方式**（推荐）和**接口实现方式**。&lt;/p&gt;
+&lt;h3&gt;5.2.1 注解方式开发工具&lt;/h3&gt;
+&lt;p&gt;使用 &lt;code&gt;@Tool&lt;/code&gt; 注解标记方法，用 &lt;code&gt;@ToolParam&lt;/code&gt; 注解标记参数。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;import io.agentscope.core.tool.Tool;
+import io.agentscope.core.tool.ToolParam;
+&lt;p&gt;public class MyTools {&lt;/p&gt;
+&lt;p&gt;@Tool(
+        name = &amp;quot;my_tool&amp;quot;,
+        description = &amp;quot;工具的详细描述，帮助模型理解何时使用&amp;quot;
+    )
+    public String myToolMethod(
+        @ToolParam(
+            name = &amp;quot;param_name&amp;quot;,      // 参数名（必填）
+            description = &amp;quot;参数描述&amp;quot;, // 参数说明
+            required = true           // 是否必填，默认 true
+        ) String paramName
+    ) {
+        // 工具逻辑
+        return &amp;quot;result&amp;quot;;
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**注解详解：**&lt;/p&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;注解&lt;/th&gt;&lt;th&gt;属性&lt;/th&gt;&lt;th&gt;说明&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;@Tool&lt;/code&gt;&lt;/td&gt;&lt;td&gt;&lt;code&gt;name&lt;/code&gt;&lt;/td&gt;&lt;td&gt;工具名称，建议 snake_case&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;code&gt;@ToolParam&lt;/code&gt;&lt;/td&gt;&lt;td&gt;&lt;code&gt;name&lt;/code&gt;&lt;/td&gt;&lt;td&gt;**必填**，参数名称&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;**工具注册：**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;Toolkit toolkit = new Toolkit();
+&lt;p&gt;// 注册工具对象（自动扫描所有 @Tool 方法）
+toolkit.registerTool(new MyTools());&lt;/p&gt;
+&lt;p&gt;// 注册到指定分组
+toolkit.createToolGroup(&amp;quot;my_group&amp;quot;, &amp;quot;我的工具组&amp;quot;, true);
+toolkit.registration().tool(new MyTools()).group(&amp;quot;my_group&amp;quot;).apply();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;5.2.2 实现 AgentTool 接口&lt;/h3&gt;
+&lt;p&gt;对于需要更复杂逻辑的工具，直接实现 &lt;code&gt;AgentTool&lt;/code&gt; 接口。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;import io.agentscope.core.tool.AgentTool;
+import io.agentscope.core.tool.ToolCallParam;
+import io.agentscope.core.message.ToolResultBlock;
+import reactor.core.publisher.Mono;
+&lt;p&gt;public class CustomAgentTool implements AgentTool {&lt;/p&gt;
+&lt;p&gt;@Override
+    public String getName() {
+        return &amp;quot;custom_tool&amp;quot;;
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public String getDescription() {
+        return &amp;quot;自定义工具描述&amp;quot;;
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public Map&amp;lt;String, Object&amp;gt; getParameters() {
+        // 返回 JSON Schema 格式的参数定义
+        return Map.of(
+            &amp;quot;type&amp;quot;, &amp;quot;object&amp;quot;,
+            &amp;quot;properties&amp;quot;, Map.of(
+                &amp;quot;input&amp;quot;, Map.of(
+                    &amp;quot;type&amp;quot;, &amp;quot;string&amp;quot;,
+                    &amp;quot;description&amp;quot;, &amp;quot;输入参数&amp;quot;
+                )
+            ),
+            &amp;quot;required&amp;quot;, List.of(&amp;quot;input&amp;quot;)
+        );
+    }&lt;/p&gt;
+&lt;p&gt;@Override
+    public Mono&amp;lt;ToolResultBlock&amp;gt; callAsync(ToolCallParam param) {
+        // 获取输入参数
+        Map&amp;lt;String, Object&amp;gt; input = param.getInput();
+        String inputValue = (String) input.get(&amp;quot;input&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 执行逻辑
+        String result = doSomething(inputValue);&lt;/p&gt;
+&lt;p&gt;// 返回结果
+        return Mono.just(ToolResultBlock.text(result));
+    }
+}&lt;/p&gt;
+&lt;p&gt;// 注册自定义工具
+toolkit.registerAgentTool(new CustomAgentTool());
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;5.2.3 异步工具开发&lt;/h3&gt;
+&lt;p&gt;工具方法返回 &lt;code&gt;Mono&lt;T&gt;&lt;/code&gt; 时自动识别为异步执行。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;public class AsyncTools {
+&lt;p&gt;@Tool(name = &amp;quot;async_fetch&amp;quot;, description = &amp;quot;异步获取数据&amp;quot;)
+    public Mono&amp;lt;String&amp;gt; asyncFetch(
+        @ToolParam(name = &amp;quot;url&amp;quot;, description = &amp;quot;数据源URL&amp;quot;) String url
+    ) {
+        return WebClient.create()
+            .get()
+            .uri(url)
+            .retrieve()
+            .bodyToMono(String.class)
+            .map(response -&amp;gt; &amp;quot;Fetched: &amp;quot; + response)
+            .onErrorResume(e -&amp;gt; Mono.just(&amp;quot;Error: &amp;quot; + e.getMessage()));
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h2&gt;5.3 工具注册与调用机制&lt;/h2&gt;
+&lt;h3&gt;5.3.1 Toolkit 核心组件&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;Toolkit
+├── ToolRegistry         # 工具注册表（名称 -&amp;gt; AgentTool）
+├── ToolGroupManager     # 工具分组管理
+├── ToolSchemaProvider    # 工具 Schema 生成
+├── ToolExecutor          # 工具执行器
+├── McpClientManager      # MCP 客户端管理
+└── MetaToolFactory       # 元工具工厂（reset_equipped_tools）
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;5.3.2 工具注册方式&lt;/h3&gt;
+&lt;p&gt;**方式一：直接注册**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;Toolkit toolkit = new Toolkit();
+&lt;p&gt;// 注册工具对象
+toolkit.registerTool(new MyTools());&lt;/p&gt;
+&lt;p&gt;// 注册 AgentTool 实例
+toolkit.registerAgentTool(new CustomAgentTool());&lt;/p&gt;
+&lt;p&gt;// 注册外部 Schema（用于外部执行工具）
+toolkit.registerSchema(ToolSchema.builder()
+    .name(&amp;quot;external_tool&amp;quot;)
+    .description(&amp;quot;外部工具&amp;quot;)
+    .parameters(Map.of(
+        &amp;quot;type&amp;quot;, &amp;quot;object&amp;quot;,
+        &amp;quot;properties&amp;quot;, Map.of(&amp;quot;input&amp;quot;, Map.of(&amp;quot;type&amp;quot;, &amp;quot;string&amp;quot;)),
+        &amp;quot;required&amp;quot;, List.of(&amp;quot;input&amp;quot;)
+    ))
+    .build());
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**方式二：使用 Builder API（推荐）**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;toolkit.registration()
+    .tool(new MyTools())              // 工具对象
+    .group(&amp;quot;my_group&amp;quot;)                // 指定分组
+    .presetParameters(Map.of(         // 预设参数（对模型隐藏）
+        &amp;quot;my_tool&amp;quot;, Map.of(&amp;quot;apiKey&amp;quot;, &amp;quot;secret&amp;quot;)
+    ))
+    .extendedModel(myExtendedModel)  // 扩展 Schema
+    .apply();
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;5.3.3 工具分组管理&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 创建工具分组（默认不激活）
+toolkit.createToolGroup(&amp;quot;file_ops&amp;quot;, &amp;quot;文件操作工具&amp;quot;, false);
+toolkit.createToolGroup(&amp;quot;calc_ops&amp;quot;, &amp;quot;计算工具&amp;quot;, false);
+&lt;p&gt;// 将工具注册到分组
+toolkit.registration().tool(new FileTools()).group(&amp;quot;file_ops&amp;quot;).apply();
+toolkit.registration().tool(new CalcTools()).group(&amp;quot;calc_ops&amp;quot;).apply();&lt;/p&gt;
+&lt;p&gt;// 激活分组
+toolkit.updateToolGroups(List.of(&amp;quot;file_ops&amp;quot;, &amp;quot;calc_ops&amp;quot;), true);&lt;/p&gt;
+&lt;p&gt;// 查看活跃分组
+List&amp;lt;String&amp;gt; activeGroups = toolkit.getActiveGroups();
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;5.3.4 元工具（Meta Tool）&lt;/h3&gt;
+&lt;p&gt;启用元工具后，Agent 可以动态管理工具分组。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;ReActAgent agent = ReActAgent.builder()
+    .name(&amp;quot;SmartAgent&amp;quot;)
+    .model(model)
+    .toolkit(toolkit)
+    .enableMetaTool(true)  // 启用 reset_equipped_tools 元工具
+    .build();
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Agent 运行时可以调用 &lt;code&gt;reset_equipped_tools&lt;/code&gt; 来激活需要的工具分组。&lt;/p&gt;
+&lt;h3&gt;5.3.5 工具调用流程&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;Agent 推理
+    │
+    ▼
+模型返回 ToolUseBlock
+    │
+    ▼
+ToolExecutor.execute()
+    │
+    ├──► 验证参数（ToolValidator）
+    │
+    ├──► 参数合并（预设参数 + 输入参数）
+    │
+    └──► 执行工具
+            │
+            ├──► 同步工具：直接调用方法
+            │
+            └──► 异步工具：Mono 处理
+    │
+    ▼
+ToolResultBlock 结果返回
+    │
+    ▼
+Agent 继续推理
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;5.3.6 预设参数（Preset Parameters）&lt;/h3&gt;
+&lt;p&gt;预设参数在工具注册时注入，对模型隐藏，不出现在 JSON Schema 中。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;// 定义预设参数
+Map&amp;lt;String, Map&amp;lt;String, Object&amp;gt;&amp;gt; presetParams = Map.of(
+    &amp;quot;fetch_data&amp;quot;, Map.of(
+        &amp;quot;apiKey&amp;quot;, &amp;quot;sk-xxxxx&amp;quot;,
+        &amp;quot;baseUrl&amp;quot;, &amp;quot;https://api.example.com&amp;quot;
+    )
+);
+&lt;p&gt;toolkit.registration()
+    .tool(new DataFetchTools())
+    .presetParameters(presetParams)
+    .apply();&lt;/p&gt;
+&lt;p&gt;// 调用时只需传入动态参数
+// 框架自动合并: { apiKey: &amp;quot;...&amp;quot;, baseUrl: &amp;quot;...&amp;quot;, query: &amp;quot;xxx&amp;quot; }
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h2&gt;5.4 工具参数验证&lt;/h2&gt;
+&lt;h3&gt;5.4.1 Schema 验证&lt;/h3&gt;
+&lt;p&gt;AgentScope 使用 &lt;code&gt;networknt-schema&lt;/code&gt; 库进行 JSON Schema 验证。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;import io.agentscope.core.tool.ToolValidator;
+&lt;p&gt;// 获取工具的 Schema
+Map&amp;lt;String, Object&amp;gt; schema = tool.getParameters();&lt;/p&gt;
+&lt;p&gt;// 验证输入参数
+String inputJson = &amp;quot;{\&amp;quot;param1\&amp;quot;: \&amp;quot;value1\&amp;quot;}&amp;quot;;
+String error = ToolValidator.validateInput(inputJson, schema);&lt;/p&gt;
+&lt;p&gt;if (error != null) {
+    // 验证失败
+    System.out.println(&amp;quot;Validation failed: &amp;quot; + error);
+} else {
+    // 验证通过
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;p&gt;**验证内容：**
+&lt;ul&gt;&lt;li&gt;必填字段检查&lt;/li&gt;
+&lt;li&gt;类型验证（string, number, integer, boolean, array, object）&lt;/li&gt;
+&lt;li&gt;枚举值验证&lt;/li&gt;
+&lt;li&gt;数值范围（min/max）&lt;/li&gt;
+&lt;li&gt;字符串长度（minLength/maxLength）&lt;/li&gt;
+&lt;li&gt;正则表达式（pattern）&lt;/li&gt;
+&lt;li&gt;嵌套对象与数组验证&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;5.4.2 自定义验证示例&lt;/h3&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;public class ValidatedTools {
+&lt;p&gt;@Tool(name = &amp;quot;search_products&amp;quot;, description = &amp;quot;搜索产品&amp;quot;)
+    public String searchProducts(
+        @ToolParam(
+            name = &amp;quot;keyword&amp;quot;,
+            description = &amp;quot;搜索关键词（2-50字符）&amp;quot;
+        ) String keyword,
+        @ToolParam(
+            name = &amp;quot;category&amp;quot;,
+            description = &amp;quot;产品类别&amp;quot;,
+            required = false
+        ) String category,
+        @ToolParam(
+            name = &amp;quot;max_results&amp;quot;,
+            description = &amp;quot;最大返回数量（1-100）&amp;quot;,
+            required = false
+        ) Integer maxResults
+    ) {
+        // 参数校验
+        if (keyword == null || keyword.length() &amp;lt; 2 || keyword.length() &amp;gt; 50) {
+            return &amp;quot;Error: keyword must be between 2 and 50 characters&amp;quot;;
+        }
+        if (maxResults != null &amp;amp;&amp;amp; (maxResults &amp;lt; 1 || maxResults &amp;gt; 100)) {
+            return &amp;quot;Error: max_results must be between 1 and 100&amp;quot;;
+        }&lt;/p&gt;
+&lt;p&gt;// 执行业务逻辑
+        return search(keyword, category, maxResults);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;5.4.3 参数类型自动推断&lt;/h3&gt;
+&lt;p&gt;框架根据方法参数类型自动生成 Schema，支持以下类型：&lt;/p&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Java 类型&lt;/th&gt;&lt;th&gt;JSON Schema 类型&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;String&lt;/td&gt;&lt;td&gt;string&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Integer / int&lt;/td&gt;&lt;td&gt;integer&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Long / long&lt;/td&gt;&lt;td&gt;integer&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Double / double&lt;/td&gt;&lt;td&gt;number&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Boolean / boolean&lt;/td&gt;&lt;td&gt;boolean&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;List&lt;T&gt;&lt;/td&gt;&lt;td&gt;array&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Map&lt;K,V&gt; / Object&lt;/td&gt;&lt;td&gt;object&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;自定义类&lt;/td&gt;&lt;td&gt;object（含 $defs）&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;枚举&lt;/td&gt;&lt;td&gt;string + enum&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;@Tool(name = &amp;quot;complex_tool&amp;quot;, description = &amp;quot;复杂参数示例&amp;quot;)
+public String complexTool(
+    @ToolParam(name = &amp;quot;name&amp;quot;) String name,
+    @ToolParam(name = &amp;quot;age&amp;quot;) Integer age,
+    @ToolParam(name = &amp;quot;tags&amp;quot;) List&amp;lt;String&amp;gt; tags,
+    @ToolParam(name = &amp;quot;metadata&amp;quot;) Map&amp;lt;String, Object&amp;gt; metadata,
+    @ToolParam(name = &amp;quot;config&amp;quot;) Config config  // 自定义类自动生成嵌套 Schema
+) {
+    // ...
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;5.5 【案例】完整工具系统实现&lt;/h2&gt;
+&lt;p&gt;本案例实现一个功能完整的工具系统，包含：&lt;/p&gt;
+&lt;p&gt;1. 内置工具的使用
+2. 自定义工具开发（计算器、天气查询）
+3. 工具分组管理
+4. 参数验证
+5. 与 Spring Boot 3 的集成&lt;/p&gt;
+&lt;h3&gt;5.5.1 项目结构&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-&quot;&gt;chapter05-tools/
+├── pom.xml
+└── src/main/java/io/agentscope/tutorial/chapter05/
+    ├── Chapter05Application.java
+    ├── config/
+    │   └── AgentConfig.java
+    ├── tools/
+    │   ├── CalculatorTool.java
+    │   ├── WeatherTool.java
+    │   └── DateTimeTool.java
+    ├── service/
+    │   └── ToolRegistrationService.java
+    └── controller/
+        └── AgentController.java
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;5.5.2 Maven 依赖（pom.xml）&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot;?&amp;gt;
+&amp;lt;project xmlns=&amp;quot;http://maven.apache.org/POM/4.0.0&amp;quot;
+         xmlns:xsi=&amp;quot;http://www.w3.org/2001/XMLSchema-instance&amp;quot;
+         xsi:schemaLocation=&amp;quot;http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd&amp;quot;&amp;gt;
+    &amp;lt;modelVersion&amp;gt;4.0.0&amp;lt;/modelVersion&amp;gt;
+&lt;p&gt;&amp;lt;parent&amp;gt;
+        &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+        &amp;lt;artifactId&amp;gt;agentscope-parent&amp;lt;/artifactId&amp;gt;
+        &amp;lt;version&amp;gt;1.0.0&amp;lt;/version&amp;gt;
+    &amp;lt;/parent&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;artifactId&amp;gt;chapter05-tools&amp;lt;/artifactId&amp;gt;
+    &amp;lt;version&amp;gt;1.0.0&amp;lt;/version&amp;gt;
+    &amp;lt;packaging&amp;gt;jar&amp;lt;/packaging&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;name&amp;gt;Chapter 05 - Tools System&amp;lt;/name&amp;gt;
+    &amp;lt;description&amp;gt;AgentScope Java Tutorial - Chapter 05 Tools System&amp;lt;/description&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;properties&amp;gt;
+        &amp;lt;java.version&amp;gt;21&amp;lt;/java.version&amp;gt;
+        &amp;lt;maven.compiler.source&amp;gt;21&amp;lt;/maven.compiler.source&amp;gt;
+        &amp;lt;maven.compiler.target&amp;gt;21&amp;lt;/maven.compiler.target&amp;gt;
+        &amp;lt;project.build.sourceEncoding&amp;gt;UTF-8&amp;lt;/project.build.sourceEncoding&amp;gt;
+    &amp;lt;/properties&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;dependencies&amp;gt;
+        &amp;lt;!-- AgentScope Core --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;io.agentscope&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;agentscope-core&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;1.0.0&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- Spring Boot 3 --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;spring-boot-starter-web&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;3.2.5&amp;lt;/version&amp;gt;
+        &amp;lt;/dependency&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;!-- Lombok（可选，简化代码） --&amp;gt;
+        &amp;lt;dependency&amp;gt;
+            &amp;lt;groupId&amp;gt;org.projectlombok&amp;lt;/groupId&amp;gt;
+            &amp;lt;artifactId&amp;gt;lombok&amp;lt;/artifactId&amp;gt;
+            &amp;lt;version&amp;gt;1.18.32&amp;lt;/version&amp;gt;
+            &amp;lt;scope&amp;gt;provided&amp;lt;/scope&amp;gt;
+        &amp;lt;/dependency&amp;gt;
+    &amp;lt;/dependencies&amp;gt;&lt;/p&gt;
+&lt;p&gt;&amp;lt;build&amp;gt;
+        &amp;lt;plugins&amp;gt;
+            &amp;lt;plugin&amp;gt;
+                &amp;lt;groupId&amp;gt;org.springframework.boot&amp;lt;/groupId&amp;gt;
+                &amp;lt;artifactId&amp;gt;spring-boot-maven-plugin&amp;lt;/artifactId&amp;gt;
+                &amp;lt;version&amp;gt;3.2.5&amp;lt;/version&amp;gt;
+            &amp;lt;/plugin&amp;gt;
+        &amp;lt;/plugins&amp;gt;
+    &amp;lt;/build&amp;gt;
+&amp;lt;/project&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;5.5.3 计算器工具（CalculatorTool.java）&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter05.tools;
+&lt;p&gt;import io.agentscope.core.tool.Tool;
+import io.agentscope.core.tool.ToolParam;
+import io.agentscope.core.tool.ToolValidator;
+import java.util.List;
+import java.util.Map;&lt;/p&gt;
+&lt;p&gt;/**
+ * 计算器工具集
+ *
+ * &amp;lt;p&amp;gt;提供基础数学运算、科学计算和表达式求值功能。
+ * 所有方法均支持参数验证，错误时返回友好的错误信息。
+ *
+ * &amp;lt;p&amp;gt;工具名称使用 snake_case 规范，便于模型理解。
+ *
+ * @author AgentScope Tutorial
+ * @since 1.0
+ */
+public class CalculatorTool {&lt;/p&gt;
+&lt;p&gt;// ==================== 基础运算 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 加法运算
+     *
+     * @param a 第一个数
+     * @param b 第二个数
+     * @return 加法结果字符串
+     */
+    @Tool(
+        name = &amp;quot;add&amp;quot;,
+        description = &amp;quot;计算两个数的加法。适用于简单的数值相加场景。&amp;quot;
+    )
+    public String add(
+        @ToolParam(name = &amp;quot;a&amp;quot;, description = &amp;quot;第一个加数&amp;quot;, required = true) Double a,
+        @ToolParam(name = &amp;quot;b&amp;quot;, description = &amp;quot;第二个加数&amp;quot;, required = true) Double b
+    ) {
+        validateNotNull(a, &amp;quot;a&amp;quot;);
+        validateNotNull(b, &amp;quot;b&amp;quot;);
+        return String.format(&amp;quot;%.2f + %.2f = %.2f&amp;quot;, a, b, a + b);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 减法运算
+     *
+     * @param a 被减数
+     * @param b 减数
+     * @return 减法结果字符串
+     */
+    @Tool(
+        name = &amp;quot;subtract&amp;quot;,
+        description = &amp;quot;计算两个数的减法&amp;quot;
+    )
+    public String subtract(
+        @ToolParam(name = &amp;quot;a&amp;quot;, description = &amp;quot;被减数&amp;quot;, required = true) Double a,
+        @ToolParam(name = &amp;quot;b&amp;quot;, description = &amp;quot;减数&amp;quot;, required = true) Double b
+    ) {
+        validateNotNull(a, &amp;quot;a&amp;quot;);
+        validateNotNull(b, &amp;quot;b&amp;quot;);
+        return String.format(&amp;quot;%.2f - %.2f = %.2f&amp;quot;, a, b, a - b);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 乘法运算
+     *
+     * @param a 第一个因数
+     * @param b 第二个因数
+     * @return 乘法结果字符串
+     */
+    @Tool(
+        name = &amp;quot;multiply&amp;quot;,
+        description = &amp;quot;计算两个数的乘法&amp;quot;
+    )
+    public String multiply(
+        @ToolParam(name = &amp;quot;a&amp;quot;, description = &amp;quot;第一个因数&amp;quot;, required = true) Double a,
+        @ToolParam(name = &amp;quot;b&amp;quot;, description = &amp;quot;第二个因数&amp;quot;, required = true) Double b
+    ) {
+        validateNotNull(a, &amp;quot;a&amp;quot;);
+        validateNotNull(b, &amp;quot;b&amp;quot;);
+        return String.format(&amp;quot;%.2f * %.2f = %.2f&amp;quot;, a, b, a * b);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 除法运算
+     *
+     * @param a 被除数
+     * @param b 除数（不能为零）
+     * @return 除法结果字符串
+     */
+    @Tool(
+        name = &amp;quot;divide&amp;quot;,
+        description = &amp;quot;计算两个数的除法。注意：除数不能为零&amp;quot;
+    )
+    public String divide(
+        @ToolParam(name = &amp;quot;a&amp;quot;, description = &amp;quot;被除数&amp;quot;, required = true) Double a,
+        @ToolParam(name = &amp;quot;b&amp;quot;, description = &amp;quot;除数（不能为零）&amp;quot;, required = true) Double b
+    ) {
+        validateNotNull(a, &amp;quot;a&amp;quot;);
+        validateNotNull(b, &amp;quot;b&amp;quot;);
+        if (b == 0) {
+            return &amp;quot;Error: 除数不能为零&amp;quot;;
+        }
+        return String.format(&amp;quot;%.2f / %.2f = %.2f&amp;quot;, a, b, a / b);
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 科学计算 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 计算阶乘
+     *
+     * @param n 非负整数（最大支持 20! 以避免溢出）
+     * @return 阶乘结果
+     */
+    @Tool(
+        name = &amp;quot;factorial&amp;quot;,
+        description = &amp;quot;计算非负整数的阶乘。最大支持 20! 以避免整数溢出。&amp;quot;
+    )
+    public String factorial(
+        @ToolParam(name = &amp;quot;n&amp;quot;, description = &amp;quot;非负整数（0-20）&amp;quot;, required = true) Integer n
+    ) {
+        validateNotNull(n, &amp;quot;n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;if (n &amp;lt; 0) {
+            return &amp;quot;Error: 阶乘不支持负数&amp;quot;;
+        }
+        if (n &amp;gt; 20) {
+            return &amp;quot;Error: 数字太大（最大支持 20!）&amp;quot;;
+        }&lt;/p&gt;
+&lt;p&gt;long result = 1;
+        for (int i = 2; i &amp;lt;= n; i++) {
+            result *= i;
+        }
+        return String.format(&amp;quot;%d! = %d&amp;quot;, n, result);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 判断质数
+     *
+     * @param n 待检测的正整数
+     * @return 质数判断结果
+     */
+    @Tool(
+        name = &amp;quot;is_prime&amp;quot;,
+        description = &amp;quot;判断一个正整数是否为质数。质数定义为大于1的自然数，除了1和它本身外不能被其他自然数整除。&amp;quot;
+    )
+    public String isPrime(
+        @ToolParam(name = &amp;quot;n&amp;quot;, description = &amp;quot;待检测的正整数（&amp;gt;= 2）&amp;quot;, required = true) Integer n
+    ) {
+        validateNotNull(n, &amp;quot;n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;if (n &amp;lt; 2) {
+            return n + &amp;quot; 不是质数（质数必须 &amp;gt;= 2）&amp;quot;;
+        }&lt;/p&gt;
+&lt;p&gt;for (int i = 2; i &amp;lt;= Math.sqrt(n); i++) {
+            if (n % i == 0) {
+                return n + &amp;quot; 不是质数（可以被 &amp;quot; + i + &amp;quot; 整除）&amp;quot;;
+            }
+        }
+        return n + &amp;quot; 是质数&amp;quot;;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 计算平方根
+     *
+     * @param x 被开方数（非负数）
+     * @return 平方根结果
+     */
+    @Tool(
+        name = &amp;quot;sqrt&amp;quot;,
+        description = &amp;quot;计算非负数的平方根&amp;quot;
+    )
+    public String sqrt(
+        @ToolParam(name = &amp;quot;x&amp;quot;, description = &amp;quot;被开方数（必须 &amp;gt;= 0）&amp;quot;, required = true) Double x
+    ) {
+        validateNotNull(x, &amp;quot;x&amp;quot;);&lt;/p&gt;
+&lt;p&gt;if (x &amp;lt; 0) {
+            return &amp;quot;Error: 平方根不支持负数&amp;quot;;
+        }
+        return String.format(&amp;quot;sqrt(%.2f) = %.4f&amp;quot;, x, Math.sqrt(x));
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 计算幂运算
+     *
+     * @param base 底数
+     * @param exponent 指数
+     * @return 幂运算结果
+     */
+    @Tool(
+        name = &amp;quot;power&amp;quot;,
+        description = &amp;quot;计算底数的指数次幂。如 2^10 = 1024&amp;quot;
+    )
+    public String power(
+        @ToolParam(name = &amp;quot;base&amp;quot;, description = &amp;quot;底数&amp;quot;, required = true) Double base,
+        @ToolParam(name = &amp;quot;exponent&amp;quot;, description = &amp;quot;指数&amp;quot;, required = true) Double exponent
+    ) {
+        validateNotNull(base, &amp;quot;base&amp;quot;);
+        validateNotNull(exponent, &amp;quot;exponent&amp;quot;);&lt;/p&gt;
+&lt;p&gt;double result = Math.pow(base, exponent);
+        return String.format(&amp;quot;%.2f ^ %.2f = %.4f&amp;quot;, base, exponent, result);
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 统计运算 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 计算平均值
+     *
+     * @param numbers 数字列表（JSON 数组格式，如 &amp;quot;[1, 2, 3, 4, 5]&amp;quot;）
+     * @return 平均值
+     */
+    @Tool(
+        name = &amp;quot;average&amp;quot;,
+        description = &amp;quot;计算一组数字的平均值。输入格式为 JSON 数组字符串，如 '[1, 2, 3, 4, 5]'&amp;quot;
+    )
+    public String average(
+        @ToolParam(name = &amp;quot;numbers&amp;quot;, description = &amp;quot;数字列表（JSON数组格式）&amp;quot;, required = true) String numbers
+    ) {
+        try {
+            // 解析 JSON 数组
+            numbers = numbers.trim();
+            if (numbers.startsWith(&amp;quot;[&amp;quot;)) {
+                numbers = numbers.substring(1, numbers.length() - 1);
+            }
+            String[] parts = numbers.split(&amp;quot;,&amp;quot;);
+            double sum = 0;
+            int count = 0;
+            for (String part : parts) {
+                sum += Double.parseDouble(part.trim());
+                count++;
+            }
+            if (count == 0) {
+                return &amp;quot;Error: 数字列表为空&amp;quot;;
+            }
+            return String.format(&amp;quot;平均值 = %.2f（共 %d 个数字）&amp;quot;, sum / count, count);
+        } catch (Exception e) {
+            return &amp;quot;Error: 无效的数字列表格式。请使用 JSON 数组格式，如 '[1, 2, 3, 4, 5]'&amp;quot;;
+        }
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 辅助方法 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 验证参数是否为空
+     */
+    private void validateNotNull(Object value, String paramName) {
+        if (value == null) {
+            throw new IllegalArgumentException(&amp;quot;参数 '&amp;quot; + paramName + &amp;quot;' 不能为空&amp;quot;);
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;5.5.4 天气查询工具（WeatherTool.java）&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter05.tools;
+&lt;p&gt;import io.agentscope.core.tool.Tool;
+import io.agentscope.core.tool.ToolParam;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;&lt;/p&gt;
+&lt;p&gt;/**
+ * 天气查询工具
+ *
+ * &amp;lt;p&amp;gt;模拟天气查询服务，支持全球主要城市的天气查询。
+ * 在实际应用中，可替换为真实天气 API（如 OpenWeatherMap、中国气象局 API 等）。
+ *
+ * &amp;lt;p&amp;gt;注意：这是一个模拟实现，返回的数据是虚构的，仅用于演示目的。
+ *
+ * @author AgentScope Tutorial
+ * @since 1.0
+ */
+public class WeatherTool {&lt;/p&gt;
+&lt;p&gt;// 模拟的天气数据（实际应用中替换为 API 调用）
+    private static final Map&amp;lt;String, WeatherInfo&amp;gt; WEATHER_DB = new ConcurrentHashMap&amp;lt;&amp;gt;();
+    private static final Random RANDOM = new Random();&lt;/p&gt;
+&lt;p&gt;static {
+        // 初始化模拟天气数据
+        WEATHER_DB.put(&amp;quot;北京&amp;quot;, new WeatherInfo(&amp;quot;北京&amp;quot;, 15, &amp;quot;晴&amp;quot;, &amp;quot;优&amp;quot;, &amp;quot;北风 3-4级&amp;quot;, 45));
+        WEATHER_DB.put(&amp;quot;上海&amp;quot;, new WeatherInfo(&amp;quot;上海&amp;quot;, 18, &amp;quot;多云&amp;quot;, &amp;quot;良&amp;quot;, &amp;quot;东风 2-3级&amp;quot;, 60));
+        WEATHER_DB.put(&amp;quot;广州&amp;quot;, new WeatherInfo(&amp;quot;广州&amp;quot;, 25, &amp;quot;晴&amp;quot;, &amp;quot;优&amp;quot;, &amp;quot;南风 2级&amp;quot;, 70));
+        WEATHER_DB.put(&amp;quot;深圳&amp;quot;, new WeatherInfo(&amp;quot;深圳&amp;quot;, 26, &amp;quot;晴&amp;quot;, &amp;quot;优&amp;quot;, &amp;quot;南风 1-2级&amp;quot;, 75));
+        WEATHER_DB.put(&amp;quot;杭州&amp;quot;, new WeatherInfo(&amp;quot;杭州&amp;quot;, 16, &amp;quot;阴&amp;quot;, &amp;quot;良&amp;quot;, &amp;quot;东北风 2级&amp;quot;, 65));
+        WEATHER_DB.put(&amp;quot;成都&amp;quot;, new WeatherInfo(&amp;quot;成都&amp;quot;, 14, &amp;quot;小雨&amp;quot;, &amp;quot;良&amp;quot;, &amp;quot;北风 1-2级&amp;quot;, 80));
+        WEATHER_DB.put(&amp;quot;武汉&amp;quot;, new WeatherInfo(&amp;quot;武汉&amp;quot;, 17, &amp;quot;多云&amp;quot;, &amp;quot;良&amp;quot;, &amp;quot;东风 3级&amp;quot;, 55));
+        WEATHER_DB.put(&amp;quot;西安&amp;quot;, new WeatherInfo(&amp;quot;西安&amp;quot;, 12, &amp;quot;晴&amp;quot;, &amp;quot;优&amp;quot;, &amp;quot;西风 2级&amp;quot;, 40));
+        WEATHER_DB.put(&amp;quot;南京&amp;quot;, new WeatherInfo(&amp;quot;南京&amp;quot;, 15, &amp;quot;阴&amp;quot;, &amp;quot;良&amp;quot;, &amp;quot;东风 2-3级&amp;quot;, 60));
+        WEATHER_DB.put(&amp;quot;重庆&amp;quot;, new WeatherInfo(&amp;quot;重庆&amp;quot;, 20, &amp;quot;晴&amp;quot;, &amp;quot;良&amp;quot;, &amp;quot;西风 1级&amp;quot;, 50));
+        WEATHER_DB.put(&amp;quot;东京&amp;quot;, new WeatherInfo(&amp;quot;东京&amp;quot;, 20, &amp;quot;晴&amp;quot;, &amp;quot;优&amp;quot;, &amp;quot;东南风 2级&amp;quot;, 50));
+        WEATHER_DB.put(&amp;quot;纽约&amp;quot;, new WeatherInfo(&amp;quot;纽约&amp;quot;, 12, &amp;quot;阴&amp;quot;, &amp;quot;中&amp;quot;, &amp;quot;西北风 3级&amp;quot;, 65));
+        WEATHER_DB.put(&amp;quot;伦敦&amp;quot;, new WeatherInfo(&amp;quot;伦敦&amp;quot;, 10, &amp;quot;小雨&amp;quot;, &amp;quot;良&amp;quot;, &amp;quot;西风 4级&amp;quot;, 85));
+        WEATHER_DB.put(&amp;quot;巴黎&amp;quot;, new WeatherInfo(&amp;quot;巴黎&amp;quot;, 14, &amp;quot;多云&amp;quot;, &amp;quot;良&amp;quot;, &amp;quot;西南风 3级&amp;quot;, 70));
+        WEATHER_DB.put(&amp;quot;新加坡&amp;quot;, new WeatherInfo(&amp;quot;新加坡&amp;quot;, 31, &amp;quot;雷阵雨&amp;quot;, &amp;quot;中&amp;quot;, &amp;quot;东南风 2级&amp;quot;, 90));
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 天气查询 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 查询当前天气
+     *
+     * &amp;lt;p&amp;gt;返回指定城市的当前天气信息，包括温度、天气状况、空气质量等。
+     *
+     * @param city 城市名称（支持中英文）
+     * @param unit 温度单位（celsius/fahrenheit），默认 celsius
+     * @return 天气信息字符串
+     */
+    @Tool(
+        name = &amp;quot;get_weather&amp;quot;,
+        description = &amp;quot;查询指定城市的当前天气信息。包括温度、天气状况、空气质量、风力等详细信息。&amp;quot;
+    )
+    public String getWeather(
+        @ToolParam(
+            name = &amp;quot;city&amp;quot;,
+            description = &amp;quot;城市名称（支持中英文，如'北京'、'Shanghai'）&amp;quot;,
+            required = true
+        ) String city,
+        @ToolParam(
+            name = &amp;quot;unit&amp;quot;,
+            description = &amp;quot;温度单位：celsius（摄氏度）或 fahrenheit（华氏度）&amp;quot;,
+            required = false
+        ) String unit
+    ) {
+        validateNotEmpty(city, &amp;quot;city&amp;quot;);&lt;/p&gt;
+&lt;p&gt;WeatherInfo weather = WEATHER_DB.get(city);
+        if (weather == null) {
+            // 尝试模糊匹配
+            return findSimilarCity(city);
+        }&lt;/p&gt;
+&lt;p&gt;return formatWeatherResponse(weather, unit);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 查询天气预报
+     *
+     * @param city 城市名称
+     * @param days 预报天数（1-7），默认 3
+     * @return 天气预报字符串
+     */
+    @Tool(
+        name = &amp;quot;get_forecast&amp;quot;,
+        description = &amp;quot;查询指定城市未来几天的天气预报&amp;quot;
+    )
+    public String getForecast(
+        @ToolParam(name = &amp;quot;city&amp;quot;, description = &amp;quot;城市名称&amp;quot;, required = true) String city,
+        @ToolParam(
+            name = &amp;quot;days&amp;quot;,
+            description = &amp;quot;预报天数（1-7天）&amp;quot;,
+            required = false
+        ) Integer days
+    ) {
+        validateNotEmpty(city, &amp;quot;city&amp;quot;);&lt;/p&gt;
+&lt;p&gt;int forecastDays = (days != null &amp;amp;&amp;amp; days &amp;gt;= 1 &amp;amp;&amp;amp; days &amp;lt;= 7) ? days : 3;&lt;/p&gt;
+&lt;p&gt;WeatherInfo baseWeather = WEATHER_DB.get(city);
+        if (baseWeather == null) {
+            return findSimilarCity(city);
+        }&lt;/p&gt;
+&lt;p&gt;StringBuilder result = new StringBuilder();
+        result.append(String.format(&amp;quot;📅 %s 天气预报（未来 %d 天）：\n\n&amp;quot;, city, forecastDays));&lt;/p&gt;
+&lt;p&gt;LocalDateTime now = LocalDateTime.now();
+        String[] conditions = {&amp;quot;晴&amp;quot;, &amp;quot;多云&amp;quot;, &amp;quot;阴&amp;quot;, &amp;quot;小雨&amp;quot;, &amp;quot;雷阵雨&amp;quot;};&lt;/p&gt;
+&lt;p&gt;for (int i = 0; i &amp;lt; forecastDays; i++) {
+            LocalDateTime date = now.plusDays(i);
+            String dateStr = date.format(DateTimeFormatter.ofPattern(&amp;quot;MM月dd日 E&amp;quot;));&lt;/p&gt;
+&lt;p&gt;// 模拟数据波动
+            int tempVariation = RANDOM.nextInt(6) - 3;
+            double temp = baseWeather.temperature + tempVariation;
+            String condition = conditions[RANDOM.nextInt(conditions.length)];&lt;/p&gt;
+&lt;p&gt;result.append(String.format(&amp;quot;【%s】%s 🌡️ %.0f~%.0f°C 💧 %d%%\n&amp;quot;,
+                dateStr,
+                condition,
+                temp - 3,
+                temp + 3,
+                baseWeather.humidity + RANDOM.nextInt(20) - 10));
+        }&lt;/p&gt;
+&lt;p&gt;return result.toString();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 查询空气质量
+     *
+     * @param city 城市名称
+     * @return 空气质量信息
+     */
+    @Tool(
+        name = &amp;quot;get_air_quality&amp;quot;,
+        description = &amp;quot;查询指定城市的空气质量指数（AQI）和详细空气质量报告&amp;quot;
+    )
+    public String getAirQuality(
+        @ToolParam(name = &amp;quot;city&amp;quot;, description = &amp;quot;城市名称&amp;quot;, required = true) String city
+    ) {
+        validateNotEmpty(city, &amp;quot;city&amp;quot;);&lt;/p&gt;
+&lt;p&gt;WeatherInfo weather = WEATHER_DB.get(city);
+        if (weather == null) {
+            return findSimilarCity(city);
+        }&lt;/p&gt;
+&lt;p&gt;StringBuilder result = new StringBuilder();
+        result.append(String.format(&amp;quot;🌫️ %s 空气质量报告\n\n&amp;quot;, city));
+        result.append(String.format(&amp;quot;• 空气质量等级：%s\n&amp;quot;, weather.airQuality));
+        result.append(String.format(&amp;quot;• 湿度：%d%%\n&amp;quot;, weather.humidity));
+        result.append(String.format(&amp;quot;• 风力：%s\n&amp;quot;, weather.wind));&lt;/p&gt;
+&lt;p&gt;// AQI 等级说明
+        String aqiDesc = switch (weather.airQuality) {
+            case &amp;quot;优&amp;quot; -&amp;gt; &amp;quot;空气质量令人满意，基本无空气污染&amp;quot;;
+            case &amp;quot;良&amp;quot; -&amp;gt; &amp;quot;空气质量可接受，某些污染物可能对极少数敏感人群有影响&amp;quot;;
+            case &amp;quot;中&amp;quot; -&amp;gt; &amp;quot;易感人群症状有轻度加剧，健康人群出现刺激症状&amp;quot;;
+            case &amp;quot;差&amp;quot; -&amp;gt; &amp;quot;进一步加剧，易感人群症状可能加剧，对心脏、呼吸系统有影响&amp;quot;;
+            default -&amp;gt; &amp;quot;数据获取中&amp;quot;;
+        };
+        result.append(String.format(&amp;quot;• 说明：%s\n&amp;quot;, aqiDesc));&lt;/p&gt;
+&lt;p&gt;return result.toString();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取穿衣建议
+     *
+     * &amp;lt;p&amp;gt;根据天气情况给出穿衣建议
+     *
+     * @param city 城市名称
+     * @param unit 温度单位（可选）
+     * @return 穿衣建议
+     */
+    @Tool(
+        name = &amp;quot;get_dressing_advice&amp;quot;,
+        description = &amp;quot;根据当前天气情况给出穿衣建议，帮助用户合理搭配衣物&amp;quot;
+    )
+    public String getDressingAdvice(
+        @ToolParam(name = &amp;quot;city&amp;quot;, description = &amp;quot;城市名称&amp;quot;, required = true) String city,
+        @ToolParam(
+            name = &amp;quot;unit&amp;quot;,
+            description = &amp;quot;温度单位（可选，默认摄氏度）&amp;quot;,
+            required = false
+        ) String unit
+    ) {
+        validateNotEmpty(city, &amp;quot;city&amp;quot;);&lt;/p&gt;
+&lt;p&gt;WeatherInfo weather = WEATHER_DB.get(city);
+        if (weather == null) {
+            return findSimilarCity(city);
+        }&lt;/p&gt;
+&lt;p&gt;double temp = weather.temperature;
+        if (&amp;quot;fahrenheit&amp;quot;.equalsIgnoreCase(unit)) {
+            temp = temp * 9 / 5 + 32;
+        }&lt;/p&gt;
+&lt;p&gt;StringBuilder advice = new StringBuilder();
+        advice.append(String.format(&amp;quot;👔 %s 穿衣建议（当前 %.0f°C）：\n\n&amp;quot;, city, temp));&lt;/p&gt;
+&lt;p&gt;// 根据温度给出建议
+        if (temp &amp;lt; 0) {
+            advice.append(&amp;quot;🥶 极寒天气，建议穿：\n&amp;quot;);
+            advice.append(&amp;quot;   • 羽绒服/厚棉服\n&amp;quot;);
+            advice.append(&amp;quot;   • 保暖内衣、毛衣\n&amp;quot;);
+            advice.append(&amp;quot;   • 棉裤、羽绒服内胆\n&amp;quot;);
+            advice.append(&amp;quot;   • 围巾、手套、帽子、棉鞋\n&amp;quot;);
+        } else if (temp &amp;lt; 10) {
+            advice.append(&amp;quot;❄️ 寒冷天气，建议穿：\n&amp;quot;);
+            advice.append(&amp;quot;   • 大衣或薄羽绒服\n&amp;quot;);
+            advice.append(&amp;quot;   • 毛衣、保暖内衣\n&amp;quot;);
+            advice.append(&amp;quot;   • 牛仔裤、保暖裤\n&amp;quot;);
+            advice.append(&amp;quot;   • 围巾、手套\n&amp;quot;);
+        } else if (temp &amp;lt; 15) {
+            advice.append(&amp;quot;🌤️ 较冷天气，建议穿：\n&amp;quot;);
+            advice.append(&amp;quot;   • 夹克、薄外套\n&amp;quot;);
+            advice.append(&amp;quot;   • 薄毛衣、长袖\n&amp;quot;);
+            advice.append(&amp;quot;   • 牛仔裤、休闲裤\n&amp;quot;);
+            advice.append(&amp;quot;   • 可带围巾\n&amp;quot;);
+        } else if (temp &amp;lt; 20) {
+            advice.append(&amp;quot;🍃 凉爽天气，建议穿：\n&amp;quot;);
+            advice.append(&amp;quot;   • 长袖衬衫、薄外套\n&amp;quot;);
+            advice.append(&amp;quot;   • 牛仔裤、休闲裤\n&amp;quot;);
+            advice.append(&amp;quot;   • 舒适的鞋子\n&amp;quot;);
+        } else if (temp &amp;lt; 25) {
+            advice.append(&amp;quot;☀️ 温暖天气，建议穿：\n&amp;quot;);
+            advice.append(&amp;quot;   • T恤、短袖\n&amp;quot;);
+            advice.append(&amp;quot;   • 薄裤子、裙子\n&amp;quot;);
+            advice.append(&amp;quot;   • 运动鞋\n&amp;quot;);
+            advice.append(&amp;quot;   • 注意防晒\n&amp;quot;);
+        } else if (temp &amp;lt; 30) {
+            advice.append(&amp;quot;🌡️ 较热天气，建议穿：\n&amp;quot;);
+            advice.append(&amp;quot;   • 短袖、短裤\n&amp;quot;);
+            advice.append(&amp;quot;   • 轻薄衣物\n&amp;quot;);
+            advice.append(&amp;quot;   • 凉鞋、拖鞋\n&amp;quot;);
+            advice.append(&amp;quot;   • 注意防暑降温\n&amp;quot;);
+        } else {
+            advice.append(&amp;quot;🔥 炎热天气，建议穿：\n&amp;quot;);
+            advice.append(&amp;quot;   • 超薄短袖、短裤\n&amp;quot;);
+            advice.append(&amp;quot;   • 透气性好的衣物\n&amp;quot;);
+            advice.append(&amp;quot;   • 凉鞋、人字拖\n&amp;quot;);
+            advice.append(&amp;quot;   • 强烈建议：多喝水，避免长时间户外活动\n&amp;quot;);
+        }&lt;/p&gt;
+&lt;p&gt;// 根据天气状况补充建议
+        if (weather.condition.contains(&amp;quot;雨&amp;quot;)) {
+            advice.append(&amp;quot;\n🌧️ 今日有雨，记得带伞！\n&amp;quot;);
+        }
+        if (weather.condition.contains(&amp;quot;雪&amp;quot;)) {
+            advice.append(&amp;quot;\n❄️ 有雪，注意防滑！\n&amp;quot;);
+        }
+        if (weather.wind.contains(&amp;quot;大风&amp;quot;)) {
+            advice.append(&amp;quot;\n💨 风力较大，注意防风！\n&amp;quot;);
+        }&lt;/p&gt;
+&lt;p&gt;return advice.toString();
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 辅助方法 ====================&lt;/p&gt;
+&lt;p&gt;private void validateNotEmpty(String value, String paramName) {
+        if (value == null || value.trim().isEmpty()) {
+            throw new IllegalArgumentException(&amp;quot;参数 '&amp;quot; + paramName + &amp;quot;' 不能为空&amp;quot;);
+        }
+    }&lt;/p&gt;
+&lt;p&gt;private String formatWeatherResponse(WeatherInfo weather, String unit) {
+        StringBuilder result = new StringBuilder();
+        result.append(String.format(&amp;quot;🌤️ %s 当前天气\n\n&amp;quot;, weather.city));
+        result.append(String.format(&amp;quot;• 温度：%.0f°C&amp;quot;, weather.temperature));
+        if (&amp;quot;fahrenheit&amp;quot;.equalsIgnoreCase(unit)) {
+            double fahrenheit = weather.temperature * 9 / 5 + 32;
+            result.append(String.format(&amp;quot;（%.0f°F）&amp;quot;, fahrenheit));
+        }
+        result.append(&amp;quot;\n&amp;quot;);
+        result.append(String.format(&amp;quot;• 天气：%s\n&amp;quot;, weather.condition));
+        result.append(String.format(&amp;quot;• 空气质量：%s\n&amp;quot;, weather.airQuality));
+        result.append(String.format(&amp;quot;• 湿度：%d%%\n&amp;quot;, weather.humidity));
+        result.append(String.format(&amp;quot;• 风力：%s\n&amp;quot;, weather.wind));&lt;/p&gt;
+&lt;p&gt;// 更新时间戳
+        String updateTime = LocalDateTime.now().format(
+            DateTimeFormatter.ofPattern(&amp;quot;yyyy-MM-dd HH:mm:ss&amp;quot;));
+        result.append(String.format(&amp;quot;\n🕐 更新时间：%s&amp;quot;, updateTime));&lt;/p&gt;
+&lt;p&gt;return result.toString();
+    }&lt;/p&gt;
+&lt;p&gt;private String findSimilarCity(String city) {
+        // 尝试模糊匹配
+        for (Map.Entry&amp;lt;String, WeatherInfo&amp;gt; entry : WEATHER_DB.entrySet()) {
+            if (entry.getKey().toLowerCase().contains(city.toLowerCase()) ||
+                city.toLowerCase().contains(entry.getKey().toLowerCase())) {
+                return formatWeatherResponse(entry.getValue(), null);
+            }
+        }
+        return String.format(&amp;quot;😢 抱歉，暂不支持查询 '%s' 的天气。\n支持的热门城市：北京、上海、广州、深圳、杭州、成都、武汉、西安、南京、重庆、东京、纽约、伦敦、巴黎、新加坡&amp;quot;, city);
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 内部类：天气信息 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 天气信息数据结构
+     */
+    private static class WeatherInfo {
+        final String city;
+        final double temperature;
+        final String condition;
+        final String airQuality;
+        final String wind;
+        final int humidity;&lt;/p&gt;
+&lt;p&gt;WeatherInfo(String city, double temperature, String condition,
+                    String airQuality, String wind, int humidity) {
+            this.city = city;
+            this.temperature = temperature;
+            this.condition = condition;
+            this.airQuality = airQuality;
+            this.wind = wind;
+            this.humidity = humidity;
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;5.5.5 日期时间工具（DateTimeTool.java）&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter05.tools;
+&lt;p&gt;import io.agentscope.core.tool.Tool;
+import io.agentscope.core.tool.ToolParam;
+import java.time.*;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.Locale;&lt;/p&gt;
+&lt;p&gt;/**
+ * 日期时间工具集
+ *
+ * &amp;lt;p&amp;gt;提供日期时间查询、转换、计算等功能。
+ * 支持多种时区和日期格式。
+ *
+ * @author AgentScope Tutorial
+ * @since 1.0
+ */
+public class DateTimeTool {&lt;/p&gt;
+&lt;p&gt;// ==================== 时间查询 ====================&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取当前日期时间
+     *
+     * @param timezone 时区（如 &amp;quot;Asia/Shanghai&amp;quot;, &amp;quot;America/New_York&amp;quot;, &amp;quot;Europe/London&amp;quot;）
+     * @param format 日期格式（如 &amp;quot;yyyy-MM-dd HH:mm:ss&amp;quot;）
+     * @return 格式化后的日期时间字符串
+     */
+    @Tool(
+        name = &amp;quot;get_current_datetime&amp;quot;,
+        description = &amp;quot;获取指定时区的当前日期时间，支持自定义格式输出&amp;quot;
+    )
+    public String getCurrentDateTime(
+        @ToolParam(
+            name = &amp;quot;timezone&amp;quot;,
+            description = &amp;quot;时区标识（如 'Asia/Shanghai', 'America/New_York', 'Europe/London'）&amp;quot;,
+            required = false
+        ) String timezone,
+        @ToolParam(
+            name = &amp;quot;format&amp;quot;,
+            description = &amp;quot;输出格式（如 'yyyy-MM-dd HH:mm:ss'），省略则使用默认格式&amp;quot;,
+            required = false
+        ) String format
+    ) {
+        ZoneId zoneId = ZoneId.systemDefault();
+        if (timezone != null &amp;amp;&amp;amp; !timezone.isBlank()) {
+            try {
+                zoneId = ZoneId.of(timezone);
+            } catch (Exception e) {
+                return String.format(&amp;quot;Error: 无效的时区 '%s'。请使用标准的 IANA 时区标识，如 'Asia/Shanghai'。&amp;quot;, timezone);
+            }
+        }&lt;/p&gt;
+&lt;p&gt;LocalDateTime now = LocalDateTime.now(zoneId);
+        DateTimeFormatter formatter;
+        if (format != null &amp;amp;&amp;amp; !format.isBlank()) {
+            try {
+                formatter = DateTimeFormatter.ofPattern(format);
+            } catch (Exception e) {
+                return String.format(&amp;quot;Error: 无效的日期格式 '%s'。&amp;quot;, format);
+            }
+        } else {
+            formatter = DateTimeFormatter.ofPattern(&amp;quot;yyyy-MM-dd HH:mm:ss&amp;quot;);
+        }&lt;/p&gt;
+&lt;p&gt;return String.format(&amp;quot;📅 当前时间（%s）：%s&amp;quot;, zoneId.getId(), now.format(formatter));
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 计算日期差
+     *
+     * @param startDate 起始日期（格式：yyyy-MM-dd）
+     * @param endDate 结束日期（格式：yyyy-MM-dd）
+     * @param unit 计算单位（days/weeks/months/years）
+     * @return 日期差结果
+     */
+    @Tool(
+        name = &amp;quot;date_diff&amp;quot;,
+        description = &amp;quot;计算两个日期之间的差值，支持按天、周、月、年计算&amp;quot;
+    )
+    public String dateDiff(
+        @ToolParam(name = &amp;quot;start_date&amp;quot;, description = &amp;quot;起始日期（格式：yyyy-MM-dd）&amp;quot;, required = true) String startDate,
+        @ToolParam(name = &amp;quot;end_date&amp;quot;, description = &amp;quot;结束日期（格式：yyyy-MM-dd）&amp;quot;, required = true) String endDate,
+        @ToolParam(
+            name = &amp;quot;unit&amp;quot;,
+            description = &amp;quot;计算单位：days（天）/ weeks（周）/ months（月）/ years（年）&amp;quot;,
+            required = false
+        ) String unit
+    ) {
+        try {
+            LocalDate start = LocalDate.parse(startDate);
+            LocalDate end = LocalDate.parse(endDate);&lt;/p&gt;
+&lt;p&gt;long days = ChronoUnit.DAYS.between(start, end);&lt;/p&gt;
+&lt;p&gt;String result = String.format(&amp;quot;📊 日期差计算\n&amp;quot;);
+            result += String.format(&amp;quot;• 起始日期：%s\n&amp;quot;, startDate);
+            result += String.format(&amp;quot;• 结束日期：%s\n&amp;quot;, endDate);
+            result += String.format(&amp;quot;• 相差天数：%d 天\n&amp;quot;, days);&lt;/p&gt;
+&lt;p&gt;if (unit == null || unit.isBlank() || &amp;quot;days&amp;quot;.equalsIgnoreCase(unit)) {
+                return result;
+            }&lt;/p&gt;
+&lt;p&gt;switch (unit.toLowerCase()) {
+                case &amp;quot;weeks&amp;quot; -&amp;gt; result += String.format(&amp;quot;• 相差周数：%.1f 周\n&amp;quot;, days / 7.0);
+                case &amp;quot;months&amp;quot; -&amp;gt; result += String.format(&amp;quot;• 相差月数：%.1f 月\n&amp;quot;, days / 30.0);
+                case &amp;quot;years&amp;quot; -&amp;gt; result += String.format(&amp;quot;• 相差年数：%.2f 年\n&amp;quot;, days / 365.0);
+                default -&amp;gt; result += &amp;quot;Error: 无效的单位 '&amp;quot; + unit + &amp;quot;'。请使用 days/weeks/months/years。&amp;quot;;
+            }&lt;/p&gt;
+&lt;p&gt;return result;
+        } catch (Exception e) {
+            return String.format(&amp;quot;Error: 日期格式错误，请使用 yyyy-MM-dd 格式，如 '2024-05-20'。详细：%s&amp;quot;, e.getMessage());
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 日期计算
+     *
+     * @param date 基准日期（格式：yyyy-MM-dd）
+     * @param amount 加减数量（正数加，负数减）
+     * @param unit 单位（days/weeks/months/years）
+     * @return 计算后的日期
+     */
+    @Tool(
+        name = &amp;quot;date_add&amp;quot;,
+        description = &amp;quot;对指定日期进行加/减运算，得到新的日期&amp;quot;
+    )
+    public String dateAdd(
+        @ToolParam(name = &amp;quot;date&amp;quot;, description = &amp;quot;基准日期（格式：yyyy-MM-dd）&amp;quot;, required = true) String date,
+        @ToolParam(name = &amp;quot;amount&amp;quot;, description = &amp;quot;加/减的数量（正数加，负数减）&amp;quot;, required = true) Integer amount,
+        @ToolParam(name = &amp;quot;unit&amp;quot;, description = &amp;quot;单位：days / weeks / months / years&amp;quot;, required = true) String unit
+    ) {
+        try {
+            LocalDate baseDate = LocalDate.parse(date);
+            LocalDate resultDate;&lt;/p&gt;
+&lt;p&gt;switch (unit.toLowerCase()) {
+                case &amp;quot;days&amp;quot; -&amp;gt; resultDate = baseDate.plusDays(amount);
+                case &amp;quot;weeks&amp;quot; -&amp;gt; resultDate = baseDate.plusWeeks(amount);
+                case &amp;quot;months&amp;quot; -&amp;gt; resultDate = baseDate.plusMonths(amount);
+                case &amp;quot;years&amp;quot; -&amp;gt; resultDate = baseDate.plusYears(amount);
+                default -&amp;gt; {
+                    return String.format(&amp;quot;Error: 无效的单位 '%s'。请使用 days/weeks/months/years。&amp;quot;, unit);
+                }
+            }&lt;/p&gt;
+&lt;p&gt;return String.format(&amp;quot;📅 日期计算\n• 基准日期：%s\n• 运算：%s %s\n• 结果：%s&amp;quot;,
+                date,
+                (amount &amp;gt;= 0 ? &amp;quot;+&amp;quot; : &amp;quot;&amp;quot;) + amount,
+                unit,
+                resultDate.format(DateTimeFormatter.ofPattern(&amp;quot;yyyy-MM-dd&amp;quot;)));
+        } catch (Exception e) {
+            return String.format(&amp;quot;Error: %s&amp;quot;, e.getMessage());
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取星期几
+     *
+     * @param date 日期（格式：yyyy-MM-dd）
+     * @return 星期信息
+     */
+    @Tool(
+        name = &amp;quot;get_weekday&amp;quot;,
+        description = &amp;quot;查询指定日期是星期几&amp;quot;
+    )
+    public String getWeekday(
+        @ToolParam(name = &amp;quot;date&amp;quot;, description = &amp;quot;日期（格式：yyyy-MM-dd）&amp;quot;, required = true) String date
+    ) {
+        try {
+            LocalDate localDate = LocalDate.parse(date);
+            DayOfWeek dayOfWeek = localDate.getDayOfWeek();
+            String weekday = dayOfWeek.getDisplayName(TextStyle.FULL, Locale.CHINESE);
+            int dayNumber = dayOfWeek.getValue(); // 1=Monday, 7=Sunday&lt;/p&gt;
+&lt;p&gt;StringBuilder result = new StringBuilder();
+            result.append(String.format(&amp;quot;📅 %s 是 %s\n&amp;quot;, date, weekday));&lt;/p&gt;
+&lt;p&gt;// 判断是否是周末
+            if (dayNumber == 6 || dayNumber == 7) {
+                result.append(&amp;quot;🎉 今天是周末！\n&amp;quot;);
+            } else if (dayNumber == 1) {
+                result.append(&amp;quot;📌 今天是周一（周一综合征？保持好心情！）\n&amp;quot;);
+            }&lt;/p&gt;
+&lt;p&gt;return result.toString();
+        } catch (Exception e) {
+            return String.format(&amp;quot;Error: 日期格式错误，请使用 yyyy-MM-dd 格式。%s&amp;quot;, e.getMessage());
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 格式化时间戳
+     *
+     * @param timestamp Unix 时间戳（秒或毫秒）
+     * @param format 输出格式
+     * @param timezone 时区
+     * @return 格式化后的时间
+     */
+    @Tool(
+        name = &amp;quot;format_timestamp&amp;quot;,
+        description = &amp;quot;将 Unix 时间戳转换为可读的日期时间格式&amp;quot;
+    )
+    public String formatTimestamp(
+        @ToolParam(name = &amp;quot;timestamp&amp;quot;, description = &amp;quot;Unix 时间戳（秒或毫秒）&amp;quot;, required = true) Long timestamp,
+        @ToolParam(
+            name = &amp;quot;format&amp;quot;,
+            description = &amp;quot;输出格式（如 'yyyy-MM-dd HH:mm:ss'）&amp;quot;,
+            required = false
+        ) String format,
+        @ToolParam(
+            name = &amp;quot;timezone&amp;quot;,
+            description = &amp;quot;时区&amp;quot;,
+            required = false
+        ) String timezone
+    ) {
+        try {
+            // 判断是秒还是毫秒
+            long millis = timestamp &amp;gt; 1_000_000_000_000L ? timestamp : timestamp * 1000;&lt;/p&gt;
+&lt;p&gt;ZoneId zoneId = ZoneId.systemDefault();
+            if (timezone != null &amp;amp;&amp;amp; !timezone.isBlank()) {
+                zoneId = ZoneId.of(timezone);
+            }&lt;/p&gt;
+&lt;p&gt;Instant instant = Instant.ofEpochMilli(millis);
+            LocalDateTime dateTime = LocalDateTime.ofInstant(instant, zoneId);&lt;/p&gt;
+&lt;p&gt;DateTimeFormatter formatter = format != null &amp;amp;&amp;amp; !format.isBlank()
+                ? DateTimeFormatter.ofPattern(format)
+                : DateTimeFormatter.ofPattern(&amp;quot;yyyy-MM-dd HH:mm:ss&amp;quot;);&lt;/p&gt;
+&lt;p&gt;return String.format(&amp;quot;⏰ 时间戳 %d 对应时间：%s&amp;quot;, timestamp, dateTime.format(formatter));
+        } catch (Exception e) {
+            return String.format(&amp;quot;Error: 无效的时间戳或格式错误。%s&amp;quot;, e.getMessage());
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取时区列表（常用）
+     *
+     * @return 常用时区列表
+     */
+    @Tool(
+        name = &amp;quot;list_timezones&amp;quot;,
+        description = &amp;quot;返回常用的时区列表供选择&amp;quot;
+    )
+    public String listTimezones() {
+        String[] timezones = {
+            &amp;quot;Asia/Shanghai&amp;quot;,    // 北京时间
+            &amp;quot;Asia/Tokyo&amp;quot;,       // 东京时间
+            &amp;quot;Asia/Hong_Kong&amp;quot;,   // 香港时间
+            &amp;quot;Asia/Singapore&amp;quot;,   // 新加坡时间
+            &amp;quot;Asia/Seoul&amp;quot;,       // 首尔时间
+            &amp;quot;America/New_York&amp;quot;,  // 纽约时间（东部）
+            &amp;quot;America/Los_Angeles&amp;quot;, // 洛杉矶时间（太平洋）
+            &amp;quot;America/Chicago&amp;quot;,   // 芝加哥时间（中部）
+            &amp;quot;Europe/London&amp;quot;,    // 伦敦时间
+            &amp;quot;Europe/Paris&amp;quot;,     // 巴黎时间
+            &amp;quot;Europe/Berlin&amp;quot;,    // 柏林时间
+            &amp;quot;Australia/Sydney&amp;quot;, // 悉尼时间
+            &amp;quot;Pacific/Tokyo&amp;quot;     // 太平洋时间
+        };&lt;/p&gt;
+&lt;p&gt;StringBuilder result = new StringBuilder();
+        result.append(&amp;quot;🌍 常用时区列表：\n\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;ZoneId systemZone = ZoneId.systemDefault();
+        LocalDateTime now = LocalDateTime.now();&lt;/p&gt;
+&lt;p&gt;for (String tz : timezones) {
+            LocalDateTime tzTime = LocalDateTime.now(ZoneId.of(tz));
+            String timeStr = tzTime.format(DateTimeFormatter.ofPattern(&amp;quot;HH:mm&amp;quot;));
+            String diff = calculateOffset(now, tzTime);&lt;/p&gt;
+&lt;p&gt;String marker = tz.equals(systemZone.getId()) ? &amp;quot; ⭐（系统时区）&amp;quot; : &amp;quot;&amp;quot;;
+            result.append(String.format(&amp;quot;• %-20s %s %s%s\n&amp;quot;, tz, timeStr, diff, marker));
+        }&lt;/p&gt;
+&lt;p&gt;return result.toString();
+    }&lt;/p&gt;
+&lt;p&gt;private String calculateOffset(LocalDateTime local, LocalDateTime target) {
+        long diffMinutes = java.time.Duration.between(local, target).toMinutes();
+        if (diffMinutes == 0) return &amp;quot;(同区)&amp;quot;;
+        return String.format(&amp;quot;(UTC%+d)&amp;quot;, diffMinutes / 60);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;5.5.6 工具注册服务（ToolRegistrationService.java）&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter05.service;
+&lt;p&gt;import io.agentscope.core.tool.Toolkit;
+import io.agentscope.core.tool.ToolkitConfig;
+import io.agentscope.tutorial.chapter05.tools.CalculatorTool;
+import io.agentscope.tutorial.chapter05.tools.DateTimeTool;
+import io.agentscope.tutorial.chapter05.tools.WeatherTool;
+import org.springframework.stereotype.Service;&lt;/p&gt;
+&lt;p&gt;import jakarta.annotation.PostConstruct;
+import java.util.List;
+import java.util.Map;&lt;/p&gt;
+&lt;p&gt;/**
+ * 工具注册服务
+ *
+ * &amp;lt;p&amp;gt;负责初始化和管理 AgentScope 工具系统。
+ * 在应用启动时自动注册所有工具，并配置工具分组。
+ *
+ * @author AgentScope Tutorial
+ * @since 1.0
+ */
+@Service
+public class ToolRegistrationService {&lt;/p&gt;
+&lt;p&gt;private final Toolkit toolkit;&lt;/p&gt;
+&lt;p&gt;public ToolRegistrationService() {
+        // 创建 Toolkit，配置为顺序执行
+        ToolkitConfig config = ToolkitConfig.builder()
+            .parallel(false)
+            .allowToolDeletion(true)
+            .build();&lt;/p&gt;
+&lt;p&gt;this.toolkit = new Toolkit(config);&lt;/p&gt;
+&lt;p&gt;// 初始化注册
+        initializeTools();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取工具包实例
+     */
+    public Toolkit getToolkit() {
+        return toolkit;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 初始化所有工具
+     */
+    private void initializeTools() {
+        System.out.println(&amp;quot;=== AgentScope 工具系统初始化 ===&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 1. 创建工具分组
+        createToolGroups();&lt;/p&gt;
+&lt;p&gt;// 2. 注册内置工具
+        registerBuiltInTools();&lt;/p&gt;
+&lt;p&gt;// 3. 注册自定义工具
+        registerCustomTools();&lt;/p&gt;
+&lt;p&gt;// 4. 注册元工具（使 Agent 可以动态管理工具分组）
+        toolkit.registerMetaTool();&lt;/p&gt;
+&lt;p&gt;// 5. 打印注册摘要
+        printRegistrationSummary();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建工具分组
+     */
+    private void createToolGroups() {
+        // 默认激活的分组
+        toolkit.createToolGroup(&amp;quot;datetime&amp;quot;, &amp;quot;日期时间工具&amp;quot;, true);
+        toolkit.createToolGroup(&amp;quot;calculator&amp;quot;, &amp;quot;计算器工具&amp;quot;, true);&lt;/p&gt;
+&lt;p&gt;// 默认不激活的分组（Agent 需要时可动态激活）
+        toolkit.createToolGroup(&amp;quot;weather&amp;quot;, &amp;quot;天气查询工具&amp;quot;, false);
+        toolkit.createToolGroup(&amp;quot;analysis&amp;quot;, &amp;quot;数据分析工具&amp;quot;, false);&lt;/p&gt;
+&lt;p&gt;System.out.println(&amp;quot;工具分组创建完成&amp;quot;);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 注册内置工具
+     */
+    private void registerBuiltInTools() {
+        // 注册文件读取工具（限制工作目录）
+        // ReadFileTool readFileTool = new ReadFileTool(&amp;quot;/data/workspace&amp;quot;);
+        // toolkit.registerAgentTool(readFileTool);
+        System.out.println(&amp;quot;内置工具注册完成&amp;quot;);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 注册自定义工具
+     */
+    private void registerCustomTools() {
+        // 注册计算器工具到 calculator 分组
+        toolkit.registration()
+            .tool(new CalculatorTool())
+            .group(&amp;quot;calculator&amp;quot;)
+            .apply();&lt;/p&gt;
+&lt;p&gt;// 注册日期时间工具到 datetime 分组
+        toolkit.registration()
+            .tool(new DateTimeTool())
+            .group(&amp;quot;datetime&amp;quot;)
+            .apply();&lt;/p&gt;
+&lt;p&gt;// 注册天气工具到 weather 分组
+        toolkit.registration()
+            .tool(new WeatherTool())
+            .group(&amp;quot;weather&amp;quot;)
+            .apply();&lt;/p&gt;
+&lt;p&gt;System.out.println(&amp;quot;自定义工具注册完成&amp;quot;);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 激活工具分组
+     *
+     * @param groupNames 分组名称列表
+     */
+    public void activateGroups(List&amp;lt;String&amp;gt; groupNames) {
+        toolkit.updateToolGroups(groupNames, true);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 停用工具分组
+     *
+     * @param groupNames 分组名称列表
+     */
+    public void deactivateGroups(List&amp;lt;String&amp;gt; groupNames) {
+        toolkit.updateToolGroups(groupNames, false);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取当前活跃的分组
+     */
+    public List&amp;lt;String&amp;gt; getActiveGroups() {
+        return toolkit.getActiveGroups();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取已注册的工具列表
+     */
+    public List&amp;lt;String&amp;gt; getRegisteredTools() {
+        return toolkit.getToolNames().stream().toList();
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 打印注册摘要
+     */
+    private void printRegistrationSummary() {
+        System.out.println(&amp;quot;\n=== 工具注册摘要 ===&amp;quot;);
+        System.out.println(&amp;quot;总工具数: &amp;quot; + toolkit.getToolNames().size());
+        System.out.println(&amp;quot;活跃分组: &amp;quot; + toolkit.getActiveGroups());
+        System.out.println(&amp;quot;已注册工具: &amp;quot; + toolkit.getToolNames());
+        System.out.println(&amp;quot;元工具: reset_equipped_tools（已启用）&amp;quot;);
+        System.out.println(&amp;quot;======================\n&amp;quot;);
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 演示工具调用
+     */
+    public String demoToolCalling() {
+        StringBuilder result = new StringBuilder();
+        result.append(&amp;quot;=== 工具调用演示 ===\n\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 演示计算器工具
+        result.append(&amp;quot;【计算器工具演示】\n&amp;quot;);
+        CalculatorTool calculator = new CalculatorTool();
+        result.append(&amp;quot;• add(10, 5) = &amp;quot;).append(calculator.add(10.0, 5.0)).append(&amp;quot;\n&amp;quot;);
+        result.append(&amp;quot;• factorial(5) = &amp;quot;).append(calculator.factorial(5)).append(&amp;quot;\n&amp;quot;);
+        result.append(&amp;quot;• is_prime(17) = &amp;quot;).append(calculator.isPrime(17)).append(&amp;quot;\n\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 演示天气工具
+        result.append(&amp;quot;【天气工具演示】\n&amp;quot;);
+        WeatherTool weather = new WeatherTool();
+        result.append(weather.getWeather(&amp;quot;北京&amp;quot;, null)).append(&amp;quot;\n\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;// 演示日期时间工具
+        result.append(&amp;quot;【日期时间工具演示】\n&amp;quot;);
+        DateTimeTool dateTime = new DateTimeTool();
+        result.append(dateTime.getCurrentDateTime(&amp;quot;Asia/Shanghai&amp;quot;, null)).append(&amp;quot;\n&amp;quot;);
+        result.append(dateTime.getWeekday(&amp;quot;2024-05-20&amp;quot;)).append(&amp;quot;\n&amp;quot;);&lt;/p&gt;
+&lt;p&gt;return result.toString();
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;5.5.7 Spring Boot 配置类（AgentConfig.java）&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter05.config;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.formatter.dashscope.DashScopeChatFormatter;
+import io.agentscope.core.memory.InMemoryMemory;
+import io.agentscope.core.model.DashScopeChatModel;
+import io.agentscope.core.tool.Toolkit;
+import io.agentscope.tutorial.chapter05.service.ToolRegistrationService;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;&lt;/p&gt;
+&lt;p&gt;/**
+ * AgentScope 配置类
+ *
+ * &amp;lt;p&amp;gt;配置 ReActAgent 实例，集成工具系统和模型客户端。
+ *
+ * @author AgentScope Tutorial
+ * @since 1.0
+ */
+@Configuration
+public class AgentConfig {&lt;/p&gt;
+&lt;p&gt;@Value(&amp;quot;${agentscope.api.key:demo-key}&amp;quot;)
+    private String apiKey;&lt;/p&gt;
+&lt;p&gt;@Value(&amp;quot;${agentscope.model.name:qwen-max}&amp;quot;)
+    private String modelName;&lt;/p&gt;
+&lt;p&gt;/**
+     * 创建 ReActAgent 实例
+     */
+    @Bean
+    public ReActAgent reactAgent(ToolRegistrationService toolService) {
+        // 获取已配置的 Toolkit
+        Toolkit toolkit = toolService.getToolkit();&lt;/p&gt;
+&lt;p&gt;// 构建 Agent
+        return ReActAgent.builder()
+            .name(&amp;quot;TutorialAgent&amp;quot;)
+            .sysPrompt(
+                &amp;quot;你是一个智能助手，名为 TutorialAgent。\n&amp;quot; +
+                &amp;quot;你可以使用各种工具来回答问题和完成任务。\n&amp;quot; +
+                &amp;quot;可用工具包括：\n&amp;quot; +
+                &amp;quot;  • 计算器：数学运算、阶乘、质数判断等\n&amp;quot; +
+                &amp;quot;  • 天气查询：查询城市天气、预报、空气质量\n&amp;quot; +
+                &amp;quot;  • 日期时间：获取当前时间、日期计算、星期查询\n\n&amp;quot; +
+                &amp;quot;当用户需要使用工具时，请清楚地说明你正在使用什么工具。\n&amp;quot; +
+                &amp;quot;如果某个工具分组未激活，你可以要求用户激活它。&amp;quot;
+            )
+            .model(
+                DashScopeChatModel.builder()
+                    .apiKey(apiKey)
+                    .modelName(modelName)
+                    .stream(true)
+                    .enableThinking(false)
+                    .formatter(new DashScopeChatFormatter())
+                    .build()
+            )
+            .toolkit(toolkit)
+            .memory(new InMemoryMemory())
+            .enableMetaTool(true)  // 启用元工具，允许 Agent 动态管理工具分组
+            .build();
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;5.5.8 REST API 控制器（AgentController.java）&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter05.controller;
+&lt;p&gt;import io.agentscope.core.ReActAgent;
+import io.agentscope.core.message.*;
+import io.agentscope.tutorial.chapter05.service.ToolRegistrationService;
+import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;&lt;/p&gt;
+&lt;p&gt;import java.util.List;
+import java.util.Map;&lt;/p&gt;
+&lt;p&gt;/**
+ * Agent HTTP 控制器
+ *
+ * &amp;lt;p&amp;gt;提供 RESTful API 接口，供前端或外部系统调用 Agent 服务。
+ *
+ * @author AgentScope Tutorial
+ * @since 1.0
+ */
+@RestController
+@RequestMapping(&amp;quot;/api/agent&amp;quot;)
+public class AgentController {&lt;/p&gt;
+&lt;p&gt;private final ReActAgent agent;
+    private final ToolRegistrationService toolService;&lt;/p&gt;
+&lt;p&gt;public AgentController(ReActAgent agent, ToolRegistrationService toolService) {
+        this.agent = agent;
+        this.toolService = toolService;
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 发送消息给 Agent
+     *
+     * @param request 包含消息内容的请求
+     * @return Agent 的回复
+     */
+    @PostMapping(&amp;quot;/chat&amp;quot;)
+    public Map&amp;lt;String, Object&amp;gt; chat(@RequestBody ChatRequest request) {
+        try {
+            Msg userMsg = Msg.of(Msg.Role.USER, request.getMessage());
+            List&amp;lt;Msg&amp;gt; history = agent.run(userMsg);&lt;/p&gt;
+&lt;p&gt;// 获取最后一条 Agent 回复
+            String reply = &amp;quot;&amp;quot;;
+            for (int i = history.size() - 1; i &amp;gt;= 0; i--) {
+                if (history.get(i).getRole() == Msg.Role.ASSISTANT) {
+                    reply = history.get(i).getContent().toString();
+                    break;
+                }
+            }&lt;/p&gt;
+&lt;p&gt;return Map.of(
+                &amp;quot;success&amp;quot;, true,
+                &amp;quot;reply&amp;quot;, reply,
+                &amp;quot;history&amp;quot;, history
+            );
+        } catch (Exception e) {
+            return Map.of(
+                &amp;quot;success&amp;quot;, false,
+                &amp;quot;error&amp;quot;, e.getMessage()
+            );
+        }
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 流式对话
+     *
+     * @param request 包含消息的请求
+     * @return SSE 流
+     */
+    @PostMapping(&amp;quot;/chat/stream&amp;quot;)
+    public Flux&amp;lt;String&amp;gt; chatStream(@RequestBody ChatRequest request) {
+        Msg userMsg = Msg.of(Msg.Role.USER, request.getMessage());&lt;/p&gt;
+&lt;p&gt;return Flux.create(sink -&amp;gt; {
+            try {
+                // 使用流式响应
+                Flux&amp;lt;Msg&amp;gt; stream = agent.runStream(userMsg);
+                stream.subscribe(
+                    msg -&amp;gt; {
+                        // 发送消息片段
+                        String content = msg.getContent() != null ? msg.getContent().toString() : &amp;quot;&amp;quot;;
+                        sink.next(&amp;quot;data: &amp;quot; + content + &amp;quot;\n\n&amp;quot;);
+                    },
+                    error -&amp;gt; {
+                        sink.error(error);
+                    },
+                    () -&amp;gt; {
+                        sink.complete();
+                    }
+                );
+            } catch (Exception e) {
+                sink.error(e);
+            }
+        });
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 获取工具列表
+     */
+    @GetMapping(&amp;quot;/tools&amp;quot;)
+    public Map&amp;lt;String, Object&amp;gt; getTools() {
+        return Map.of(
+            &amp;quot;tools&amp;quot;, toolService.getRegisteredTools(),
+            &amp;quot;activeGroups&amp;quot;, toolService.getActiveGroups()
+        );
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 激活工具分组
+     */
+    @PostMapping(&amp;quot;/tools/activate&amp;quot;)
+    public Map&amp;lt;String, Object&amp;gt; activateGroups(@RequestBody List&amp;lt;String&amp;gt; groups) {
+        toolService.activateGroups(groups);
+        return Map.of(
+            &amp;quot;success&amp;quot;, true,
+            &amp;quot;activeGroups&amp;quot;, toolService.getActiveGroups()
+        );
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 停用工具分组
+     */
+    @PostMapping(&amp;quot;/tools/deactivate&amp;quot;)
+    public Map&amp;lt;String, Object&amp;gt; deactivateGroups(@RequestBody List&amp;lt;String&amp;gt; groups) {
+        toolService.deactivateGroups(groups);
+        return Map.of(
+            &amp;quot;success&amp;quot;, true,
+            &amp;quot;activeGroups&amp;quot;, toolService.getActiveGroups()
+        );
+    }&lt;/p&gt;
+&lt;p&gt;/**
+     * 工具调用演示
+     */
+    @GetMapping(&amp;quot;/tools/demo&amp;quot;)
+    public Map&amp;lt;String, Object&amp;gt; demoTools() {
+        return Map.of(
+            &amp;quot;success&amp;quot;, true,
+            &amp;quot;result&amp;quot;, toolService.demoToolCalling()
+        );
+    }&lt;/p&gt;
+&lt;p&gt;// ==================== 请求/响应类 ====================&lt;/p&gt;
+&lt;p&gt;public static class ChatRequest {
+        private String message;&lt;/p&gt;
+&lt;p&gt;public String getMessage() {
+            return message;
+        }&lt;/p&gt;
+&lt;p&gt;public void setMessage(String message) {
+            this.message = message;
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;5.5.9 Spring Boot 应用入口（Chapter05Application.java）&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter05;
+&lt;p&gt;import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;&lt;/p&gt;
+&lt;p&gt;/**
+ * AgentScope 第五章教程 - 工具系统
+ *
+ * &amp;lt;p&amp;gt;本应用演示了 AgentScope Java 的完整工具系统，包括：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;内置工具的使用（文件操作等）&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;自定义工具开发（计算器、天气查询、日期时间）&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;工具分组管理&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;元工具（reset_equipped_tools）&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;Spring Boot 3 集成&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * &amp;lt;p&amp;gt;启动后可通过以下端点交互：
+ * &amp;lt;ul&amp;gt;
+ *   &amp;lt;li&amp;gt;POST /api/agent/chat - 发送消息给 Agent&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;GET /api/agent/tools - 获取工具列表&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;POST /api/agent/tools/activate - 激活工具分组&amp;lt;/li&amp;gt;
+ *   &amp;lt;li&amp;gt;GET /api/agent/tools/demo - 演示工具调用&amp;lt;/li&amp;gt;
+ * &amp;lt;/ul&amp;gt;
+ *
+ * @author AgentScope Tutorial
+ * @since 1.0
+ */
+@SpringBootApplication
+public class Chapter05Application {&lt;/p&gt;
+&lt;p&gt;public static void main(String[] args) {
+        SpringApplication.run(Chapter05Application.class, args);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;5.5.10 application.yml 配置&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;# AgentScope 第五章教程配置
+server:
+  port: 8080
+&lt;p&gt;spring:
+  application:
+    name: chapter05-tools&lt;/p&gt;
+&lt;h1&gt;AgentScope 配置&lt;/h1&gt;
+agentscope:
+  # 阿里云百炼 API Key（请替换为实际值）
+  api:
+    key: ${DASHSCOPE_API_KEY:your-api-key-here}
+&lt;p&gt;# 模型配置
+  model:
+    name: qwen-max&lt;/p&gt;
+&lt;h1&gt;日志配置&lt;/h1&gt;
+logging:
+  level:
+    io.agentscope: DEBUG
+    root: INFO
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;5.5.11 单元测试（CalculatorToolTest.java）&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;language-java&quot;&gt;package io.agentscope.tutorial.chapter05;
+&lt;p&gt;import io.agentscope.tutorial.chapter05.tools.CalculatorTool;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;&lt;/p&gt;
+&lt;p&gt;import static org.junit.jupiter.api.Assertions.*;&lt;/p&gt;
+&lt;p&gt;/**
+ * 计算器工具单元测试
+ */
+class CalculatorToolTest {&lt;/p&gt;
+&lt;p&gt;private CalculatorTool calculator;&lt;/p&gt;
+&lt;p&gt;@BeforeEach
+    void setUp() {
+        calculator = new CalculatorTool();
+    }&lt;/p&gt;
+&lt;p&gt;@Nested
+    @DisplayName(&amp;quot;基础运算测试&amp;quot;)
+    class BasicOperationsTest {&lt;/p&gt;
+&lt;p&gt;@Test
+        @DisplayName(&amp;quot;加法测试&amp;quot;)
+        void testAdd() {
+            String result = calculator.add(10.0, 5.0);
+            assertTrue(result.contains(&amp;quot;15.00&amp;quot;));
+        }&lt;/p&gt;
+&lt;p&gt;@Test
+        @DisplayName(&amp;quot;减法测试&amp;quot;)
+        void testSubtract() {
+            String result = calculator.subtract(10.0, 5.0);
+            assertTrue(result.contains(&amp;quot;5.00&amp;quot;));
+        }&lt;/p&gt;
+&lt;p&gt;@Test
+        @DisplayName(&amp;quot;乘法测试&amp;quot;)
+        void testMultiply() {
+            String result = calculator.multiply(10.0, 5.0);
+            assertTrue(result.contains(&amp;quot;50.00&amp;quot;));
+        }&lt;/p&gt;
+&lt;p&gt;@Test
+        @DisplayName(&amp;quot;除法测试&amp;quot;)
+        void testDivide() {
+            String result = calculator.divide(10.0, 2.0);
+            assertTrue(result.contains(&amp;quot;5.00&amp;quot;));
+        }&lt;/p&gt;
+&lt;p&gt;@Test
+        @DisplayName(&amp;quot;除数为零测试&amp;quot;)
+        void testDivideByZero() {
+            String result = calculator.divide(10.0, 0.0);
+            assertTrue(result.contains(&amp;quot;Error&amp;quot;));
+            assertTrue(result.contains(&amp;quot;零&amp;quot;));
+        }
+    }&lt;/p&gt;
+&lt;p&gt;@Nested
+    @DisplayName(&amp;quot;科学计算测试&amp;quot;)
+    class ScientificCalculationTest {&lt;/p&gt;
+&lt;p&gt;@Test
+        @DisplayName(&amp;quot;阶乘测试 - 5! = 120&amp;quot;)
+        void testFactorial5() {
+            String result = calculator.factorial(5);
+            assertTrue(result.contains(&amp;quot;120&amp;quot;));
+        }&lt;/p&gt;
+&lt;p&gt;@Test
+        @DisplayName(&amp;quot;阶乘测试 - 0! = 1&amp;quot;)
+        void testFactorial0() {
+            String result = calculator.factorial(0);
+            assertTrue(result.contains(&amp;quot;1&amp;quot;));
+        }&lt;/p&gt;
+&lt;p&gt;@Test
+        @DisplayName(&amp;quot;阶乘测试 - 负数报错&amp;quot;)
+        void testFactorialNegative() {
+            String result = calculator.factorial(-1);
+            assertTrue(result.contains(&amp;quot;Error&amp;quot;));
+            assertTrue(result.contains(&amp;quot;负数&amp;quot;));
+        }&lt;/p&gt;
+&lt;p&gt;@Test
+        @DisplayName(&amp;quot;阶乘测试 - 数字太大&amp;quot;)
+        void testFactorialTooLarge() {
+            String result = calculator.factorial(21);
+            assertTrue(result.contains(&amp;quot;Error&amp;quot;));
+            assertTrue(result.contains(&amp;quot;太大&amp;quot;));
+        }&lt;/p&gt;
+&lt;p&gt;@Test
+        @DisplayName(&amp;quot;质数判断 - 17 是质数&amp;quot;)
+        void testIsPrimeTrue() {
+            String result = calculator.isPrime(17);
+            assertTrue(result.contains(&amp;quot;质数&amp;quot;));
+        }&lt;/p&gt;
+&lt;p&gt;@Test
+        @DisplayName(&amp;quot;质数判断 - 15 不是质数&amp;quot;)
+        void testIsPrimeFalse() {
+            String result = calculator.isPrime(15);
+            assertFalse(result.contains(&amp;quot;是质数&amp;quot;));
+            assertTrue(result.contains(&amp;quot;可以被&amp;quot;));
+        }&lt;/p&gt;
+&lt;p&gt;@Test
+        @DisplayName(&amp;quot;平方根测试&amp;quot;)
+        void testSqrt() {
+            String result = calculator.sqrt(16.0);
+            assertTrue(result.contains(&amp;quot;4&amp;quot;));
+        }&lt;/p&gt;
+&lt;p&gt;@Test
+        @DisplayName(&amp;quot;平方根测试 - 负数报错&amp;quot;)
+        void testSqrtNegative() {
+            String result = calculator.sqrt(-16.0);
+            assertTrue(result.contains(&amp;quot;Error&amp;quot;));
+        }&lt;/p&gt;
+&lt;p&gt;@Test
+        @DisplayName(&amp;quot;幂运算测试&amp;quot;)
+        void testPower() {
+            String result = calculator.power(2.0, 10.0);
+            assertTrue(result.contains(&amp;quot;1024&amp;quot;));
+        }
+    }&lt;/p&gt;
+&lt;p&gt;@Nested
+    @DisplayName(&amp;quot;统计运算测试&amp;quot;)
+    class StatisticsTest {&lt;/p&gt;
+&lt;p&gt;@Test
+        @DisplayName(&amp;quot;平均值测试&amp;quot;)
+        void testAverage() {
+            String result = calculator.average(&amp;quot;[1, 2, 3, 4, 5]&amp;quot;);
+            assertTrue(result.contains(&amp;quot;3.00&amp;quot;));
+            assertTrue(result.contains(&amp;quot;5&amp;quot;));
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/p&gt;
+&lt;h3&gt;5.5.12 运行说明&lt;/h3&gt;
+&lt;p&gt;**1. 配置 API Key**&lt;/p&gt;
+&lt;p&gt;在运行前，需要配置阿里云百炼的 API Key：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 设置环境变量
+export DASHSCOPE_API_KEY=your-actual-api-key
+&lt;h1&gt;或者修改 application.yml 中的 agentscope.api.key 配置&lt;/h1&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**2. 编译和运行**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 编译项目
+mvn clean compile
+&lt;h1&gt;运行单元测试&lt;/h1&gt;
+mvn test
+&lt;h1&gt;启动应用&lt;/h1&gt;
+mvn spring-boot:run
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**3. 测试 API**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# 获取工具列表
+curl http://localhost:8080/api/agent/tools
+&lt;h1&gt;发送消息给 Agent&lt;/h1&gt;
+curl -X POST http://localhost:8080/api/agent/chat \
+  -H &amp;quot;Content-Type: application/json&amp;quot; \
+  -d '{&amp;quot;message&amp;quot;: &amp;quot;计算 25 + 17 等于多少？&amp;quot;}'
+&lt;h1&gt;激活天气分组&lt;/h1&gt;
+curl -X POST http://localhost:8080/api/agent/tools/activate \
+  -H &amp;quot;Content-Type: application/json&amp;quot; \
+  -d '[&amp;quot;weather&amp;quot;]'
+&lt;h1&gt;演示工具调用&lt;/h1&gt;
+curl http://localhost:8080/api/agent/tools/demo
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;**4. 预期输出示例**&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-json&quot;&gt;{
+  &amp;quot;success&amp;quot;: true,
+  &amp;quot;result&amp;quot;: &amp;quot;=== 工具调用演示 ===\n\n&amp;quot; +
+    &amp;quot;【计算器工具演示】\n&amp;quot; +
+    &amp;quot;• add(10, 5) = 10.00 + 5.00 = 15.00\n&amp;quot; +
+    &amp;quot;• factorial(5) = 5! = 120\n&amp;quot; +
+    &amp;quot;• is_prime(17) = 17 是质数\n\n&amp;quot; +
+    &amp;quot;【天气工具演示】\n&amp;quot; +
+    &amp;quot;🌤️ 北京 当前天气\n&amp;quot; +
+    &amp;quot;• 温度：15°C\n&amp;quot; +
+    &amp;quot;• 天气：晴\n&amp;quot; +
+    &amp;quot;• 空气质量：优\n&amp;quot; +
+    &amp;quot;• 湿度：45%\n&amp;quot; +
+    &amp;quot;• 风力：北风 3-4级\n\n&amp;quot; +
+    &amp;quot;【日期时间工具演示】\n&amp;quot; +
+    &amp;quot;📅 当前时间（Asia/Shanghai）：2024-05-20 14:30:00\n&amp;quot; +
+    &amp;quot;📅 2024-05-20 是 星期一\n&amp;quot;
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;5.6 小结&lt;/h2&gt;
+&lt;p&gt;本章介绍了 AgentScope Java 工具系统的完整知识：&lt;/p&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;8&quot; cellspacing=&quot;0&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;主题&lt;/th&gt;&lt;th&gt;核心内容&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;**内置工具**&lt;/td&gt;&lt;td&gt;ReadFileTool, WriteFileTool, ShellCommandTool, MCP 工具, SubAgent 工具&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**自定义工具**&lt;/td&gt;&lt;td&gt;注解方式（@Tool + @ToolParam）、接口实现方式（AgentTool）&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**工具注册**&lt;/td&gt;&lt;td&gt;直接注册、Builder API、工具分组、预设参数&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**工具调用**&lt;/td&gt;&lt;td&gt;Toolkit -&gt; ToolExecutor -&gt; AgentTool.callAsync()&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**参数验证**&lt;/td&gt;&lt;td&gt;JSON Schema 自动验证、ToolValidator、类型自动推断&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;**工具分组**&lt;/td&gt;&lt;td&gt;创建、激活/停用、元工具（reset_equipped_tools）&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;**关键设计理念：**&lt;/p&gt;
+&lt;p&gt;1. **注解驱动**：通过 &lt;code&gt;@Tool&lt;/code&gt; 和 &lt;code&gt;@ToolParam&lt;/code&gt; 注解，框架自动完成工具发现、Schema 生成、参数绑定
+2. **异步优先**：工具方法支持 &lt;code&gt;Mono&lt;T&gt;&lt;/code&gt; 异步返回，框架自动处理
+3. **安全优先**：文件工具提供路径验证、分组隔离、预设参数隐藏等安全机制
+4. **灵活扩展**：支持 MCP 协议、SubAgent、子类扩展，满足各种集成需求&lt;/p&gt;
+&lt;p&gt;下一章我们将学习 **第六章：模型集成**，了解如何配置和使用不同的模型客户端（DashScope、OpenAI、Ollama、Gemini 等）。&lt;/p&gt;
+</body>
+</html>
