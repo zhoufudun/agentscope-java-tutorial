@@ -1,20 +1,69 @@
-# IDE
-.idea/
-*.iml
-
-# Build
 target/
-*.class
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
 
-# Temporary
-deploy-temp/
-*.html
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
 
-# Scripts
-merge_to_single_html.py
-convert_md_to_html.py
-convert_comments.py
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
 
-# OS
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+### VS Code ###
+.vscode/
+.claude/
+
+### Mac OS ###
 .DS_Store
-Thumbs.db
+
+.flattened-pom.xml
+**/dependency-reduced-pom.xml
+
+### Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+
+### Docs
+docs/_build
+.venv/
+
+
+# vibe coding
+.claude
+openspec
+AGENTS.md
+CLAUDE.md
+
+##Log
+logs/
+
+## boba-tea-shop example
+**/boba-tea-shop/supervisor-agent/**/static/
+**/boba-tea-shop/**/node_modules/
+**/boba-tea-shop/**/dist/
+
+##agentscope
+.agentscope/
+
+## harness db
+**/*.db
