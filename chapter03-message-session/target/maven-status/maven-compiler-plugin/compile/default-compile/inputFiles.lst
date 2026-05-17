@@ -1,0 +1,12 @@
+D:\Work\ai\agents\agentscope-java\tutorial\chapter03-message-session\src\main\java\io\agentscope\tutorial\chapter03\entity\ChatMessage.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter03-message-session\src\main\java\io\agentscope\tutorial\chapter03\entity\ChatSession.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter03-message-session\src\main\java\io\agentscope\tutorial\chapter03\service\ChatService.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter03-message-session\src\main\java\io\agentscope\tutorial\chapter03\service\SessionService.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter03-message-session\src\main\java\io\agentscope\tutorial\chapter03\repository\MessageRepository.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter03-message-session\src\main\java\io\agentscope\tutorial\chapter03\repository\SessionRepository.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter03-message-session\src\main\java\io\agentscope\tutorial\chapter03\service\ChatResponseDTO.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter03-message-session\src\main\java\io\agentscope\tutorial\chapter03\Chapter03Application.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter03-message-session\src\main\java\io\agentscope\tutorial\chapter03\controller\ChatController.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter03-message-session\src\main\java\io\agentscope\tutorial\chapter03\formatter\JsonLogFormatter.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter03-message-session\src\main\java\io\agentscope\tutorial\chapter03\config\SessionConfig.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter03-message-session\src\main\java\io\agentscope\tutorial\chapter03\controller\SessionController.java

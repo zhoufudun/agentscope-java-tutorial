@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: chapter01-overview
+  profiles:
+    active: dev
+
+# AgentScope 配置
+agentscope:
+  # 模型提供者配置（默认 dashscope）
+  model:
+    provider: dashscope
+
+  # DashScope 模型配置
+  dashscope:
+    enabled: true
+    api-key: ${DASHSCOPE_API_KEY:your-api-key}
+    model-name: qwen-turbo
+    stream: true
+
+  # Agent 配置
+  agent:
+    enabled: true
+    name: "Assistant"
+    sys-prompt: "你是一个友好的 AI 助手，使用中文回答用户的问题。请简洁明了，答案控制在200字以内。"
+    max-iters: 10

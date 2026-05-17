@@ -1,0 +1,21 @@
+spring:
+  # 开发环境使用 H2 内存数据库
+  datasource:
+    url: jdbc:h2:mem:skilldb_dev;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+
+  # JPA 开发配置
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+# 开发环境日志级别
+logging:
+  level:
+    io.agentscope: DEBUG
+    io.agentscope.tutorial: DEBUG
+    org.springframework.web: DEBUG
+    org.hibernate.SQL: DEBUG

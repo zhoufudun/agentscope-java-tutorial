@@ -1,0 +1,38 @@
+# 开发环境配置 (H2 内存数据库)
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  # H2 数据源配置
+  datasource:
+    url: jdbc:h2:mem:plan_db;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  # JPA 配置
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: true
+
+  # 初始化 SQL
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+# 服务端口
+server:
+  port: 8080
+
+# 日志
+logging:
+  level:
+    io.agentscope.tutorial.chapter12: DEBUG
+    org.hibernate.SQL: DEBUG

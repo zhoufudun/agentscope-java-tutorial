@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env
+.env.*
+*.local
+
+# Test files
+src/test/
+
+# Documentation
+*.md
+docs/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.docker/
+
+# Kubernetes
+*.kubeconfig
+*.yaml.bak
+
+# Misc
+*.bak
+*.tmp
+*.cache

@@ -1,0 +1,77 @@
+spring:
+  application:
+    name: chapter11-skills
+
+  # H2 开发数据库配置
+  datasource:
+    url: jdbc:h2:mem:skilldb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      idle-timeout: 30000
+      connection-timeout: 30000
+
+  # JPA 配置
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.H2Dialect
+
+  # H2 控制台（开发环境启用）
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+# 服务器配置
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+# 聊天配置
+agentscope:
+  chat:
+    system-prompt: 你是一个有用的AI助手，可以帮助用户完成各种任务。
+    skill-prompt-prefix: "你可以使用以下技能来帮助用户："
+    max-history: 20
+
+  model:
+    type: dashscope
+    api-key: ${DASHSCOPE_API_KEY:your-api-key-here}
+    model-name: qwen-plus
+
+  # 技能系统配置
+  skill:
+    # 技能文件存储路径
+    storage-path: classpath:skills/
+    # 技能代码执行工作目录
+    code-execution:
+      work-dir: ${java.io.tmpdir}/agentscope-skills
+      enabled: true
+      shell-commands:
+        - python
+        - python3
+        - node
+    # 自动加载技能
+    auto-load: true
+    # 技能工具包配置
+    toolkit:
+      code-execution-enabled: true
+      read-enabled: true
+      write-enabled: true
+
+# 日志配置
+logging:
+  level:
+    io.agentscope: DEBUG
+    io.agentscope.tutorial: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

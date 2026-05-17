@@ -1,0 +1,11 @@
+D:\Work\ai\agents\agentscope-java\tutorial\chapter05-tools\src\main\java\io\agentscope\tutorial\chapter05\Chapter05Application.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter05-tools\src\main\java\io\agentscope\tutorial\chapter05\config\ToolConfig.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter05-tools\src\main\java\io\agentscope\tutorial\chapter05\controller\ChatController.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter05-tools\src\main\java\io\agentscope\tutorial\chapter05\controller\ToolController.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter05-tools\src\main\java\io\agentscope\tutorial\chapter05\service\ToolService.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter05-tools\src\main\java\io\agentscope\tutorial\chapter05\tool\BuiltinTools.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter05-tools\src\main\java\io\agentscope\tutorial\chapter05\tool\CalculatorTool.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter05-tools\src\main\java\io\agentscope\tutorial\chapter05\tool\DateTimeTool.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter05-tools\src\main\java\io\agentscope\tutorial\chapter05\tool\HttpTool.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter05-tools\src\main\java\io\agentscope\tutorial\chapter05\tool\SearchTool.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter05-tools\src\main\java\io\agentscope\tutorial\chapter05\tool\WeatherTool.java

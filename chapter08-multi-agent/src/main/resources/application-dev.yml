@@ -1,0 +1,15 @@
+# 开发环境配置
+spring:
+  ai:
+    dashscope:
+      api-key: ${AI_DASHSCOPE_API_KEY:}
+
+logging:
+  level:
+    io.agentscope: DEBUG
+    com.alibaba.cloud.ai: DEBUG
+
+# 开发环境启用演示
+customer-service:
+  demo:
+    enabled: true

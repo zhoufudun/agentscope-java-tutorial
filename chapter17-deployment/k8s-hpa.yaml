@@ -1,0 +1,125 @@
+# =============================================================================
+# AgentScope Java - Chapter 17: Kubernetes Deployment
+# HPA 自动扩缩容配置
+# =============================================================================
+
+---
+# =============================================================================
+# HorizontalPodAutoscaler: 基于 CPU 和内存自动扩缩容
+# =============================================================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: agentscope-hpa
+  namespace: agentscope
+  labels:
+    app: agentscope
+    environment: production
+spec:
+  # 目标 Deployment
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: agentscope-deployment
+  # 副本数范围
+  minReplicas: 2
+  maxReplicas: 10
+  # 选择器
+  behavior:
+    scaleDown:
+      # 缩容 stabilization 窗口：5 分钟
+      stabilizationWindowSeconds: 300
+      policies:
+        # 最多每分钟缩容 2 个 Pod
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+        # 最多缩容 25% 的 Pod
+        - type: Percent
+          value: 25
+          periodSeconds: 60
+      selectPolicy: Min
+    scaleUp:
+      # 扩容 stabilization 窗口：0 秒（立即扩容）
+      stabilizationWindowSeconds: 0
+      policies:
+        # 最多一次扩容 4 个 Pod
+        - type: Pods
+          value: 4
+          periodSeconds: 15
+        # 最多一次扩容 100% 的 Pod
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+      selectPolicy: Max
+  # 扩缩容指标
+  metrics:
+    # CPU 使用率
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    # 内存使用率
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+    # 自定义指标：HTTP 请求率
+    - type: Pods
+      pods:
+        metric:
+          name: http_requests_per_second
+        target:
+          type: AverageValue
+          averageValue: "1000"
+---
+# =============================================================================
+# PodDisruptionBudget: 确保最小可用 Pod 数
+# =============================================================================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: agentscope-pdb
+  namespace: agentscope
+  labels:
+    app: agentscope
+    environment: production
+spec:
+  # 至少保持 2 个 Pod 可用
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: agentscope
+---
+# =============================================================================
+# VerticalPodAutoscaler: 推荐 Pod 资源大小（可选）
+# =============================================================================
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: agentscope-vpa
+  namespace: agentscope
+  labels:
+    app: agentscope
+    environment: production
+spec:
+  targetRef:
+    apiVersion: "apps/v1"
+    kind: Deployment
+    name: agentscope-deployment
+  updatePolicy:
+    updateMode: "Off"  # Off = 只推荐，不自动更新
+  resourcePolicy:
+    containerPolicies:
+      - containerName: agentscope
+        minAllowed:
+          memory: 256Mi
+          cpu: 100m
+        maxAllowed:
+          memory: 4Gi
+          cpu: 2000m
+        controlledResources: ["cpu", "memory"]

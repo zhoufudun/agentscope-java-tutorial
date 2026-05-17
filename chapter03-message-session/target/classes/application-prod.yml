@@ -1,0 +1,37 @@
+spring:
+  # 生产模式使用 MySQL 数据库
+  datasource:
+    url: jdbc:mysql://localhost:3306/agentscope_chat?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        dialect: org.hibernate.dialect.MySQL8Dialect
+    open-in-view: false
+
+  # 禁用 H2 Console
+  h2:
+    console:
+      enabled: false
+
+# 生产环境日志级别
+logging:
+  level:
+    io.agentscope: INFO
+    org.springframework: WARN
+    org.hibernate: WARN
+  file:
+    name: ./logs/agentscope-chapter03.log

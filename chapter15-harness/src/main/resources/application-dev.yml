@@ -1,0 +1,31 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:harness_dev_db;DB_CLOSE_DELAY=-1;MODE=MySQL
+  jpa:
+    show-sql: true
+  h2:
+    console:
+      enabled: true
+
+logging:
+  level:
+    root: DEBUG
+    io.agentscope: TRACE
+    io.agentscope.harness: TRACE
+
+# Harness specific configuration
+harness:
+  sandbox:
+    default-timeout: 60
+    max-timeout: 300
+    workspace-root: /workspace
+  execution:
+    max-output-size: 1024 * 1024  # 1MB
+    allowed-commands:
+      - ls
+      - cat
+      - grep
+      - find
+      - echo
+      - mkdir
+      - touch

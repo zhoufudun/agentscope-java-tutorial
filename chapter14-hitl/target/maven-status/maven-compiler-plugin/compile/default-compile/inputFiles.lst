@@ -1,0 +1,13 @@
+D:\Work\ai\agents\agentscope-java\tutorial\chapter14-hitl\src\main\java\io\agentscope\tutorial\chapter14\Chapter14Application.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter14-hitl\src\main\java\io\agentscope\tutorial\chapter14\config\HITLConfig.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter14-hitl\src\main\java\io\agentscope\tutorial\chapter14\controller\ApprovalController.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter14-hitl\src\main\java\io\agentscope\tutorial\chapter14\controller\ChatController.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter14-hitl\src\main\java\io\agentscope\tutorial\chapter14\controller\WorkflowController.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter14-hitl\src\main\java\io\agentscope\tutorial\chapter14\entity\ApprovalRequest.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter14-hitl\src\main\java\io\agentscope\tutorial\chapter14\hook\ApprovalHook.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter14-hitl\src\main\java\io\agentscope\tutorial\chapter14\repository\ApprovalRepository.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter14-hitl\src\main\java\io\agentscope\tutorial\chapter14\service\ApprovalService.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter14-hitl\src\main\java\io\agentscope\tutorial\chapter14\service\ChatService.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter14-hitl\src\main\java\io\agentscope\tutorial\chapter14\service\WorkflowService.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter14-hitl\src\main\java\io\agentscope\tutorial\chapter14\tool\DeleteDataTool.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter14-hitl\src\main\java\io\agentscope\tutorial\chapter14\tool\SendEmailTool.java

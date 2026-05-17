@@ -1,0 +1,14 @@
+io\agentscope\tutorial\chapter05\controller\ToolController.class
+io\agentscope\tutorial\chapter05\tool\SearchTool.class
+io\agentscope\tutorial\chapter05\controller\ChatController$ChatRequest.class
+io\agentscope\tutorial\chapter05\tool\HttpTool.class
+io\agentscope\tutorial\chapter05\Chapter05Application.class
+io\agentscope\tutorial\chapter05\tool\WeatherTool$WeatherInfo.class
+io\agentscope\tutorial\chapter05\tool\SearchTool$SearchResult.class
+io\agentscope\tutorial\chapter05\controller\ChatController.class
+io\agentscope\tutorial\chapter05\config\ToolConfig.class
+io\agentscope\tutorial\chapter05\service\ToolService.class
+io\agentscope\tutorial\chapter05\tool\DateTimeTool.class
+io\agentscope\tutorial\chapter05\tool\WeatherTool.class
+io\agentscope\tutorial\chapter05\tool\BuiltinTools.class
+io\agentscope\tutorial\chapter05\tool\CalculatorTool.class

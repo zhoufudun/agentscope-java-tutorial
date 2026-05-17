@@ -1,0 +1,24 @@
+# 第八章案例：智能客户服务中心配置
+spring:
+  application:
+    name: chapter08-multi-agent
+
+  # DashScope 模型配置
+  ai:
+    dashscope:
+      api-key: ${AI_DASHSCOPE_API_KEY:your-api-key-here}
+      model: qwen-plus
+
+# 服务端口
+server:
+  port: 8088
+
+# 是否在启动时运行演示（设置为 true 方便测试）
+customer-service:
+  demo:
+    enabled: true
+
+# 日志级别
+logging:
+  level:
+    io.agentscope: DEBUG

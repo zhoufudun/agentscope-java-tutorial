@@ -1,0 +1,104 @@
+# =============================================================================
+# Prometheus Configuration for AgentScope Java
+# =============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'agentscope-production'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# Load rules once every period
+rule_files:
+  # - "alert_rules.yml"
+
+# Scrape configuration
+scrape_configs:
+  # ---------------------------------------------------------------------------
+  # Prometheus 自身
+  # ---------------------------------------------------------------------------
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  # ---------------------------------------------------------------------------
+  # AgentScope Application
+  # ---------------------------------------------------------------------------
+  - job_name: 'agentscope-app'
+    scrape_interval: 10s
+    scrape_timeout: 10s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['app:8080']
+        labels:
+          service: 'agentscope'
+          environment: 'production'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):\d+'
+        replacement: '${1}'
+    # Kubernetes 服务发现 (在 K8s 环境中启用)
+    # kubernetes_sd_configs:
+    #   - role: pod
+    #     namespaces:
+    #       names:
+    #         - agentscope
+    #   relabel_configs:
+    #     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+    #       action: keep
+    #       regex: true
+    #     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+    #       action: replace
+    #       target_label: __metrics_path__
+    #       regex: (.+)
+    #     - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+    #       action: replace
+    #       regex: ([^:]+)(?::\d+)?;(\d+)
+    #       replacement: $1:$2
+    #       target_label: __address__
+
+  # ---------------------------------------------------------------------------
+  # Java/JVM Metrics (通过 Prometheus JMX Exporter)
+  # ---------------------------------------------------------------------------
+  - job_name: 'jvm-metrics'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['app:8080']
+        labels:
+          service: 'jvm-metrics'
+
+  # ---------------------------------------------------------------------------
+  # Spring Boot Actuator Metrics
+  # ---------------------------------------------------------------------------
+  - job_name: 'spring-boot-actuator'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['app:8080']
+    metric_relabel_configs:
+      # 添加环境标签
+      - source_labels: [application]
+        target_label: app_name
+        replacement: agentscope
+      # 重命名指标
+      - source_labels: [uri]
+        target_label: endpoint
+
+  # ---------------------------------------------------------------------------
+  # OTel Collector Metrics
+  # ---------------------------------------------------------------------------
+  - job_name: 'otel-collector'
+    static_configs:
+      - targets: ['otel-collector:8888', 'otel-collector:8889']
+        labels:
+          service: 'otel-collector'

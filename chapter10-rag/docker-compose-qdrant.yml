@@ -1,0 +1,67 @@
+# Qdrant Vector Database - Standalone Docker Compose
+# Use this file to start Qdrant separately from the main application
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    container_name: agentscope-rag-qdrant
+    ports:
+      # REST API port
+      - "6333:6333"
+      # gRPC port (for high-performance client connections)
+      - "6334:6334"
+    volumes:
+      # Persist Qdrant storage data
+      - qdrant-data:/qdrant/storage
+    environment:
+      # QDRANT__SERVICE__GRPC_PORT: 6334
+      # QDRANT__SERVICE__PORT: 6333
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  qdrant-data:
+    driver: local
+
+# =============================================================================
+# Usage Instructions:
+# =============================================================================
+#
+# 1. Start Qdrant:
+#    docker-compose -f docker-compose-qdrant.yml up -d
+#
+# 2. Verify Qdrant is running:
+#    curl http://localhost:6333/readyz
+#    Expected: {"status":"ready"}
+#
+# 3. Access Qdrant Dashboard:
+#    Open http://localhost:6333/dashboard in your browser
+#
+# 4. Stop Qdrant:
+#    docker-compose -f docker-compose-qdrant.yml down
+#
+# 5. Stop and remove data:
+#    docker-compose -f docker-compose-qdrant.yml down -v
+#
+# =============================================================================
+# Alternative: Run Qdrant with custom configuration
+# =============================================================================
+#
+# For production, you might want to customize Qdrant:
+#
+# services:
+#   qdrant:
+#     image: qdrant/qdrant:v1.7.4
+#     ports:
+#       - "6333:6333"
+#       - "6334:6334"
+#     volumes:
+#       - ./qdrant-config:/qdrant/config:ro
+#       - qdrant-data:/qdrant/storage
+#     command: /qdrant/config/production.yaml
+#
+# =============================================================================

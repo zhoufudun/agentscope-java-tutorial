@@ -1,0 +1,55 @@
+# Spring Boot Application Configuration
+spring:
+  application:
+    name: chapter14-hitl
+  profiles:
+    active: dev
+
+  # H2 数据库配置（开发环境）
+  datasource:
+    url: jdbc:h2:mem:hitl_db;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=MySQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  # H2 Console（开发环境）
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  # JPA 配置
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    database-platform: org.hibernate.dialect.H2Dialect
+    properties:
+      hibernate:
+        format_sql: true
+
+  # Jackson 配置
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+
+# 服务器配置
+server:
+  port: 8080
+
+# AgentScope 配置
+agentscope:
+  api-key: ${DASHSCOPE_API_KEY:your-api-key-here}
+  model:
+    provider: dashscope
+    default: qwen-plus
+    stream: true
+
+# 日志配置
+logging:
+  level:
+    io.agentscope: INFO
+    io.agentscope.tutorial.chapter14: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

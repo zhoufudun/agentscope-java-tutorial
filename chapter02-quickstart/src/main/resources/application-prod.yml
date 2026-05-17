@@ -1,0 +1,66 @@
+# =============================================================================
+# 生产环境配置 (application-prod.yml)
+# 使用 MySQL 数据库，适合生产环境
+# =============================================================================
+
+spring:
+  # MySQL 数据库配置
+  datasource:
+    url: jdbc:mysql://localhost:3306/agentscope_prod?useSSL=true&serverTimezone=Asia/Shanghai
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${DB_USERNAME:agentscope}
+    password: ${DB_PASSWORD:}
+
+  # 连接池配置
+  hikari:
+    maximum-pool-size: 10
+    minimum-idle: 5
+    connection-timeout: 30000
+
+  # JPA 配置
+  jpa:
+    database-platform: org.hibernate.dialect.MySQL8Dialect
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+# AgentScope 配置
+agentscope:
+  # 模型配置
+  model:
+    # 默认 DashScope 配置
+    dashscope:
+      enabled: true
+      api-key: ${DASHSCOPE_API_KEY:}
+      model-name: qwen-plus
+      stream: true
+      enable-thinking: true
+      thinking-budget: 1024
+      temperature: 0.7
+
+    # OpenAI 兼容配置（预留）
+    openai:
+      enabled: false
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+      api-key: ${OPENAI_API_KEY:}
+      model-name: gpt-4o
+
+    # Ollama 本地模型配置（预留）
+    ollama:
+      enabled: false
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      model-name: llama3
+
+# 日志配置
+logging:
+  level:
+    root: WARN
+    io.agentscope: INFO
+    io.agentscope.tutorial: INFO
+  file:
+    name: /var/log/agentscope/application.log
+    max-size: 100MB
+    max-history: 30

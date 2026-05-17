@@ -1,0 +1,78 @@
+#
+# Copyright 2024-2026 the original author or authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+micronaut:
+  application:
+    name: agentscope-micronaut-example
+  server:
+    port: 8080
+    host: 0.0.0.0
+
+# ===================================================================
+# AgentScope Configuration
+# ===================================================================
+agentscope:
+  model:
+    # Available providers: dashscope, openai, gemini, anthropic
+    provider: ${AGENTSCOPE_MODEL_PROVIDER:dashscope}
+
+  # DashScope Configuration (Default)
+  dashscope:
+    enabled: true
+    api-key: ${DASHSCOPE_API_KEY:your-api-key-here}
+    model-name: ${DASHSCOPE_MODEL_NAME:qwen-plus}
+    stream: false
+    enable-thinking: false
+
+  # OpenAI Configuration (Optional)
+  openai:
+    enabled: false
+    api-key: ${OPENAI_API_KEY:}
+    model-name: gpt-4-mini
+    stream: false
+
+  # Gemini Configuration (Optional)
+  gemini:
+    enabled: false
+    api-key: ${GEMINI_API_KEY:}
+    model-name: gemini-2.0-flash
+    stream: false
+
+  # Anthropic Configuration (Optional)
+  anthropic:
+    enabled: false
+    api-key: ${ANTHROPIC_API_KEY:}
+    model-name: claude-sonnet-4-20250514
+    stream: false
+
+  # Agent Configuration
+  agent:
+    enabled: true
+    name: "MicronautAssistant"
+    sys-prompt: |
+      You are a helpful AI assistant powered by AgentScope,
+      running in a Micronaut application.
+      Micronaut uses compile-time dependency injection for
+      fast startup and low memory usage.
+    max-iters: 10
+
+# ===================================================================
+# Logging Configuration
+# ===================================================================
+logger:
+  levels:
+    io.agentscope: DEBUG
+    io.micronaut: INFO

@@ -1,0 +1,46 @@
+# AgentScope 第五章教程配置
+server:
+  port: 8080
+
+spring:
+  application:
+    name: chapter05-tools
+
+  # H2 Database Configuration
+  datasource:
+    url: jdbc:h2:mem:tutorial_db
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  # H2 Console（仅开发环境启用）
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+# AgentScope 配置
+agentscope:
+  # 阿里云百炼 API Key（请替换为实际值）
+  api:
+    key: ${DASHSCOPE_API_KEY:your-api-key-here}
+
+  # 模型配置
+  model:
+    name: ${AGENTSCOPE_MODEL_NAME:qwen-max}
+
+# 日志配置
+logging:
+  level:
+    io.agentscope: DEBUG
+    root: INFO
+    org.springframework: INFO

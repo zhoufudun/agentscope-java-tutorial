@@ -1,0 +1,32 @@
+# Patterns to ignore when building packages.
+# This supports shell glob matching.
+*.tmp
+*.orig
+*.log
+.git
+.gitignore
+.env
+.helmignore
+ values.lock
+docs/
+README.md
+
+# patterns to skip during packaging
+ci/
+test/
+Makefile
+docker-compose*.yml
+Dockerfile*
+*.md
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Kubernetes
+*.kubeconfig

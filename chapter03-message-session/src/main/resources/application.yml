@@ -1,0 +1,56 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: agentscope-chapter03-demo
+
+  # 默认使用 H2 内存数据库（开发模式）
+  datasource:
+    url: jdbc:h2:mem:chatsession;DB_CLOSE_DELAY=-1;MODE=MySQL;AUTO_RECONNECT=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  # H2 Console（开发调试用）
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.H2Dialect
+
+  # SQL 初始化
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+# AgentScope 配置
+agentscope:
+  model:
+    api-key: ${DASHSCOPE_API_KEY:demo-key}
+    base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    model: qwen-plus
+    max-tokens: 2048
+    temperature: 0.7
+
+  # 会话配置
+  session:
+    max-history-size: 50
+    storage-path: ./data/agentscope_sessions
+
+# 日志配置
+logging:
+  level:
+    io.agentscope: DEBUG
+    org.springframework: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

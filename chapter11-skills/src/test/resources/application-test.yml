@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: chapter11-skills-test
+
+  # 测试使用 H2 内存数据库
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  # JPA 测试配置
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+  # 禁用 H2 控制台
+  h2:
+    console:
+      enabled: false
+
+# 测试环境日志级别
+logging:
+  level:
+    io.agentscope: INFO
+    io.agentscope.tutorial: INFO

@@ -1,0 +1,49 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: chapter06-model-integration
+
+  profiles:
+    active: dev
+
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  # H2 Console
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+# Model Configuration
+model:
+  dashscope:
+    api-key: ${DASHSCOPE_API_KEY:demo-key}
+    base-url: https://dashscope.aliyuncs.com/api/v1
+    default-model: qwen-plus
+
+  openai:
+    api-key: ${OPENAI_API_KEY:demo-key}
+    base-url: https://api.openai.com/v1
+    default-model: gpt-4o
+
+  ollama:
+    base-url: http://localhost:11434
+    default-model: llama3.2
+
+  gemini:
+    api-key: ${GEMINI_API_KEY:demo-key}
+    default-model: gemini-2.0-flash
+
+logging:
+  level:
+    io.agentscope: DEBUG
+    root: INFO

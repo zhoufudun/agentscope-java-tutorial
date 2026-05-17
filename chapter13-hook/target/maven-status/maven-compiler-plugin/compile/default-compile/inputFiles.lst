@@ -1,0 +1,12 @@
+D:\Work\ai\agents\agentscope-java\tutorial\chapter13-hook\src\main\java\io\agentscope\tutorial\chapter13\Chapter13Application.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter13-hook\src\main\java\io\agentscope\tutorial\chapter13\config\AgentConfig.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter13-hook\src\main\java\io\agentscope\tutorial\chapter13\config\HookConfig.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter13-hook\src\main\java\io\agentscope\tutorial\chapter13\controller\AuditController.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter13-hook\src\main\java\io\agentscope\tutorial\chapter13\controller\ChatController.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter13-hook\src\main\java\io\agentscope\tutorial\chapter13\entity\AuditLog.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter13-hook\src\main\java\io\agentscope\tutorial\chapter13\hook\AuditHook.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter13-hook\src\main\java\io\agentscope\tutorial\chapter13\hook\LoggingHook.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter13-hook\src\main\java\io\agentscope\tutorial\chapter13\hook\MetricsHook.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter13-hook\src\main\java\io\agentscope\tutorial\chapter13\hook\TimingHook.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter13-hook\src\main\java\io\agentscope\tutorial\chapter13\repository\AuditLogRepository.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter13-hook\src\main\java\io\agentscope\tutorial\chapter13\service\ChatService.java

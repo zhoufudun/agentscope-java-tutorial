@@ -1,0 +1,61 @@
+# =============================================================================
+# 开发环境配置 (application-dev.yml)
+# 使用 H2 内存数据库，适合本地开发和测试
+# =============================================================================
+
+spring:
+  # H2 数据库配置
+  datasource:
+    url: jdbc:h2:mem:agentscope_dev;DB_CLOSE_DELAY=-1;MODE=MySQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  # H2 Console 配置（方便调试）
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  # JPA 配置
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+# AgentScope 配置
+agentscope:
+  # 模型配置
+  model:
+    # 默认 DashScope 配置
+    dashscope:
+      enabled: true
+      api-key: ${DASHSCOPE_API_KEY:your-api-key-here}
+      model-name: qwen-plus
+      stream: true
+      enable-thinking: true
+      thinking-budget: 1024
+      temperature: 0.7
+
+    # OpenAI 兼容配置（预留）
+    openai:
+      enabled: false
+      base-url: https://api.openai.com/v1
+      api-key: ${OPENAI_API_KEY:}
+      model-name: gpt-4o
+
+    # Ollama 本地模型配置（预留）
+    ollama:
+      enabled: false
+      base-url: http://localhost:11434
+      model-name: llama3
+
+# 日志配置
+logging:
+  level:
+    io.agentscope: DEBUG
+    io.agentscope.tutorial: DEBUG

@@ -1,0 +1,97 @@
+# AgentScope Java - Chapter 10: RAG Tutorial Configuration
+# Default configuration for development
+
+spring:
+  application:
+    name: chapter10-rag
+
+  # H2 Database Configuration
+  datasource:
+    url: jdbc:h2:mem:ragdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  # H2 Console (for debugging)
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+# Server Configuration
+server:
+  port: 8080
+
+# RAG Configuration
+rag:
+  # Embedding Model Configuration
+  embedding:
+    # Model type: OLLAMA, OPENAI, DASHSCOPE
+    modelType: OLLAMA
+    # Ollama model name
+    modelName: nomic-embed-text
+    # Embedding dimensions (must match model output)
+    dimensions: 768
+    # Base URL for Ollama
+    baseUrl: http://localhost:11434
+
+  # Chunking Strategy Configuration
+  chunking:
+    # Strategy: CHARACTER, PARAGRAPH, TOKEN, SEMANTIC
+    strategy: PARAGRAPH
+    # Target chunk size (interpreted based on strategy)
+    chunkSize: 500
+    # Overlap size between chunks
+    overlapSize: 50
+    # Minimum chunk length
+    minChunkLength: 10
+    # Maximum chunk length
+    maxChunkLength: 2000
+
+  # Retrieval Configuration
+  retrieval:
+    # Number of documents to retrieve
+    topK: 5
+    # Minimum similarity score (0-1)
+    scoreThreshold: 0.5
+    # Enable hybrid search
+    hybridSearch: false
+    # Keyword search weight (0-1)
+    keywordWeight: 0.3
+
+# Qdrant Vector Store Configuration
+qdrant:
+  # Qdrant server location
+  # Examples:
+  #   - http://localhost:6333 (HTTP, uses gRPC port 6334)
+  #   - localhost:6334 (direct gRPC)
+  #   - file:///path/to/qdrant (local storage)
+  location: http://localhost:6333
+  # Collection name for document embeddings
+  collectionName: tutorial_rag
+  # Vector dimensions (must match embedding model)
+  dimensions: 768
+  # API key (optional, for authenticated Qdrant servers)
+  apiKey:
+  # Use TLS for gRPC connections
+  useTls: false
+  # Check client-server compatibility
+  checkCompatibility: true
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    io.agentscope: DEBUG
+    io.agentscope.tutorial: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

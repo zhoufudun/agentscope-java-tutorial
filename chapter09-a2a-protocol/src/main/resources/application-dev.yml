@@ -1,0 +1,39 @@
+# Development Configuration
+# AgentScope Java Tutorial - Chapter 09: A2A Protocol
+
+spring:
+  # H2 Database Configuration for development
+  datasource:
+    url: jdbc:h2:mem:a2a_tutorial
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  # H2 Console (for debugging)
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+# Development Server Configuration
+server:
+  port: 8888
+
+# Enhanced logging for development
+logging:
+  level:
+    root: DEBUG
+    io.agentscope: TRACE
+    io.a2a: TRACE
+    io.agentscope.tutorial: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# A2A Client Configuration - local development
+a2a:
+  client:
+    base-url: http://localhost:8888
+    agent-card-path: /.well-known/agent-card.json
+    agent-name: tutorial-a2a-agent
+  server:
+    transport: JSONRPC

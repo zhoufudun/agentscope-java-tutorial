@@ -1,0 +1,104 @@
+# ===================================================================
+# AgentScope Java - Chapter 18: Spring Boot Integration
+# Configuration File
+# ===================================================================
+
+spring:
+  application:
+    name: agentscope-spring-boot-example
+
+  # H2 Database Configuration (in-memory)
+  datasource:
+    url: jdbc:h2:mem:agentscope;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  # JPA Configuration
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+
+# ===================================================================
+# AgentScope Configuration
+# ===================================================================
+agentscope:
+  model:
+    # Available providers: dashscope, openai, gemini, anthropic
+    provider: ${AGENTSCOPE_MODEL_PROVIDER:dashscope}
+
+  # DashScope Configuration (Default)
+  dashscope:
+    enabled: true
+    api-key: ${DASHSCOPE_API_KEY:your-api-key-here}
+    model-name: ${DASHSCOPE_MODEL_NAME:qwen-plus}
+    stream: false
+    enable-thinking: false
+
+  # OpenAI Configuration (Optional)
+  openai:
+    enabled: false
+    api-key: ${OPENAI_API_KEY:}
+    model-name: gpt-4-mini
+    stream: false
+
+  # Gemini Configuration (Optional)
+  gemini:
+    enabled: false
+    api-key: ${GEMINI_API_KEY:}
+    model-name: gemini-2.0-flash
+    stream: false
+
+  # Anthropic Configuration (Optional)
+  anthropic:
+    enabled: false
+    api-key: ${ANTHROPIC_API_KEY:}
+    model-name: claude-sonnet-4-20250514
+    stream: false
+
+  # Agent Configuration
+  agent:
+    enabled: true
+    name: "SpringBootAssistant"
+    sys-prompt: |
+      You are a helpful AI assistant powered by AgentScope,
+      running in a Spring Boot application.
+      You can help users with questions, provide information,
+      and assist with various tasks.
+    max-iters: 10
+
+# ===================================================================
+# Server Configuration
+# ===================================================================
+server:
+  port: 8080
+  address: 0.0.0.0
+
+# ===================================================================
+# Actuator Configuration
+# ===================================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# ===================================================================
+# Logging Configuration
+# ===================================================================
+logging:
+  level:
+    root: INFO
+    io.agentscope: DEBUG
+    org.springframework.web: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

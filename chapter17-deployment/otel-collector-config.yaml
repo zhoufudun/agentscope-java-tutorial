@@ -1,0 +1,157 @@
+# =============================================================================
+# OpenTelemetry Collector Configuration for AgentScope Java
+# =============================================================================
+
+receivers:
+  # OTLP Receiver (gRPC and HTTP)
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Prometheus Receiver (从 Prometheus 拉取指标)
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'otel-collector'
+          scrape_interval: 10s
+          static_configs:
+            - targets: ['localhost:8888', 'localhost:8889']
+
+  # Jaeger Receiver (接收 Jaeger traces)
+  jaeger:
+    protocols:
+      thrift_http:
+        endpoint: 0.0.0.0:14268
+      grpc:
+        endpoint: 0.0.0.0:14250
+
+processors:
+  # 批处理配置
+  batch:
+    timeout: 10s
+    send_batch_size: 8192
+    send_batch_max_size: 16384
+    # 限制内存使用
+    metadata_batch_size: 512
+
+  # 内存限制器
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 1024
+    spike_limit_mib: 256
+
+  # 属性过滤
+  filter:
+    trace:
+      error_mode: ignore
+    metrics:
+      error_mode: ignore
+    logs:
+      error_mode: ignore
+
+  # 属性转换
+  transform:
+    trace:
+      queries:
+        - replace_pattern(attributes["http.target"], "\\?.*$", "")
+        - replace_pattern(attributes["url.path"], "\\?.*$", "")
+
+  # 资源属性
+  resource:
+    attributes:
+      - action: upsert
+        key: deployment.environment
+        value: production
+      - action: upsert
+        key: service.namespace
+        value: agentscope
+      - action: upsert
+        key: service.version
+        value: "1.0.0"
+
+  # Kubernetes资源属性 (需要 Kubernetes API access)
+  # k8sattributes:
+  #   auth_type: 'serviceAccount'
+  #   passthrough: true
+  #   extract:
+  #     metadata:
+  #       - k8s.namespace.name
+  #       - k8s.deployment.name
+  #       - k8s.pod.name
+  #       - k8s.node.name
+
+exporters:
+  # Prometheus Exporter (暴露指标给 Prometheus 抓取)
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: agentscope
+    const_labels:
+      environment: production
+      cluster: agentscope-production
+    resource_to_telemetry_conversion:
+      enabled: true
+
+  # OTLP Exporter (发送到后端)
+  otlp:
+    endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}
+    tls:
+      insecure: true
+    sending_queue:
+      queue_size: 10000
+      num_consumers: 10
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+  # Jaeger Exporter (发送到 Jaeger)
+  jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true
+    sending_queue:
+      enabled: true
+      queue_size: 5000
+
+  # 日志导出器
+  logging:
+    loglevel: info
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+extensions:
+  # 健康检查
+  health_check:
+    endpoint: 0.0.0.0:13133
+    check_collector_pipeline:
+      enabled: true
+      interval: 30s
+
+  # zPages (用于调试)
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+  # 文件持久化队列 (用于断电保护)
+  file_storage:
+    directory: /var/otel_collector
+    timeout: 1s
+
+service:
+  extensions: [health_check, zpages, file_storage]
+  pipelines:
+    traces:
+      receivers: [otlp, jaeger]
+      processors: [memory_limiter, batch, resource, transform]
+      exporters: [otlp, jaeger, logging]
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, batch, resource]
+      exporters: [prometheus, otlp, logging]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [otlp, logging]

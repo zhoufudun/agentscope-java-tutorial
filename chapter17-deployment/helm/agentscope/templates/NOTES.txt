@@ -1,0 +1,85 @@
+{{/*
+AgentScope Java Helm Chart
+*/}}
+{{- if .Values.ingress.enabled -}}
+{{- $fullName := include "agentscope.fullname" . -}}
+{{- $svcPort := .Values.service.port -}}
+{{- if and (eq .Values.service.type "NodePort") .Values.service.nodePort }}
+{{- $svcPort = .Values.service.nodePort -}}
+{{- end }}
+
+# =============================================================================
+# AgentScope Java - Installation Complete
+# =============================================================================
+
+Thank you for installing {{ .Chart.Name }}.
+
+Your release is named {{ .Release.Name }}.
+
+To learn more about the release, try:
+
+  $ helm status {{ .Release.Name }} -n {{ .Release.Namespace }}
+  $ helm get all {{ .Release.Name }} -n {{ .Release.Namespace }}
+
+# =============================================================================
+# Access the Application
+# =============================================================================
+
+{{- if .Values.ingress.enabled }}
+Application URL:
+
+  {{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}{{ .paths[0].path }}
+  {{- end }}
+
+{{- else if eq .Values.service.type "LoadBalancer" }}
+Service Type is LoadBalancer. It may take a few minutes for the LoadBalancer
+IP to be available.
+
+  $ kubectl get svc --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "agentscope.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -w
+
+{{- else if eq .Values.service.type "NodePort" }}
+
+The application is available at:
+
+  http://<node-ip>:{{ $svcPort }}/
+
+{{- else }}
+
+The application is only accessible within the cluster:
+
+  ClusterIP: <internal-ip>
+
+From inside the cluster, access it as:
+
+  $ kubectl exec -it -n {{ .Release.Namespace }} <pod-name> -- curl http://{{ $fullName }}.{{ .Release.Namespace }}:{{ $svcPort }}/
+
+{{- end }}
+
+# =============================================================================
+# Monitoring
+# =============================================================================
+
+Prometheus metrics are available at:
+  http://<app-url>/actuator/prometheus
+
+Grafana Dashboard (if enabled):
+  http://<grafana-url>/d/agentscope-java-prod
+
+# =============================================================================
+# Next Steps
+# =============================================================================
+
+1. Check pod status:
+   $ kubectl get pods -n {{ .Release.Namespace }}
+
+2. View logs:
+   $ kubectl logs -f deployment/{{ $fullName }} -n {{ .Release.Namespace }}
+
+3. Upgrade the release:
+   $ helm upgrade {{ .Release.Name }} {{ .Chart.Name }} -n {{ .Release.Namespace }}
+
+4. Delete the release:
+   $ helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
+
+{{- end }}

@@ -1,0 +1,226 @@
+# =============================================================================
+# AgentScope Java Helm Chart - Deployment Template
+# =============================================================================
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "agentscope.fullname" . }}
+    environment: production
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agentscope.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "agentscope.labels" . | nindent 4 }}
+data:
+  SPRING_PROFILES_ACTIVE: {{ .Values.spring.profiles.active | quote }}
+  LOG_LEVEL_ROOT: {{ .Values.env.LOG_LEVEL_ROOT | quote }}
+  LOG_LEVEL_IO_AGENTSCOPE: {{ .Values.env.LOG_LEVEL_IO_AGENTSCOPE | quote }}
+  JAVA_OPTS: {{ .Values.env.JAVA_OPTS | quote }}
+{{- end }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "agentscope.fullname" . }}-secret
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "agentscope.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  DB_PASSWORD: {{ .Values.secret.dbPassword | quote }}
+  REDIS_PASSWORD: {{ .Values.secret.redisPassword | quote }}
+  DASHSCOPE_API_KEY: {{ .Values.secret.dashscopeApiKey | quote }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "agentscope.fullname" . }}-sa
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "agentscope.labels" . | nindent 4 }}
+{{- with .Values.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "agentscope.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "agentscope.labels" . | nindent 4 }}
+{{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+{{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    {{- range $name, $port := .Values.service.ports }}
+    - name: {{ $name }}
+      port: {{ $port.port }}
+      targetPort: {{ $port.targetPort }}
+      protocol: {{ $port.protocol }}
+    {{- end }}
+  selector:
+    {{- include "agentscope.selectorLabels" . | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agentscope.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "agentscope.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "agentscope.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "agentscope.selectorLabels" . | nindent 8 }}
+      annotations:
+        {{- toYaml .Values.podAnnotations | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "agentscope.fullname" . }}-sa
+      terminationGracePeriodSeconds: 60
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.lifecycle }}
+          {{- if .preStop.enabled }}
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - sh
+                  - -c
+                  - sleep {{ .preStop.sleepSeconds }}
+          {{- end }}
+          {{- end }}
+          ports:
+            {{- range $name, $port := .Values.service.ports }}
+            - name: {{ $name }}
+              containerPort: {{ $port.targetPort }}
+              protocol: {{ $port.protocol }}
+            {{- end }}
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "agentscope.fullname" . }}-config
+                  key: SPRING_PROFILES_ACTIVE
+            - name: JAVA_OPTS
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "agentscope.fullname" . }}-config
+                  key: JAVA_OPTS
+            - name: DB_HOST
+              value: "mysql"
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_NAME
+              value: "agentscope"
+            - name: DB_USERNAME
+              value: "agentscope"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "agentscope.fullname" . }}-secret
+                  key: DB_PASSWORD
+            - name: REDIS_HOST
+              value: "redis"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "agentscope.fullname" . }}-secret
+                  key: REDIS_PASSWORD
+            - name: DASHSCOPE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "agentscope.fullname" . }}-secret
+                  key: DASHSCOPE_API_KEY
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            httpGet:
+              path: {{ .httpGet.path }}
+              port: {{ .httpGet.port }}
+            initialDelaySeconds: {{ .initialDelaySeconds }}
+            periodSeconds: {{ .periodSeconds }}
+            timeoutSeconds: {{ .timeoutSeconds }}
+            failureThreshold: {{ .failureThreshold }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            httpGet:
+              path: {{ .httpGet.path }}
+              port: {{ .httpGet.port }}
+            initialDelaySeconds: {{ .initialDelaySeconds }}
+            periodSeconds: {{ .periodSeconds }}
+            timeoutSeconds: {{ .timeoutSeconds }}
+            failureThreshold: {{ .failureThreshold }}
+          {{- end }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            httpGet:
+              path: {{ .httpGet.path }}
+              port: {{ .httpGet.port }}
+            initialDelaySeconds: {{ .initialDelaySeconds }}
+            periodSeconds: {{ .periodSeconds }}
+            timeoutSeconds: {{ .timeoutSeconds }}
+            failureThreshold: {{ .failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            {{- with .Values.extraVolumeMounts }}
+              {{- toYaml . | nindent 10 }}
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        {{- with .Values.extraVolumes }}
+          {{- toYaml . | nindent 6 }}
+        {{- end }}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+{{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 6 }}
+{{- end }}
+{{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+{{- end }}

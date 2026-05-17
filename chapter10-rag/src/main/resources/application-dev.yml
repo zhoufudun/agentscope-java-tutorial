@@ -1,0 +1,73 @@
+# Development Configuration
+# Use this profile for local development with detailed logging
+
+spring:
+  application:
+    name: chapter10-rag-dev
+
+  # H2 Database - Development Mode
+  datasource:
+    url: jdbc:h2:mem:ragdb_dev;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=MySQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  # H2 Console enabled for development
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  # JPA - Show SQL in development
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+
+# Server Configuration - Development
+server:
+  port: 8080
+
+# RAG Configuration - Development
+rag:
+  embedding:
+    # Use Ollama for local development (no API costs)
+    modelType: OLLAMA
+    modelName: nomic-embed-text
+    dimensions: 768
+    baseUrl: http://localhost:11434
+
+  chunking:
+    strategy: PARAGRAPH
+    chunkSize: 500
+    overlapSize: 50
+    minChunkLength: 10
+    maxChunkLength: 2000
+
+  retrieval:
+    topK: 5
+    scoreThreshold: 0.5
+    hybridSearch: false
+    keywordWeight: 0.3
+
+# Qdrant - Local Development
+qdrant:
+  location: http://localhost:6333
+  collectionName: tutorial_rag_dev
+  dimensions: 768
+  checkCompatibility: true
+
+# Logging - Detailed for Development
+logging:
+  level:
+    root: DEBUG
+    io.agentscope: DEBUG
+    io.agentscope.tutorial: DEBUG
+    io.agentscope.core.rag: DEBUG
+    io.agentscope.core.embedding: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

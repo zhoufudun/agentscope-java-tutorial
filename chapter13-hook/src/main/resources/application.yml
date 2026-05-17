@@ -1,0 +1,71 @@
+spring:
+  application:
+    name: chapter13-hook
+  profiles:
+    active: dev
+
+# AgentScope 配置
+agentscope:
+  # 模型提供者配置（默认 dashscope）
+  model:
+    provider: dashscope
+
+  # DashScope 模型配置
+  dashscope:
+    enabled: true
+    api-key: ${DASHSCOPE_API_KEY:your-api-key}
+    model-name: qwen-plus
+    stream: true
+    enable-thinking: true
+
+  # Agent 配置
+  agent:
+    enabled: true
+    name: "TutorialAgent"
+    sys-prompt: |
+      You are a helpful assistant with access to several tools.
+
+      Available tools:
+      - calculate: Perform mathematical calculations
+      - get_weather: Get weather information for a city
+      - search_info: Search for information on the internet
+
+      Use tools when needed to answer user questions accurately.
+      Always explain your reasoning process.
+    max-iters: 10
+
+# 服务器配置
+server:
+  port: 8080
+
+# 日志配置
+logging:
+  level:
+    io.agentscope: DEBUG
+    io.agentscope.tutorial: INFO
+    AuditLog: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/agentscope.log
+
+# Hook 配置
+tutorial:
+  hook:
+    # 日志钩子配置
+    logging:
+      # 是否记录流式 chunks（可能产生大量日志）
+      log-streaming-chunks: false
+    # 监控钩子配置
+    metrics:
+      # 是否启用详细指标收集
+      detailed: true
+    # 审计钩子配置
+    audit:
+      # 敏感工具列表
+      sensitive-tools:
+        - delete_file
+        - send_email
+        - execute_command
+      # 是否启用严格模式（阻止未授权工具）
+      strict-mode: false

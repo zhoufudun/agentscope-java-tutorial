@@ -1,0 +1,6 @@
+io\agentscope\tutorial\chapter13\HookTest.class
+io\agentscope\tutorial\chapter13\HookTest$MetricsHookTest.class
+io\agentscope\tutorial\chapter13\HookTest$AuditHookTest.class
+io\agentscope\tutorial\chapter13\HookTest$LoggingHookTest.class
+io\agentscope\tutorial\chapter13\HookTest$TimingHookTest.class
+io\agentscope\tutorial\chapter13\HookTest$PriorityTest.class

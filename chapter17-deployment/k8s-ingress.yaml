@@ -1,0 +1,151 @@
+# =============================================================================
+# Kubernetes Ingress Configuration for AgentScope Java
+# =============================================================================
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agentscope-ingress
+  namespace: agentscope
+  labels:
+    app: agentscope
+    environment: production
+  annotations:
+    # Nginx Ingress Controller 配置
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header Host $host;
+      # 限制连接
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      # WebSocket 支持
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+    # 速率限制
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-connections: "50"
+    # CORS 配置（如果需要）
+    # nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    # nginx.ingress.kubernetes.io/cors-allow-methods: "PUT, GET, POST, DELETE, PATCH, OPTIONS"
+    # nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization,Content-Type,Accept,Origin,User-Agent,Cache-Control,Keep-Alive,X-Requested-With"
+    # 熔断器配置
+    nginx.ingress.kubernetes.io/limit-rate: "1000"
+    nginx.ingress.kubernetes.io/limit-rate-after: "100000"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - agentscope.example.com
+      secretName: agentscope-tls-secret
+  rules:
+    - host: agentscope.example.com
+      http:
+        paths:
+          # API 路径
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: agentscope-service
+                port:
+                  number: 8080
+          # Actuator 路径 (限制访问)
+          - path: /actuator
+            pathType: Exact
+            backend:
+              service:
+                name: agentscope-service
+                port:
+                  number: 8080
+          # 根路径
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: agentscope-service
+                port:
+                  number: 8080
+---
+# =============================================================================
+# NetworkPolicy: 限制流量访问
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agentscope-network-policy
+  namespace: agentscope
+  labels:
+    app: agentscope
+    environment: production
+spec:
+  podSelector:
+    matchLabels:
+      app: agentscope
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # 允许来自 Ingress Controller 的流量
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+    # 允许来自 Prometheus 的指标抓取
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # 允许访问 DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    # 允许访问 MySQL
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mysql
+      ports:
+        - protocol: TCP
+          port: 3306
+    # 允许访问 Redis
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # 允许访问外部 API
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80

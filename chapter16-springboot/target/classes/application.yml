@@ -1,0 +1,98 @@
+# =============================================================================
+# Spring Boot 应用配置
+# =============================================================================
+spring:
+  application:
+    name: chapter16-springboot
+
+  profiles:
+    active: dev
+
+  # H2 数据库配置（用于会话管理）
+  datasource:
+    url: jdbc:h2:mem:agent_sessions;DB_CLOSE_DELAY=-1;MODE=MySQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+
+  # H2 Web 控制台（开发时使用，生产建议禁用）
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  # SQL 初始化
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+# =============================================================================
+# 服务器配置
+# =============================================================================
+server:
+  port: 8080
+
+# =============================================================================
+# AgentScope 配置
+# =============================================================================
+agentscope:
+  # 模型提供商配置
+  model:
+    provider: dashscope
+
+  # 阿里云百炼（默认模型）
+  dashscope:
+    enabled: true
+    api-key: ${DASHSCOPE_API_KEY:your-api-key-here}
+    model-name: qwen-plus
+    stream: true
+    enable-thinking: true
+
+  # OpenAI 配置（取消注释以使用）
+  # openai:
+  #   enabled: true
+  #   api-key: ${OPENAI_API_KEY}
+  #   model-name: gpt-4.1-mini
+  #   base-url: https://api.openai.com/v1
+
+  # Google Gemini 配置（取消注释以使用）
+  # gemini:
+  #   enabled: true
+  #   api-key: ${GEMINI_API_KEY}
+  #   model-name: gemini-2.0-flash
+  #   project: your-gcp-project
+  #   location: us-central1
+  #   vertex-ai: false
+
+  # 默认 Agent 配置
+  agent:
+    enabled: true
+    name: "TutorialAgent"
+    sys-prompt: |
+      你是一个专业的AI助手，代号为 TutorialAgent。
+      你具备以下能力：
+      - 回答各类问题
+      - 使用工具获取实时信息（如查询天气）
+      - 进行多轮对话
+      请用中文回答。
+    max-iters: 15
+
+  # Chat Completions API 配置
+  chat-completions:
+    enabled: true
+    base-path: /v1/chat/completions
+
+# =============================================================================
+# 日志配置
+# =============================================================================
+logging:
+  level:
+    root: INFO
+    io.agentscope: DEBUG
+    io.agentscope.tutorial: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

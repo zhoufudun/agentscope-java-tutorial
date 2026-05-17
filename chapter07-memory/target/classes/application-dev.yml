@@ -1,0 +1,51 @@
+spring:
+  application:
+    name: chapter07-memory
+
+  profiles:
+    active: dev
+
+  # MySQL Production Profile
+  datasource:
+    url: jdbc:mysql://localhost:3306/agentscope_memory?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: ${MYSQL_PASSWORD:password}
+
+  jpa:
+    database-platform: org.hibernate.dialect.MySQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  h2:
+    console:
+      enabled: false
+
+  sql:
+    init:
+      mode: never
+
+# Memory Configuration
+memory:
+  # Maximum messages to keep in memory before compression
+  max-messages: 100
+  # Enable memory compression
+  compression-enabled: true
+  # Compression threshold (percentage of max messages)
+  compression-threshold: 0.8
+
+# Model Configuration (DashScope as default)
+model:
+  dashscope:
+    api-key: ${DASHSCOPE_API_KEY:demo-key}
+    base-url: https://dashscope.aliyuncs.com/api/v1
+    default-model: qwen-plus
+
+logging:
+  level:
+    io.agentscope: DEBUG
+    root: INFO

@@ -1,0 +1,261 @@
+# =============================================================================
+# AgentScope Java - Chapter 17: Kubernetes Deployment
+# Deployment 和 Service 配置
+# =============================================================================
+
+---
+# =============================================================================
+# Deployment: AgentScope 应用
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentscope-deployment
+  namespace: agentscope
+  labels:
+    app: agentscope
+    version: v1
+    environment: production
+spec:
+  # 副本数
+  replicas: 3
+  # 滚动更新策略
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  # Selector
+  selector:
+    matchLabels:
+      app: agentscope
+      version: v1
+  # Pod 模板
+  template:
+    metadata:
+      labels:
+        app: agentscope
+        version: v1
+        environment: production
+      annotations:
+        # Prometheus 指标路径
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      # 服务账号
+      serviceAccountName: agentscope-sa
+      # 优雅关闭超时
+      terminationGracePeriodSeconds: 60
+      # 初始化容器 - 等待数据库就绪
+      initContainers:
+        - name: wait-for-mysql
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for MySQL..."
+              until nc -z mysql 3306; do
+                echo "MySQL is not ready, waiting..."
+                sleep 5
+              done
+              echo "MySQL is ready!"
+        - name: wait-for-redis
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for Redis..."
+              until nc -z redis 6379; do
+                echo "Redis is not ready, waiting..."
+                sleep 5
+              done
+              echo "Redis is ready!"
+      # 容器配置
+      containers:
+        - name: agentscope
+          image: agentscope/chapter17-deployment:1.0.0
+          imagePullPolicy: Always
+          # 生命周期钩子 - 优雅关闭
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - sh
+                  - -c
+                  - |
+                    echo "Received shutdown signal, starting graceful shutdown..."
+                    # 等待 ingress/nginx 移除流量
+                    sleep 15
+                    echo "Graceful shutdown completed"
+          # 资源限制
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          # 环境变量
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              valueFrom:
+                configMapKeyRef:
+                  name: agentscope-config
+                  key: SPRING_PROFILES_ACTIVE
+            - name: JAVA_OPTS
+              valueFrom:
+                configMapKeyRef:
+                  name: agentscope-config
+                  key: JAVA_OPTS
+            - name: LOG_LEVEL_ROOT
+              valueFrom:
+                configMapKeyRef:
+                  name: agentscope-config
+                  key: LOG_LEVEL_ROOT
+            - name: DB_HOST
+              value: "mysql"
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_NAME
+              value: "agentscope"
+            - name: DB_USERNAME
+              value: "agentscope"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: agentscope-secret
+                  key: DB_PASSWORD
+            - name: REDIS_HOST
+              value: "redis"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: agentscope-secret
+                  key: REDIS_PASSWORD
+            - name: DASHSCOPE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentscope-secret
+                  key: DASHSCOPE_API_KEY
+          # 端口
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: debug
+              containerPort: 5005
+              protocol: TCP
+          # 健康检查
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          # 挂载卷
+          volumeMounts:
+            - name: app-logs
+              mountPath: /app/logs
+            - name: tmp
+              mountPath: /tmp
+      # 挂载卷
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      # 调度策略
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - agentscope
+                topologyKey: kubernetes.io/hostname
+      # 污点容忍
+      tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "NoSchedule"
+        - key: "node-role.kubernetes.io/master"
+          operator: "Exists"
+          effect: "NoSchedule"
+---
+# =============================================================================
+# Service: ClusterIP 服务
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentscope-service
+  namespace: agentscope
+  labels:
+    app: agentscope
+    environment: production
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+    - name: debug
+      port: 5005
+      targetPort: debug
+      protocol: TCP
+  selector:
+    app: agentscope
+    version: v1
+---
+# =============================================================================
+# Service: NodePort 服务（用于开发/测试）
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentscope-nodeport
+  namespace: agentscope
+  labels:
+    app: agentscope
+    environment: development
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      nodePort: 30080
+      protocol: TCP
+  selector:
+    app: agentscope
+    version: v1

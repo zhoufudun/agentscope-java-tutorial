@@ -1,0 +1,191 @@
+# =============================================================================
+# AgentScope Java - Chapter 17: Production Configuration
+# =============================================================================
+
+spring:
+  application:
+    name: chapter17-deployment
+
+  # 生产环境 Profile
+  profiles:
+    active: prod
+
+  # 数据库配置
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:agentscope}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&cachePrepStmts=true&prepStmtCacheSize=250&prepStmtCacheSqlLimit=2048
+    username: ${DB_USERNAME:agentscope}
+    password: ${DB_PASSWORD:agentscope123}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # HikariCP 连接池配置
+    hikari:
+      pool-name: AgentScope-HikariCP
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      leak-detection-threshold: 60000
+      connection-test-query: SELECT 1
+      auto-commit: true
+      validate-on-borrow: true
+
+  # Redis 配置
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:redis123}
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
+          max-wait: 3000ms
+        shutdown-timeout: 100ms
+
+  # Jackson 配置
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+    default-property-inclusion: non_null
+
+  # Servlet 配置
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+# =============================================================================
+# AgentScope 配置
+# =============================================================================
+agentscope:
+  # 模型提供者配置
+  model:
+    provider: dashscope
+
+  # DashScope 配置
+  dashscope:
+    enabled: true
+    api-key: ${DASHSCOPE_API_KEY:your-api-key}
+    model-name: qwen-turbo
+    stream: true
+    timeout: 60000
+    max-retries: 3
+    retry-delay: 1000
+
+  # Agent 配置
+  agent:
+    enabled: true
+    name: "Assistant"
+    sys-prompt: "你是一个友好的 AI 助手，使用中文回答用户的问题。请简洁明了，答案控制在200字以内。"
+    max-iters: 10
+
+# =============================================================================
+# 服务器配置
+# =============================================================================
+server:
+  port: 8080
+  # 优雅关闭配置
+  shutdown: graceful
+  compression:
+    enabled: true
+    mime-types: text/html,text/xml,text/plain,text/css,application/javascript,application/json
+    min-response-size: 1024
+  http2:
+    enabled: true
+
+# =============================================================================
+# 优雅关闭配置
+# =============================================================================
+spring.lifecycle:
+  timeout-per-shutdown-phase: 60s
+
+# =============================================================================
+# Actuator 配置
+# =============================================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,env,beans,caches,conditions
+      base-path: /actuator
+      # 端点路径配置
+      mapping:
+        health: /actuator/health
+        info: /actuator/info
+        metrics: /actuator/metrics
+        prometheus: /actuator/prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+    prometheus:
+      enabled: true
+    info:
+      enabled: true
+      # 构建信息
+      build:
+        enabled: true
+      git:
+        enabled: true
+  # 健康检查详情
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+    db:
+      enabled: true
+    redis:
+      enabled: true
+  # 指标导出到 Prometheus
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5, 0.95, 0.99
+      slo:
+        http.server.requests: 10ms,50ms,100ms,200ms,500ms,1s
+      sampling:
+        percentage: 10
+
+# =============================================================================
+# 日志配置
+# =============================================================================
+logging:
+  level:
+    root: ${LOG_LEVEL_ROOT:INFO}
+    io.agentscope: ${LOG_LEVEL_IO_AGENTSCOPE:DEBUG}
+    org.springframework: INFO
+    org.apache.catalina: WARN
+    com.zaxxer.hikari: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: ${LOG_FILE:/app/logs/application.log}
+    max-size: 100MB
+    max-history: 30
+    total-size-cap: 10GB
+
+# =============================================================================
+# 生产环境特定配置
+# =============================================================================
+production:
+  rate-limiting-enabled: true
+  max-concurrent-requests: 100
+  request-timeout-ms: 30000
+  cache:
+    enabled: true
+    max-size: 1000
+    ttl-seconds: 3600

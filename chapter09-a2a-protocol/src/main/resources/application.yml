@@ -1,0 +1,58 @@
+# Application Configuration
+# AgentScope Java Tutorial - Chapter 09: A2A Protocol
+
+spring:
+  application:
+    name: chapter09-a2a-protocol
+
+  # Jackson configuration
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+
+# Server Configuration
+server:
+  port: 8888
+  address: 0.0.0.0
+
+# A2A Protocol Configuration
+a2a:
+  # Server Configuration
+  server:
+    # Transport protocol (JSONRPC, etc.)
+    transport: JSONRPC
+    # Agent Card configuration
+    agent-card:
+      name: tutorial-a2a-agent
+      description: Tutorial agent demonstrating A2A protocol communication
+      version: 1.0.0
+      provider:
+        name: AgentScope Team
+        url: https://agentscope.io
+
+  # Client Configuration
+  client:
+    # Base URL for the remote agent
+    base-url: http://localhost:8888
+    # Well-known path for AgentCard
+    agent-card-path: /.well-known/agent-card.json
+    # Remote agent name
+    agent-name: tutorial-a2a-agent
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    io.agentscope: DEBUG
+    io.a2a: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# Management endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

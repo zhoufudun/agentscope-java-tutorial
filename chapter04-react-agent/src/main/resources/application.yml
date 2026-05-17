@@ -1,0 +1,25 @@
+# AgentScope Java 教程 - 第四章配置
+spring:
+  application:
+    name: agentscope-chapter04-tutorial
+
+  # HTTP 服务器配置
+  server:
+    port: 8080
+
+# AgentScope 配置
+agentscope:
+  model:
+    # 使用环境变量或默认值
+    api-key: ${DASHSCOPE_API_KEY:EMPTY}
+    model-name: ${MODEL_NAME:qwen-plus}
+    base-url: ${BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    io.agentscope: DEBUG
+    io.agentscope.tutorial: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

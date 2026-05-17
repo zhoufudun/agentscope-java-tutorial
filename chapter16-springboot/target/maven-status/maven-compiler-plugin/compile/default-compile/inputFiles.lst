@@ -1,0 +1,13 @@
+D:\Work\ai\agents\agentscope-java\tutorial\chapter16-springboot\src\main\java\io\agentscope\tutorial\chapter16\Chapter16Application.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter16-springboot\src\main\java\io\agentscope\tutorial\chapter16\config\AgentScopeAutoConfig.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter16-springboot\src\main\java\io\agentscope\tutorial\chapter16\config\ToolConfig.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter16-springboot\src\main\java\io\agentscope\tutorial\chapter16\controller\ChatController.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter16-springboot\src\main\java\io\agentscope\tutorial\chapter16\controller\HealthController.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter16-springboot\src\main\java\io\agentscope\tutorial\chapter16\controller\SessionController.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter16-springboot\src\main\java\io\agentscope\tutorial\chapter16\dto\ChatRequest.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter16-springboot\src\main\java\io\agentscope\tutorial\chapter16\dto\ChatResponse.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter16-springboot\src\main\java\io\agentscope\tutorial\chapter16\model\entity\SessionMessage.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter16-springboot\src\main\java\io\agentscope\tutorial\chapter16\repository\SessionRepository.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter16-springboot\src\main\java\io\agentscope\tutorial\chapter16\service\ChatService.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter16-springboot\src\main\java\io\agentscope\tutorial\chapter16\service\H2SessionManager.java
+D:\Work\ai\agents\agentscope-java\tutorial\chapter16-springboot\src\main\java\io\agentscope\tutorial\chapter16\tool\WeatherTools.java
