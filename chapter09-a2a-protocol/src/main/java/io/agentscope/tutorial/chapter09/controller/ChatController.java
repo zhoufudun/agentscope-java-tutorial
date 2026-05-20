@@ -17,10 +17,11 @@
 package io.agentscope.tutorial.chapter09.controller;
 
 import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.tutorial.chapter09.client.AgentClient;
 import io.agentscope.tutorial.chapter09.server.AgentServer;
-import org.springframework.beans.factory.annotation.自动注入;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -105,7 +106,10 @@ public class ChatController {
                     : UUID.randomUUID().toString();
 
             // Create message
-            Msg message = Msg.of(request.getMessage(), contextId);
+            Msg message = Msg.builder()
+                    .role(MsgRole.USER)
+                    .content(TextBlock.builder().text(request.getMessage()).build())
+                    .build();
 
             // Send to remote agent
             Msg response = agentClient.chat(message);
@@ -149,7 +153,7 @@ public class ChatController {
      */
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter streamChat(
-            @Request参数 String message,
+            @RequestParam String message,
             @RequestParam(required = false) String contextId) {
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);

@@ -7,7 +7,7 @@ import io.agentscope.core.model.ChatResponse;
 import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.model.Model;
 import io.agentscope.tutorial.chapter06.config.AgentConfig;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -24,7 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Service
 @Slf4j
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 public class ChatService {
 
     private final ModelService modelService;
@@ -52,7 +52,7 @@ public class ChatService {
         List<Msg> messages = List.of(
                 Msg.builder()
                         .role(MsgRole.SYSTEM)
-                        .content(TextBlock.builder().text(agentConfig.get默认SystemPrompt()).build())
+                        .content(TextBlock.builder().text(agentConfig.getDefaultSystemPrompt()).build())
                         .build(),
                 Msg.builder()
                         .role(MsgRole.USER)
@@ -61,8 +61,8 @@ public class ChatService {
         );
 
         GenerateOptions effectiveOptions = options != null ? options : GenerateOptions.builder()
-                .temperature(agentConfig.get默认Temperature())
-                .maxTokens(agentConfig.get默认MaxTokens())
+                .temperature(agentConfig.getDefaultTemperature())
+                .maxTokens(agentConfig.getDefaultMaxTokens())
                 .build();
 
         try {
@@ -84,14 +84,14 @@ public class ChatService {
             throw new IllegalArgumentException("Model not found: " + provider + ":" + modelName);
         }
 
-        List<Msg> history = conversationHistory.getOr默认(sessionId, List.of());
+        List<Msg> history = conversationHistory.getOrDefault(sessionId, List.of());
         List<Msg> messages;
 
         if (includeSystemPrompt) {
             messages = List.of(
                     Msg.builder()
                             .role(MsgRole.SYSTEM)
-                            .content(TextBlock.builder().text(agentConfig.get默认SystemPrompt()).build())
+                            .content(TextBlock.builder().text(agentConfig.getDefaultSystemPrompt()).build())
                             .build()
             );
         } else {
@@ -109,8 +109,8 @@ public class ChatService {
                 .build());
 
         GenerateOptions options = GenerateOptions.builder()
-                .temperature(agentConfig.get默认Temperature())
-                .maxTokens(agentConfig.get默认MaxTokens())
+                .temperature(agentConfig.getDefaultTemperature())
+                .maxTokens(agentConfig.getDefaultMaxTokens())
                 .build();
 
         try {
@@ -128,7 +128,7 @@ public class ChatService {
                 saveToHistory(sessionId,
                         Msg.builder()
                                 .role(MsgRole.ASSISTANT)
-                                .content(TextBlock.builder().text(response.getContent().getText()).build())
+                                .content(TextBlock.builder().text(extractText(response)).build())
                                 .build()
                 );
             }
@@ -160,7 +160,7 @@ public class ChatService {
         List<Msg> messages = List.of(
                 Msg.builder()
                         .role(MsgRole.SYSTEM)
-                        .content(TextBlock.builder().text(agentConfig.get默认SystemPrompt()).build())
+                        .content(TextBlock.builder().text(agentConfig.getDefaultSystemPrompt()).build())
                         .build(),
                 Msg.builder()
                         .role(MsgRole.USER)
@@ -169,8 +169,8 @@ public class ChatService {
         );
 
         GenerateOptions effectiveOptions = options != null ? options : GenerateOptions.builder()
-                .temperature(agentConfig.get默认Temperature())
-                .maxTokens(agentConfig.get默认MaxTokens())
+                .temperature(agentConfig.getDefaultTemperature())
+                .maxTokens(agentConfig.getDefaultMaxTokens())
                 .build();
 
         return model.stream(messages, null, effectiveOptions);
@@ -196,6 +196,22 @@ public class ChatService {
      * Get conversation history
      */
     public List<Msg> getHistory(String sessionId) {
-        return conversationHistory.getOr默认(sessionId, List.of());
+        return conversationHistory.getOrDefault(sessionId, List.of());
+    }
+
+    /**
+     * Extract text content from ChatResponse
+     */
+    private String extractText(ChatResponse response) {
+        if (response == null || response.getContent() == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (io.agentscope.core.message.ContentBlock block : response.getContent()) {
+            if (block instanceof io.agentscope.core.message.TextBlock textBlock) {
+                sb.append(textBlock.getText());
+            }
+        }
+        return sb.toString();
     }
 }

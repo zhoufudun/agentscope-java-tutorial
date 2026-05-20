@@ -19,11 +19,13 @@ import io.agentscope.core.ReActAgent;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * REST Controller for AgentScope chat endpoints in Spring Boot.
@@ -49,10 +51,11 @@ import java.util.Map;
  *
  * @author AgentScope Tutorial
  */
-@Slf4j
 @RestController
 @RequestMapping("/api")
 public class ChatController {
+
+    private static final Logger log = LoggerFactory.getLogger(ChatController.class);
 
     /** The auto-configured ReActAgent. */
     private final ReActAgent agent;
@@ -87,7 +90,7 @@ public class ChatController {
                     .content(TextBlock.builder().text(request.message()).build())
                     .build();
 
-            Msg response = agent.call(userMsg).block();
+            Msg response = agent.call(List.of(userMsg)).block();
 
             String responseText = response != null ? response.getTextContent() : "No response";
 
@@ -139,7 +142,7 @@ public class ChatController {
                     .content(TextBlock.builder().text(conversation.toString()).build())
                     .build();
 
-            Msg response = agent.call(userMsg).block();
+            Msg response = agent.call(List.of(userMsg)).block();
             String responseText = response != null ? response.getTextContent() : "No response";
 
             return ResponseEntity.ok(new ChatResponse(responseText));
@@ -165,7 +168,7 @@ public class ChatController {
      *
      * @param messages list of messages to send as a conversation
      */
-    public record MultiChatRequest(java.util.List<String> messages) {}
+    public record MultiChatRequest(List<String> messages) {}
 
     /**
      * Chat response DTO.

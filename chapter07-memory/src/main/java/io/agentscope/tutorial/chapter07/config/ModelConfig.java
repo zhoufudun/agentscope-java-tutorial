@@ -41,7 +41,7 @@ public class ModelConfig {
         return DashScopeChatModel.builder()
                 .apiKey(dashscope.getApiKey())
                 .baseUrl(dashscope.getBaseUrl())
-                .modelName(dashscope.get默认Model())
+                .modelName(dashscope.getDefaultModel())
                 .formatter(new DashScopeChatFormatter())
                 .stream(true)
                 .build();

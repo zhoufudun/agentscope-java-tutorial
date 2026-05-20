@@ -5,7 +5,7 @@ import io.agentscope.core.memory.InMemoryMemory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.beans.factory.annotation.自动注入;
+import org.springframework.beans.factory.annotation.Autowired;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.state.StatePersistence;

@@ -11,9 +11,10 @@ import io.agentscope.core.message.*;
 import io.agentscope.core.model.DashScopeChatModel;
 import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.plan.PlanNotebook;
-import io.agentscope.core.plan.hint.默认PlanToHint;
+import io.agentscope.core.plan.hint.DefaultPlanToHint;
 import io.agentscope.core.plan.storage.PlanStorage;
 import io.agentscope.core.tool.Toolkit;
+import reactor.core.publisher.Mono;
 import io.agentscope.core.tool.coding.ShellCommandTool;
 import io.agentscope.core.tool.file.ReadFileTool;
 import io.agentscope.core.tool.file.WriteFileTool;
@@ -102,7 +103,7 @@ public class PlanConfig {
         // Shell 命令工具（白名单限制）
         toolkit.registerTool(new ShellCommandTool(workspaceRoot, SHELL_COMMAND_WHITELIST, null));
 
-        log.info("Toolkit initialized with {} tools", toolkit.getTools().size());
+        log.info("Toolkit initialized with {} tools", toolkit.getToolNames().size());
         return toolkit;
     }
 
@@ -115,7 +116,7 @@ public class PlanConfig {
     @Bean
     public PlanNotebook planNotebook(PlanService planService) {
         PlanNotebook notebook = PlanNotebook.builder()
-                .planToHint(new 默认PlanToHint())
+                .planToHint(new DefaultPlanToHint())
                 .storage(planService)  // 使用 PlanService 作为存储后端
                 .needUserConfirm(true)
                 .maxSubtasks(15)

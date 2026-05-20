@@ -75,7 +75,7 @@ public class ApprovalController {
     @PostMapping("/{id}")
     public ResponseEntity<Map<String, Object>> approve(
             @PathVariable Long id,
-            @Request参数 boolean approved,
+            @RequestParam boolean approved,
             @RequestParam(defaultValue = "admin") String approver,
             @RequestParam(required = false) String comment) {
 
@@ -103,7 +103,7 @@ public class ApprovalController {
     public ResponseEntity<Map<String, Object>> approveByToolCallId(
             @PathVariable String sessionId,
             @PathVariable String toolCallId,
-            @Request参数 boolean approved,
+            @RequestParam boolean approved,
             @RequestParam(defaultValue = "admin") String approver,
             @RequestParam(required = false) String comment) {
 

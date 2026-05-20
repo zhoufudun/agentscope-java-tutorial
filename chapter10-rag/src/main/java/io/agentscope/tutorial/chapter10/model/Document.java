@@ -15,10 +15,10 @@
  */
 package io.agentscope.tutorial.chapter10.model;
 
-import lombok.AllArgs构造函数;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgs构造函数;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -31,8 +31,8 @@ import java.util.Map;
  */
 @Data
 @Builder
-@NoArgs构造函数
-@AllArgs构造函数
+@NoArgsConstructor
+@AllArgsConstructor
 public class Document {
 
     /**

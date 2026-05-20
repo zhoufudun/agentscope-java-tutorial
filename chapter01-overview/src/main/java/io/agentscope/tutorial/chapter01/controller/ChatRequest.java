@@ -16,10 +16,10 @@
 package io.agentscope.tutorial.chapter01.controller;
 
 import jakarta.validation.constraints.NotBlank;
-import lombok.AllArgs构造函数;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgs构造函数;
+import lombok.NoArgsConstructor;
 
 /**
  * 聊天请求类.
@@ -37,8 +37,8 @@ import lombok.NoArgs构造函数;
  */
 @Data
 @Builder
-@NoArgs构造函数
-@AllArgs构造函数
+@NoArgsConstructor
+@AllArgsConstructor
 public class ChatRequest {
 
     /**

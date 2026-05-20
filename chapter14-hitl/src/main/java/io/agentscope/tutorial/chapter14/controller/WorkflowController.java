@@ -38,9 +38,9 @@ public class WorkflowController {
      */
     @PostMapping(value = "/resume", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<Map<String, Object>>> resume(
-            @Request参数 String sessionId,
-            @Request参数 String toolCallId,
-            @Request参数 boolean approved,
+            @RequestParam String sessionId,
+            @RequestParam String toolCallId,
+            @RequestParam boolean approved,
             @RequestParam(defaultValue = "admin") String approver,
             @RequestParam(required = false) String comment) {
 

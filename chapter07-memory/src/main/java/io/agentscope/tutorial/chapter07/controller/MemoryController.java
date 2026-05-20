@@ -100,7 +100,7 @@ public class MemoryController {
     @GetMapping("/search")
     public ResponseEntity<Map<String, Object>> search(
             @RequestParam(defaultValue = "default") String sessionId,
-            @Request参数 String keyword,
+            @RequestParam String keyword,
             @RequestParam(defaultValue = "false") boolean acrossSessions) {
 
         List<MemoryRecord> results;

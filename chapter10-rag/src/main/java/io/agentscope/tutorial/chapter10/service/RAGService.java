@@ -18,7 +18,7 @@ package io.agentscope.tutorial.chapter10.service;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.rag.model.Document;
 import io.agentscope.tutorial.chapter10.config.RAGConfig;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -61,7 +61,7 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 public class RAGService {
 
     private final RAGConfig ragConfig;
@@ -75,7 +75,7 @@ public class RAGService {
      * @return CompletableFuture containing the RAG result
      */
     public CompletableFuture<RAGResult> query(String query) {
-        return query(query, RAGConfig.RetrievalConfig.builder().build());
+        return query(query, new RAGConfig.RetrievalConfig());
     }
 
     /**

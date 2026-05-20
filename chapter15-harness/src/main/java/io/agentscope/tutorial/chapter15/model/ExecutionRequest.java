@@ -3,10 +3,10 @@ package io.agentscope.tutorial.chapter15.model;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import lombok.AllArgs构造函数;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgs构造函数;
+import lombok.NoArgsConstructor;
 
 /**
  * Code execution request model.
@@ -18,24 +18,24 @@ import lombok.NoArgs构造函数;
  */
 @Data
 @Builder
-@NoArgs构造函数
-@AllArgs构造函数
+@NoArgsConstructor
+@AllArgsConstructor
 public class ExecutionRequest {
 
     @NotBlank(message = "Code cannot be blank")
     private String code;
 
-    @Builder.默认
+    @Builder.Default
     private String language = "java";
 
     @Min(value = 1, message = "Timeout must be at least 1 second")
     @Max(value = 300, message = "Timeout cannot exceed 300 seconds")
-    @Builder.默认
+    @Builder.Default
     private Integer timeoutSeconds = 60;
 
-    @Builder.默认
+    @Builder.Default
     private String workspace = "default";
 
-    @Builder.默认
+    @Builder.Default
     private Boolean captureOutput = true;
 }

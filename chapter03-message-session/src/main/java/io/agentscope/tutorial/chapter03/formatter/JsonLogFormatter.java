@@ -88,7 +88,7 @@ public class JsonLogFormatter
             blockMap.put("text", textBlock.getText());
         } else if (block instanceof ImageBlock imageBlock) {
             blockMap.put("type", "image");
-            blockMap.put("mediaType", imageBlock.getMediaType());
+            blockMap.put("mediaType", "image/*");
             Source source = imageBlock.getSource();
             if (source instanceof URLSource urlSource) {
                 blockMap.put("url", urlSource.getUrl());
@@ -134,12 +134,9 @@ public class JsonLogFormatter
     public ChatResponse parseResponse(Map<String, Object> response, Instant startTime) {
         Object content = response.get("content");
         String textContent = content instanceof String ? (String) content : String.valueOf(content);
-        return ChatResponse.builder()
-                .message(Msg.builder()
-                        .role(MsgRole.ASSISTANT)
-                        .textContent(textContent != null ? textContent : "")
-                        .build())
-                .build();
+        // 使用 TextBlock 作为 ContentBlock
+        TextBlock textBlock = TextBlock.builder().text(textContent != null ? textContent : "").build();
+        return ChatResponse.builder().content(List.of(textBlock)).build();
     }
 
     @Override
@@ -260,7 +257,7 @@ public class JsonLogFormatter
         List<Map<String, Object>> maps = doFormat(messages);
         try {
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            return mapper.writerWith默认PrettyPrinter().writeValueAsString(maps);
+            return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(maps);
         } catch (Exception e) {
             return formatMessagesToString(messages);
         }

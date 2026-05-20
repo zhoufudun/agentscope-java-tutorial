@@ -4,7 +4,7 @@ import io.agentscope.core.model.Model;
 import io.agentscope.tutorial.chapter06.config.ModelConfig;
 import io.agentscope.tutorial.chapter06.service.ModelService;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.自动注入;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
@@ -136,16 +136,16 @@ class ModelServiceTest {
 
         // Verify DashScope config
         assertEquals("https://dashscope.aliyuncs.com/api/v1", modelConfig.getDashscope().getBaseUrl());
-        assertEquals("qwen-plus", modelConfig.getDashscope().get默认Model());
+        assertEquals("qwen-plus", modelConfig.getDashscope().getDefaultModel());
 
         // Verify OpenAI config
         assertEquals("https://api.openai.com/v1", modelConfig.getOpenai().getBaseUrl());
-        assertEquals("gpt-4o", modelConfig.getOpenai().get默认Model());
+        assertEquals("gpt-4o", modelConfig.getOpenai().getDefaultModel());
 
         // Verify Ollama config
         assertEquals("http://localhost:11434", modelConfig.getOllama().getBaseUrl());
 
         // Verify Gemini config
-        assertEquals("gemini-2.0-flash", modelConfig.getGemini().get默认Model());
+        assertEquals("gemini-2.0-flash", modelConfig.getGemini().getDefaultModel());
     }
 }

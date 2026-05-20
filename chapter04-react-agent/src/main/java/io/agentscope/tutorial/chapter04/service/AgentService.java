@@ -23,8 +23,8 @@ import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ToolResultBlock;
-import io.agentscope.core.tool.ToolUseBlock;
-import io.github.pivistechaopeng.commons.lang3.StringUtils;
+import io.agentscope.core.message.ContentBlock;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -72,7 +72,7 @@ public class AgentService {
 
         return agent.call(userMsg)
                 .map(response -> {
-                    String content = response.getContentAsString();
+                    String content = response.getTextContent();
                     log.info("Agent 响应长度: {} 字符", content.length());
                     return content;
                 })
@@ -98,17 +98,17 @@ public class AgentService {
                 .build();
 
         StreamOptions options = StreamOptions.builder()
-                .stream(EventType.REASONING)
-                .stream(EventType.TOOL_RESULT)
-                .stream(EventType.AGENT_RESULT)
+                .eventTypes(EventType.REASONING, EventType.TOOL_RESULT, EventType.AGENT_RESULT)
                 .build();
 
         return agent.stream(userMsg, options)
-                .map(event -> Map.of(
-                        "type", event.getType().name(),
-                        "content", formatEventContent(event),
-                        "timestamp", java.time.Instant.now().toString()
-                ))
+                .map(event -> {
+                    Map<String, Object> result = new java.util.HashMap<>();
+                    result.put("type", event.getType().name());
+                    result.put("content", formatEventContent(event));
+                    result.put("timestamp", java.time.Instant.now().toString());
+                    return result;
+                })
                 .doOnComplete(() -> log.info("流式响应完成"))
                 .doOnError(e -> log.error("流式响应出错", e));
     }
@@ -123,7 +123,7 @@ public class AgentService {
                 .map(msg -> Map.of(
                         "role", msg.getRole().name(),
                         "name", msg.getName() != null ? msg.getName() : "",
-                        "content", msg.getContentAsString()
+                        "content", msg.getTextContent()
                 ))
                 .toList();
     }
@@ -174,7 +174,7 @@ public class AgentService {
         if (msg == null) return "";
 
         return switch (event.getType()) {
-            case REASONING -> msg.getContentAsString();
+            case REASONING -> msg.getTextContent();
             case TOOL_RESULT -> {
                 List<ToolResultBlock> toolResults = msg.getContentBlocks(ToolResultBlock.class);
                 if (!toolResults.isEmpty()) {
@@ -182,9 +182,9 @@ public class AgentService {
                 }
                 yield "";
             }
-            case HINT -> msg.getContentAsString();
-            case AGENT_RESULT -> msg.getContentAsString();
-            case SUMMARY -> msg.getContentAsString();
+            case HINT -> msg.getTextContent();
+            case AGENT_RESULT -> msg.getTextContent();
+            case SUMMARY -> msg.getTextContent();
             default -> "";
         };
     }

@@ -82,7 +82,7 @@ public class AuditHook implements Hook {
         public String getStartTimeFormatted() {
             return LocalDateTime.ofInstant(
                     Instant.ofEpochMilli(startTime),
-                    java.time.ZoneId.system默认()
+                    java.time.ZoneId.systemDefault()
             ).format(DT_FORMATTER);
         }
     }
@@ -231,7 +231,7 @@ public class AuditHook implements Hook {
                         entity.setOutputContent(updatedRecord.output());
                         entity.setStartTime(LocalDateTime.ofInstant(
                                 Instant.ofEpochMilli(updatedRecord.startTime()),
-                                java.time.ZoneId.system默认()));
+                                java.time.ZoneId.systemDefault()));
                         entity.setDurationMs(updatedRecord.durationMs());
                         entity.setSensitive(updatedRecord.sensitive());
                         entity.setBlocked(updatedRecord.blocked());

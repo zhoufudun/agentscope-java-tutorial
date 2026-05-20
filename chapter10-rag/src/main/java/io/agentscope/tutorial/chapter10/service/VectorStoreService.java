@@ -23,7 +23,7 @@ import io.agentscope.core.rag.store.dto.SearchDocumentDto;
 import io.agentscope.tutorial.chapter10.config.QdrantConfig;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -51,7 +51,7 @@ import java.util.concurrent.CompletableFuture;
  */
 @Slf4j
 @Service
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 public class VectorStoreService {
 
     private final QdrantConfig qdrantConfig;
@@ -201,11 +201,9 @@ public class VectorStoreService {
                 payload
         );
 
-        return io.agentscope.core.rag.model.Document.builder()
-                .id(UUID.randomUUID().toString())
-                .metadata(metadata)
-                .embedding(embedding)
-                .build();
+        Document doc = new io.agentscope.core.rag.model.Document(metadata);
+        doc.setEmbedding(embedding);
+        return doc;
     }
 
     /**

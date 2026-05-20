@@ -15,13 +15,13 @@
  */
 package io.agentscope.tutorial.chapter17.controller;
 
-import io.agentscope.agent.ReActAgent;
-import io.agentscope.model.Memory;
+import io.agentscope.core.ReActAgent;
+import io.agentscope.core.memory.Memory;
 import io.agentscope.tutorial.chapter17.config.ProductionConfig;
 import io.agentscope.tutorial.chapter17.service.ChatService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -50,7 +50,7 @@ import java.util.concurrent.Executors;
  */
 @RestController
 @RequestMapping("/api/v1")
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 @Slf4j
 public class ChatController {
 
@@ -131,8 +131,8 @@ public class ChatController {
     @GetMapping(value = "/chat/stream/{sessionId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter streamChat(
             @PathVariable String sessionId,
-            @Request参数 @NotBlank String userId,
-            @Request参数 @NotBlank String message,
+            @RequestParam @NotBlank String userId,
+            @RequestParam @NotBlank String message,
             ReActAgent agent) {
 
         log.info("Received stream chat request - userId: {}, sessionId: {}", userId, sessionId);
@@ -249,7 +249,7 @@ public class ChatController {
         private final Memory memory;
 
         public SessionContext() {
-            this.memory = new io.agentscope.model.InMemoryMemory();
+            this.memory = new io.agentscope.core.memory.InMemoryMemory();
         }
 
         public Memory getMemory() {

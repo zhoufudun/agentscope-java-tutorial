@@ -15,12 +15,12 @@
  */
 package io.agentscope.tutorial.chapter19.boba.service;
 
+import io.agentscope.core.message.ToolResultBlock;
 import io.agentscope.core.tool.Tool;
-import io.agentscope.core.tool.ToolResult;
-import io.agentscope.core.tool.ToolSpec;
+import io.agentscope.core.tool.ToolParam;
 import io.agentscope.tutorial.chapter19.boba.barista.BaristaAgent;
 import io.agentscope.tutorial.chapter19.boba.cashier.CashierAgent;
-import org.springframework.beans.factory.annotation.自动注入;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -81,148 +81,73 @@ public class BobaOrderService {
     }
 
     /**
-     * 获取工具规格列表
-     */
-    public static List<ToolSpec> getToolSpecs() {
-        return List.of(
-                ToolSpec.builder()
-                        .name("process_payment")
-                        .description("处理顾客付款，确认订单完成")
-                        .paramSpec("""
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "amount": {
-                                            "type": "number",
-                                            "description": "付款金额"
-                                        },
-                                        "payment_method": {
-                                            "type": "string",
-                                            "description": "付款方式（wechat/alipay/cash）"
-                                        }
-                                    },
-                                    "required": ["amount", "payment_method"]
-                                }
-                                """)
-                        .build(),
-
-                ToolSpec.builder()
-                        .name("make_drink")
-                        .description("根据订单制作饮品")
-                        .paramSpec("""
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "order_details": {
-                                            "type": "string",
-                                            "description": "订单详情，包含饮品名称、甜度、冰度、加料等"
-                                        }
-                                    },
-                                    "required": ["order_details"]
-                                }
-                                """)
-                        .build(),
-
-                ToolSpec.builder()
-                        .name("check_stock")
-                        .description("检查原料库存")
-                        .paramSpec("""
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "ingredient": {
-                                            "type": "string",
-                                            "description": "原料名称（珍珠/椰果/波霸/芋圆/茶底/奶盖）"
-                                        }
-                                    },
-                                    "required": ["ingredient"]
-                                }
-                                """)
-                        .build(),
-
-                ToolSpec.builder()
-                        .name("generate_order_id")
-                        .description("生成唯一订单号")
-                        .paramSpec("""
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "drink_name": {
-                                            "type": "string",
-                                            "description": "饮品名称"
-                                        }
-                                    },
-                                    "required": ["drink_name"]
-                                }
-                                """)
-                        .build()
-        );
-    }
-
-    /**
      * 处理付款工具方法
      */
-    public ToolResult processPayment(double amount, String paymentMethod) {
+    @Tool(name = "process_payment", description = "处理顾客付款，确认订单完成")
+    public ToolResultBlock processPayment(
+            @ToolParam(name = "amount", description = "付款金额") double amount,
+            @ToolParam(name = "payment_method", description = "付款方式（wechat/alipay/cash）") String paymentMethod) {
         try {
             String result = cashierAgent.processPayment(amount, paymentMethod);
             if (result.contains("成功") || result.contains("完成")) {
-                return ToolResult.success("付款处理完成", result);
+                return ToolResultBlock.text(result);
             } else {
-                return ToolResult.failure("付款处理失败：" + result);
+                return ToolResultBlock.error("付款处理失败：" + result);
             }
         } catch (Exception e) {
-            return ToolResult.failure("付款处理异常：" + e.getMessage());
+            return ToolResultBlock.error("付款处理异常：" + e.getMessage());
         }
     }
 
     /**
      * 制作饮品工具方法
      */
-    public ToolResult makeDrink(String orderDetails) {
+    @Tool(name = "make_drink", description = "根据订单制作饮品")
+    public ToolResultBlock makeDrink(
+            @ToolParam(name = "order_details", description = "订单详情，包含饮品名称、甜度、冰度、加料等") String orderDetails) {
         try {
             String result = baristaAgent.makeDrink(orderDetails);
             if (result.contains("完成") || result.contains("好")) {
-                return ToolResult.success("饮品制作完成", result);
+                return ToolResultBlock.text(result);
             } else {
-                return ToolResult.success("饮品制作中", result);
+                return ToolResultBlock.text("饮品制作中: " + result);
             }
         } catch (Exception e) {
-            return ToolResult.failure("制作饮品异常：" + e.getMessage());
+            return ToolResultBlock.error("制作饮品异常：" + e.getMessage());
         }
     }
 
     /**
      * 检查库存工具方法
      */
-    public ToolResult checkStock(String ingredient) {
+    @Tool(name = "check_stock", description = "检查原料库存")
+    public ToolResultBlock checkStock(
+            @ToolParam(name = "ingredient", description = "原料名称（珍珠/椰果/波霸/芋圆/茶底/奶盖）") String ingredient) {
         Integer quantity = stock.get(ingredient);
         if (quantity != null) {
             if (quantity > 20) {
-                return ToolResult.success("库存充足",
-                        String.format("原料 '%s' 库存：%d 单位，库存充足", ingredient, quantity));
+                return ToolResultBlock.text(String.format("原料 '%s' 库存：%d 单位，库存充足", ingredient, quantity));
             } else if (quantity > 0) {
-                return ToolResult.success("库存不足",
-                        String.format("原料 '%s' 库存：%d 单位，库存不足，建议补货", ingredient, quantity));
+                return ToolResultBlock.text(String.format("原料 '%s' 库存：%d 单位，库存不足，建议补货", ingredient, quantity));
             } else {
-                return ToolResult.success("缺货",
-                        String.format("原料 '%s' 已缺货，请立即补货", ingredient));
+                return ToolResultBlock.text(String.format("原料 '%s' 已缺货，请立即补货", ingredient));
             }
         } else {
-            return ToolResult.failure("未知原料",
-                    String.format("原料 '%s' 不在库存列表中", ingredient));
+            return ToolResultBlock.error(String.format("原料 '%s' 不在库存列表中", ingredient));
         }
     }
 
     /**
      * 生成订单号工具方法
      */
-    public ToolResult generateOrderId(String drinkName) {
+    @Tool(name = "generate_order_id", description = "生成唯一订单号")
+    public ToolResultBlock generateOrderId(
+            @ToolParam(name = "drink_name", description = "饮品名称") String drinkName) {
         try {
             String orderId = cashierAgent.generateOrderId(drinkName);
-            return ToolResult.success("订单号生成成功",
-                    String.format("订单号：%s，饮品：%s", orderId, drinkName));
+            return ToolResultBlock.text(String.format("订单号：%s，饮品：%s", orderId, drinkName));
         } catch (Exception e) {
-            return ToolResult.failure("生成订单号失败：" + e.getMessage());
+            return ToolResultBlock.error("生成订单号失败：" + e.getMessage());
         }
     }
 
@@ -234,10 +159,10 @@ public class BobaOrderService {
      * @return 总价
      */
     public double calculatePrice(String drinkName, List<String> toppings) {
-        double price = PRICES.getOr默认(drinkName, 0.0);
+        double price = PRICES.getOrDefault(drinkName, 0.0);
         if (toppings != null) {
             for (String topping : toppings) {
-                price += TOPPING_PRICES.getOr默认(topping, 0.0);
+                price += TOPPING_PRICES.getOrDefault(topping, 0.0);
             }
         }
         return price;

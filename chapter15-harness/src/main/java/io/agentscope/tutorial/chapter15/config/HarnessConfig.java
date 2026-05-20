@@ -46,7 +46,7 @@ public class HarnessConfig {
      */
     public int getEffectiveTimeout(Integer requestedTimeout) {
         if (requestedTimeout == null) {
-            return sandbox.get默认Timeout();
+            return sandbox.getDefaultTimeout();
         }
         return Math.min(requestedTimeout, sandbox.getMaxTimeout());
     }

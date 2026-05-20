@@ -15,13 +15,13 @@
  */
 package io.agentscope.tutorial.chapter17.controller;
 
-import io.agentscope.agent.ReActAgent;
+import io.agentscope.core.ReActAgent;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import lombok.AllArgs构造函数;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgs构造函数;
+import lombok.NoArgsConstructor;
 
 /**
  * 聊天请求 DTO.
@@ -31,8 +31,8 @@ import lombok.NoArgs构造函数;
  */
 @Data
 @Builder
-@NoArgs构造函数
-@AllArgs构造函数
+@NoArgsConstructor
+@AllArgsConstructor
 public class ChatRequest {
 
     /**
@@ -69,8 +69,8 @@ public class ChatRequest {
      */
     @Data
     @Builder
-    @NoArgs构造函数
-    @AllArgs构造函数
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class ChatOptions {
         /**
          * 最大 token 数.

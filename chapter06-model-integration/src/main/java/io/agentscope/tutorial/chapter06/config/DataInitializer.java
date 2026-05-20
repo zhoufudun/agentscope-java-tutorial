@@ -4,7 +4,7 @@ import io.agentscope.tutorial.chapter06.entity.ChatConfig;
 import io.agentscope.tutorial.chapter06.entity.ModelProvider;
 import io.agentscope.tutorial.chapter06.repository.ChatConfigRepository;
 import io.agentscope.tutorial.chapter06.repository.ModelProviderRepository;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
  * Initializes default model provider configuration on application startup
  */
 @Component
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 @Slf4j
 public class DataInitializer implements CommandLineRunner {
 
@@ -98,7 +98,7 @@ public class DataInitializer implements CommandLineRunner {
                     .maxTokens(2000)
                     .systemPrompt("你是一个有帮助的AI助手。请用中文回答问题。")
                     .streamEnabled(true)
-                    .is默认(true)
+                    .isDefault(true)
                     .build());
             log.info("Created DashScope default config");
         }
@@ -113,7 +113,7 @@ public class DataInitializer implements CommandLineRunner {
                     .maxTokens(2000)
                     .systemPrompt("You are a helpful AI assistant. Please answer in the same language as the user.")
                     .streamEnabled(true)
-                    .is默认(false)
+                    .isDefault(false)
                     .build());
             log.info("Created OpenAI default config");
         }
@@ -128,7 +128,7 @@ public class DataInitializer implements CommandLineRunner {
                     .maxTokens(2000)
                     .systemPrompt("You are a helpful AI assistant.")
                     .streamEnabled(true)
-                    .is默认(false)
+                    .isDefault(false)
                     .build());
             log.info("Created Ollama default config");
         }

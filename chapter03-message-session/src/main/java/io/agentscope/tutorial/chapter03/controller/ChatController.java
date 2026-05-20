@@ -69,8 +69,8 @@ public class ChatController {
      */
     @PostMapping("/message")
     public ResponseEntity<ChatResponseDTO> sendMessage(
-            @Request参数 @NotBlank String sessionId,
-            @Request参数 @NotBlank String message,
+            @RequestParam @NotBlank String sessionId,
+            @RequestParam @NotBlank String message,
             @RequestParam(required = false) String systemPrompt) {
 
         ChatResponseDTO response = chatService.chat(sessionId, message, systemPrompt);

@@ -3,10 +3,10 @@ package io.agentscope.tutorial.chapter11.entity;
 import io.agentscope.core.skill.AgentSkill;
 import io.agentscope.core.skill.util.SkillUtil;
 import jakarta.persistence.*;
-import lombok.AllArgs构造函数;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgs构造函数;
+import lombok.NoArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 
 import java.time.LocalDateTime;
@@ -34,8 +34,8 @@ import java.util.Map;
 @Entity
 @Table(name = "skill_definition")
 @Data
-@NoArgs构造函数
-@AllArgs构造函数
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder
 public class SkillDefinition {
 
@@ -68,7 +68,7 @@ public class SkillDefinition {
      * 技能版本
      */
     @Column(name = "version")
-    @Builder.默认
+    @Builder.Default
     private String version = "1.0.0";
 
     /**
@@ -93,14 +93,14 @@ public class SkillDefinition {
      * 技能来源
      */
     @Column(name = "source")
-    @Builder.默认
+    @Builder.Default
     private String source = "custom";
 
     /**
      * 是否激活
      */
     @Column(name = "is_active")
-    @Builder.默认
+    @Builder.Default
     private Boolean isActive = true;
 
     /**

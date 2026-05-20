@@ -1,10 +1,10 @@
 package io.agentscope.tutorial.chapter06.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgs构造函数;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgs构造函数;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
@@ -16,8 +16,8 @@ import java.time.LocalDateTime;
 @Table(name = "chat_config")
 @Data
 @Builder
-@NoArgs构造函数
-@AllArgs构造函数
+@NoArgsConstructor
+@AllArgsConstructor
 public class ChatConfig {
 
     @Id
@@ -46,14 +46,14 @@ public class ChatConfig {
      * Temperature parameter for generation
      */
     @Column
-    @Builder.默认
+    @Builder.Default
     private Double temperature = 0.7;
 
     /**
      * Maximum tokens for generation
      */
     @Column
-    @Builder.默认
+    @Builder.Default
     private Integer maxTokens = 2000;
 
     /**
@@ -66,28 +66,28 @@ public class ChatConfig {
      * Whether streaming is enabled
      */
     @Column(nullable = false)
-    @Builder.默认
+    @Builder.Default
     private Boolean streamEnabled = true;
 
     /**
      * Whether this is the default configuration
      */
     @Column(nullable = false)
-    @Builder.默认
-    private Boolean is默认 = false;
+    @Builder.Default
+    private Boolean isDefault = false;
 
     /**
      * Creation timestamp
      */
     @Column(nullable = false, updatable = false)
-    @Builder.默认
+    @Builder.Default
     private LocalDateTime createTime = LocalDateTime.now();
 
     /**
      * Last update timestamp
      */
     @Column(nullable = false)
-    @Builder.默认
+    @Builder.Default
     private LocalDateTime updateTime = LocalDateTime.now();
 
     @PreUpdate

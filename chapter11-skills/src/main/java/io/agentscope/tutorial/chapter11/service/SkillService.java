@@ -6,7 +6,7 @@ import io.agentscope.core.skill.util.SkillUtil;
 import io.agentscope.tutorial.chapter11.entity.SkillDefinition;
 import io.agentscope.tutorial.chapter11.repository.SkillRepository;
 import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,7 +57,7 @@ import java.util.stream.Collectors;
  * @see SkillDefinition
  */
 @Service
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 @Slf4j
 public class SkillService {
 

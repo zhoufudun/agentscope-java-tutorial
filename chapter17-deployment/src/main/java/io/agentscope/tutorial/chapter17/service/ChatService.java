@@ -15,16 +15,22 @@
  */
 package io.agentscope.tutorial.chapter17.service;
 
-import io.agentscope.agent.ReActAgent;
-import io.agentscope.model.Memory;
-import io.agentscope.model.Toolkit;
-import lombok.RequiredArgs构造函数;
+import io.agentscope.core.ReActAgent;
+import io.agentscope.core.agent.StreamOptions;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.memory.Memory;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 聊天服务 - 生产环境版本.
@@ -42,7 +48,7 @@ import java.util.concurrent.Executor;
  * @version 1.0.0
  */
 @Service
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 @Slf4j
 public class ChatService {
 
@@ -76,16 +82,19 @@ public class ChatService {
             ).increment();
 
             // 构建用户消息
-            io.agentscope.model.Message userMsg = io.agentscope.model.Message.ofUser(message);
+            Msg userMsg = Msg.builder()
+                    .role(MsgRole.USER)
+                    .content(TextBlock.builder().text(message).build())
+                    .build();
 
             // 添加用户消息到记忆
-            memory.add(userMsg);
+            memory.addMessage(userMsg);
 
             // 执行 Agent 推理
-            io.agentscope.model.Message response = agent.invoke(message);
+            Msg response = agent.call(List.of(userMsg)).block();
 
             // 添加 Agent 响应到记忆
-            memory.add(response);
+            memory.addMessage(response);
 
             // 记录响应指标
             long duration = System.currentTimeMillis() - startTime;
@@ -93,10 +102,13 @@ public class ChatService {
                 "userId", userId
             ).record(java.time.Duration.ofMillis(duration));
 
-            log.info("Chat request completed - userId: {}, duration: {}ms, responseLength: {}",
-                userId, duration, response.getContent().length());
+            // Extract response text
+            String responseText = extractTextFromMessage(response);
 
-            return response.getContent();
+            log.info("Chat request completed - userId: {}, duration: {}ms, responseLength: {}",
+                userId, duration, responseText.length());
+
+            return responseText;
 
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
@@ -163,15 +175,32 @@ public class ChatService {
                 "userId", userId
             ).increment();
 
+            // 构建用户消息
+            Msg userMsg = Msg.builder()
+                    .role(MsgRole.USER)
+                    .content(TextBlock.builder().text(message).build())
+                    .build();
+
             // 添加用户消息到记忆
-            memory.add(io.agentscope.model.Message.ofUser(message));
+            memory.addMessage(userMsg);
 
-            // 使用流式调用
-            agent.invokeStream(message).forEach(chunk -> {
-                callback.onNext(chunk.getContent());
-            });
+            // 使用流式调用 - 获取文本块
+            StreamOptions options = StreamOptions.builder()
+                    .incremental(true)
+                    .build();
 
-            callback.onComplete();
+            agent.stream(List.of(userMsg), options)
+                    .filter(event -> event.getMessage() != null)
+                    .flatMap(event -> {
+                        Msg msg = event.getMessage();
+                        return Flux.fromIterable(msg.getContentBlocks(TextBlock.class));
+                    })
+                    .map(TextBlock::getText)
+                    .subscribe(
+                            callback::onNext,
+                            callback::onError,
+                            callback::onComplete
+                    );
 
         } catch (Exception e) {
             log.error("Stream chat request failed - userId: {}, sessionId: {}", userId, sessionId, e);
@@ -208,8 +237,8 @@ public class ChatService {
 
         return new ServiceStats(
             timer != null ? timer.count() : 0,
-            timer != null ? timer.mean(java.time.temporal.ChronoUnit.MILLIS) : 0,
-            counter != null ? counter.count() : 0
+            timer != null ? timer.mean(TimeUnit.MILLISECONDS) : 0.0,
+            counter != null ? (long) counter.count() : 0
         );
     }
 
@@ -221,4 +250,21 @@ public class ChatService {
         double averageDurationMs,
         long totalTokens
     ) {}
+
+    /**
+     * Extract text content from a message.
+     */
+    private String extractTextFromMessage(Msg message) {
+        if (message == null || message.getContent() == null) {
+            return "";
+        }
+
+        StringBuilder text = new StringBuilder();
+        message.getContent().stream()
+                .filter(block -> block instanceof TextBlock)
+                .map(block -> (TextBlock) block)
+                .forEach(block -> text.append(block.getText()));
+
+        return text.toString();
+    }
 }

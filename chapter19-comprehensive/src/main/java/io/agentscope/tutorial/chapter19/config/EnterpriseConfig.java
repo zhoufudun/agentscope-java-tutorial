@@ -54,8 +54,6 @@ public class EnterpriseConfig {
     @Bean
     public ReActAgent bobaSupervisorAgent() {
         Toolkit toolkit = new Toolkit();
-        toolkit.registerObject(getClass().getClassLoader().loadClass(
-                "io.agentscope.tutorial.chapter19.boba.service.BobaOrderService"));
 
         String sysPrompt = """
                 你是一位奶茶店智能助手，负责协调多个专业Agent完成订单处理。
@@ -282,13 +280,6 @@ public class EnterpriseConfig {
     @Bean
     public ReActAgent enterpriseAssistantAgent() {
         Toolkit toolkit = new Toolkit();
-        try {
-            Class<?> toolsClass = Class.forName(
-                    "io.agentscope.tutorial.chapter19.assistant.EnterpriseAssistantTools");
-            toolkit.registerObject(toolsClass.getDeclared构造函数().newInstance());
-        } catch (Exception e) {
-            // Tools will be registered separately
-        }
 
         String sysPrompt = """
                 你是一位企业智能助手，帮助用户处理日常工作。

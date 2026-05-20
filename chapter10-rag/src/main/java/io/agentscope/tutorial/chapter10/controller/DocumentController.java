@@ -18,7 +18,7 @@ package io.agentscope.tutorial.chapter10.controller;
 import io.agentscope.core.rag.model.Document;
 import io.agentscope.tutorial.chapter10.service.DocumentService;
 import io.agentscope.tutorial.chapter10.service.VectorStoreService;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -55,7 +55,7 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 @RestController
 @RequestMapping("/api/documents")
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 public class DocumentController {
 
     private final DocumentService documentService;
@@ -216,7 +216,7 @@ public class DocumentController {
      * @return statistics
      */
     @GetMapping("/stats")
-    public ResponseEntity<Map<String, Object>> getStats(@Request参数 String content) {
+    public ResponseEntity<Map<String, Object>> getStats(@RequestParam String content) {
         try {
             Map<String, Object> stats = documentService.getDocumentStats(content);
             stats.put("success", true);

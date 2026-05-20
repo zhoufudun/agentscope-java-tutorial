@@ -7,7 +7,7 @@ import io.agentscope.tutorial.chapter15.config.HarnessConfig;
 import io.agentscope.tutorial.chapter15.model.ExecutionRequest;
 import io.agentscope.tutorial.chapter15.model.ExecutionResult;
 import io.agentscope.tutorial.chapter15.sandbox.InMemorySandbox;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -31,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @Service
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 public class CodeExecutionService {
 
     private final HarnessConfig harnessConfig;
@@ -206,7 +206,7 @@ public class CodeExecutionService {
         }
 
         try {
-            InMemorySandbox sandbox = new InMemorySandbox(harnessConfig.getSandbox().get默认Timeout());
+            InMemorySandbox sandbox = new InMemorySandbox(harnessConfig.getSandbox().getDefaultTimeout());
             sandbox.setWorkspaceSpec(create默认WorkspaceSpec());
             sandbox.start();
             log.info("Created sandbox {} for workspace {}", sandbox.getSandboxId(), workspaceId);

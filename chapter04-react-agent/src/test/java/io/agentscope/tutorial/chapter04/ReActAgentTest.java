@@ -306,7 +306,7 @@ class ReActAgentTest {
         toolkit.registerObject(new WeatherTool());
         toolkit.registerObject(new CalculatorTool());
         toolkit.registerObject(new DateTimeTool());
-        toolkit.set默认ExecutionConfig(
+        toolkit.setDefaultExecutionConfig(
                 ExecutionConfig.builder()
                         .timeout(Duration.ofSeconds(30))
                         .maxRetries(1)

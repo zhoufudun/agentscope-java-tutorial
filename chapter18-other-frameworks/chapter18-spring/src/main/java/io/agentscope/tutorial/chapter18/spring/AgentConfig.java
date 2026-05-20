@@ -20,8 +20,11 @@ import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
 import jakarta.annotation.PostConstruct;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Agent configuration component for Spring Boot integration.
@@ -41,9 +44,10 @@ import org.springframework.stereotype.Component;
  *
  * @author AgentScope Tutorial
  */
-@Slf4j
 @Component
 public class AgentConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(AgentConfig.class);
 
     /** The auto-configured ReActAgent instance. */
     private final ReActAgent agent;
@@ -76,7 +80,7 @@ public class AgentConfig {
     public void init() {
         log.info("=== AgentScope Spring Boot Integration ===");
         log.info("Agent initialized: {}", agent.getName());
-        log.info("Agent max iterations: {}", agent.getMaxIterations());
+        log.info("Agent max iterations: {}", agent.getMaxIters());
     }
 
     /**
@@ -102,7 +106,7 @@ public class AgentConfig {
                 .content(TextBlock.builder().text(userMessage).build())
                 .build();
 
-        Msg response = agent.call(userMsg).block();
+        Msg response = agent.call(List.of(userMsg)).block();
         log.info("Agent: {}", response != null ? response.getTextContent() : "null");
 
         return response;

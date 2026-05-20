@@ -17,7 +17,7 @@ package io.agentscope.tutorial.chapter02.controller;
 
 import io.agentscope.core.ReActAgent;
 import io.agentscope.tutorial.chapter02.service.QuickStartService;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -50,7 +50,7 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/")
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 public class QuickStartController {
 
     /**

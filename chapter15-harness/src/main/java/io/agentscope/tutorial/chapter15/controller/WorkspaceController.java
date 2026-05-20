@@ -2,7 +2,7 @@ package io.agentscope.tutorial.chapter15.controller;
 
 import io.agentscope.harness.agent.filesystem.model.*;
 import io.agentscope.tutorial.chapter15.service.WorkspaceService;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -31,7 +31,7 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api/workspace")
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 public class WorkspaceController {
 
     private final WorkspaceService workspaceService;
@@ -68,7 +68,7 @@ public class WorkspaceController {
     @GetMapping("/{workspaceId}/read")
     public ResponseEntity<ReadResult> readFile(
             @PathVariable String workspaceId,
-            @Request参数 String filePath,
+            @RequestParam String filePath,
             @RequestParam(defaultValue = "0") int offset,
             @RequestParam(defaultValue = "1000") int limit) {
 
@@ -150,7 +150,7 @@ public class WorkspaceController {
         String filePath = (String) request.get("filePath");
         String oldString = (String) request.get("oldString");
         String newString = (String) request.get("newString");
-        Boolean replaceAll = (Boolean) request.getOr默认("replaceAll", false);
+        Boolean replaceAll = (Boolean) request.getOrDefault("replaceAll", false);
 
         if (filePath == null || oldString == null || newString == null) {
             return ResponseEntity.badRequest().body(
@@ -175,7 +175,7 @@ public class WorkspaceController {
     @DeleteMapping("/{workspaceId}/file")
     public ResponseEntity<WriteResult> deleteFile(
             @PathVariable String workspaceId,
-            @Request参数 String path) {
+            @RequestParam String path) {
 
         log.info("Deleting {} from workspace {}", path, workspaceId);
         WriteResult result = workspaceService.delete(workspaceId, path);
@@ -220,7 +220,7 @@ public class WorkspaceController {
     @GetMapping("/{workspaceId}/grep")
     public ResponseEntity<GrepResult> grep(
             @PathVariable String workspaceId,
-            @Request参数 String pattern,
+            @RequestParam String pattern,
             @RequestParam(required = false) String path,
             @RequestParam(required = false) String glob) {
 
@@ -240,7 +240,7 @@ public class WorkspaceController {
     @GetMapping("/{workspaceId}/glob")
     public ResponseEntity<GlobResult> glob(
             @PathVariable String workspaceId,
-            @Request参数 String pattern,
+            @RequestParam String pattern,
             @RequestParam(required = false) String path) {
 
         log.debug("Globbing for '{}' in workspace {}", pattern, workspaceId);
@@ -303,7 +303,7 @@ public class WorkspaceController {
     @GetMapping("/{workspaceId}/exists")
     public ResponseEntity<Map<String, Object>> exists(
             @PathVariable String workspaceId,
-            @Request参数 String path) {
+            @RequestParam String path) {
 
         boolean exists = workspaceService.exists(workspaceId, path);
         return ResponseEntity.ok(Map.of(

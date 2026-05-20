@@ -35,7 +35,7 @@ public class ChatController {
      */
     @PostMapping(value = "/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<Map<String, Object>>> chat(@RequestBody Map<String, String> request) {
-        String sessionId = request.getOr默认("sessionId", "default");
+        String sessionId = request.getOrDefault("sessionId", "default");
         String message = request.get("message");
 
         if (message == null || message.isBlank()) {
@@ -58,10 +58,10 @@ public class ChatController {
      */
     @PostMapping(value = "/approve", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<Map<String, Object>>> approve(@RequestBody Map<String, Object> request) {
-        String sessionId = (String) request.getOr默认("sessionId", "default");
+        String sessionId = (String) request.getOrDefault("sessionId", "default");
         String toolCallId = (String) request.get("toolCallId");
         boolean approved = Boolean.TRUE.equals(request.get("approved"));
-        String approver = (String) request.getOr默认("approver", "admin");
+        String approver = (String) request.getOrDefault("approver", "admin");
         String comment = (String) request.get("comment");
 
         if (toolCallId == null || toolCallId.isBlank()) {

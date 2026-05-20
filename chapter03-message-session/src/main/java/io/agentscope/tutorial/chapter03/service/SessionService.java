@@ -78,10 +78,6 @@ public class SessionService {
         ChatSession session = new ChatSession(sessionId, userId, effectiveTitle);
         ChatSession saved = sessionRepository.save(session);
 
-        // 同时保存到 AgentScope Session
-        SessionKey key = SimpleSessionKey.of(sessionId);
-        agentscopeSession.save(key, "session_info", saved);
-
         log.info("创建新会话: sessionId={}, userId={}, title={}", sessionId, userId, effectiveTitle);
         return saved;
     }
@@ -148,11 +144,6 @@ public class SessionService {
         // 更新会话的消息计数
         updateSessionMessageCount(sessionId);
 
-        // 保存到 AgentScope Session
-        SessionKey key = SimpleSessionKey.of(sessionId);
-        List<Msg> messages = loadMessages(sessionId);
-        agentscopeSession.save(key, "messages", messages);
-
         log.debug("保存消息: sessionId={}, messageId={}, sequence={}", sessionId, message.getId(), nextSequence);
     }
 
@@ -174,10 +165,6 @@ public class SessionService {
         // 更新会话消息计数
         updateSessionMessageCount(sessionId);
 
-        // 保存到 AgentScope Session
-        SessionKey key = SimpleSessionKey.of(sessionId);
-        agentscopeSession.save(key, "messages", messages);
-
         log.debug("批量保存消息: sessionId={}, count={}", sessionId, messages.size());
     }
 
@@ -196,9 +183,8 @@ public class SessionService {
             sessionRepository.save(session);
         }
 
-        // 清理 AgentScope Session 中的消息
+        // 清理会话消息计数
         SessionKey key = SimpleSessionKey.of(sessionId);
-        agentscopeSession.save(key, "messages", new ArrayList<>());
 
         log.info("清空会话消息: sessionId={}", sessionId);
     }
@@ -215,9 +201,8 @@ public class SessionService {
         // 再删除会话
         sessionRepository.deleteById(sessionId);
 
-        // 清理 AgentScope Session
+        // 清理会话
         SessionKey key = SimpleSessionKey.of(sessionId);
-        agentscopeSession.delete(key);
 
         log.info("删除会话: sessionId={}", sessionId);
     }

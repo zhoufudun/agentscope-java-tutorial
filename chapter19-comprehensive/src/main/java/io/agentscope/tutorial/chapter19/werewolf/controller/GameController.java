@@ -20,7 +20,7 @@ import io.agentscope.tutorial.chapter19.werewolf.game.WerewolfGame;
 import io.agentscope.tutorial.chapter19.werewolf.role.ModeratorAgent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.自动注入;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;

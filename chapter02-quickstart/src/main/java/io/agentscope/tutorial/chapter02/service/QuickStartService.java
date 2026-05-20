@@ -30,7 +30,7 @@ import io.agentscope.core.model.DashScopeChatModel;
 import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.tutorial.chapter02.config.AgentConfig;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -55,7 +55,7 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 public class QuickStartService {
 
     /**
@@ -148,7 +148,6 @@ public class QuickStartService {
                 .model(model)
                 .memory(memory)
                 .toolkit(toolkit)
-                .maxIterations(DEFAULT_MAX_ITERATIONS)
                 .build();
     }
 
@@ -201,7 +200,6 @@ public class QuickStartService {
 
         // 配置流式输出选项
         StreamOptions streamOptions = StreamOptions.builder()
-                .eventTypes(EventType.REASONING, EventType.TOOL_RESULT, EventType.FINAL)
                 .incremental(true)
                 .includeReasoningResult(true)
                 .build();

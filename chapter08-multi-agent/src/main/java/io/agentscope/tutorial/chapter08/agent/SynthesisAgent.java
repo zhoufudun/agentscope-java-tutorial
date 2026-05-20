@@ -7,15 +7,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 合成代理（Synthesis Agent）
+ * Synthesis Agent
  *
- * 负责将多个专业代理的处理结果合成为最终回复。
+ * Responsible for synthesizing final responses from multiple specialized agents.
  *
- * 核心职责：
- * 1. 整合多个代理的输出结果
- * 2. 去除重复信息
- * 3. 按逻辑顺序组织内容
- * 4. 生成友好的最终回复
+ * Core responsibilities:
+ * 1. Integrate output results from multiple agents
+ * 2. Remove duplicate information
+ * 3. Organize content in logical order
+ * 4. Generate friendly final responses
  */
 public class SynthesisAgent {
 
@@ -25,56 +25,58 @@ public class SynthesisAgent {
 
     public SynthesisAgent(Model model) {
         this.model = model;
-        log.info("合成代理初始化完成");
+        log.info("Synthesis agent initialized");
     }
 
     /**
-     * 合成单个代理的结果
+     * Synthesize single agent result
      *
-     * @param query 原始用户查询
-     * @param agentResult 专业代理的处理结果
-     * @param category 代理类别
-     * @return 合成后的最终回复
+     * @param query Original user query
+     * @param agentResult Specialized agent's processing result
+     * @param category Agent category
+     * @return Synthesized final response
      */
     public String synthesize(String query, String agentResult, String category) {
-        log.info("开始合成结果，类别：{}", category);
+        log.info("Starting synthesis, category: {}", category);
 
         try {
-            // 使用 LLM 合成结果
+            // Use LLM to synthesize result
             String prompt = buildSynthesisPrompt(query, agentResult, category);
 
-            var response = model.generate(
+            var response = model.stream(
                 java.util.List.of(
-                    io.agentscope.core.message.Msg.of(
-                        io.agentscope.core.message.MsgRole.USER,
-                        io.agentscope.core.message.TextBlock.of(prompt)
-                    )
-                )
-            ).block();
+                    io.agentscope.core.message.Msg.builder()
+                        .role(io.agentscope.core.message.MsgRole.USER)
+                        .content(io.agentscope.core.message.TextBlock.builder().text(prompt).build())
+                        .build()
+                ),
+                null,
+                null
+            ).blockLast(java.time.Duration.ofSeconds(60));
 
             if (response != null && response.getContent() != null) {
                 String result = extractTextContent(response);
-                log.info("结果合成完成");
+                log.info("Synthesis completed");
                 return result;
             }
 
         } catch (Exception e) {
-            log.error("结果合成失败，使用原始结果", e);
+            log.error("Synthesis failed, using original result", e);
         }
 
-        // 合成失败时返回原始结果
+        // Return original result on synthesis failure
         return agentResult;
     }
 
     /**
-     * 合成多个代理的结果（并行场景）
+     * Synthesize multiple agents' results (parallel scenario)
      *
-     * @param query 原始用户查询
-     * @param results 多个代理的处理结果
-     * @return 合成后的最终回复
+     * @param query Original user query
+     * @param results Multiple agents' processing results
+     * @return Synthesized final response
      */
     public String synthesizeMultiple(String query, java.util.Map<String, String> results) {
-        log.info("开始合成多个结果，数量：{}", results.size());
+        log.info("Starting multi-result synthesis, count: {}", results.size());
 
         try {
             StringBuilder allResults = new StringBuilder();
@@ -84,106 +86,108 @@ public class SynthesisAgent {
             });
 
             String prompt = """
-                作为智能客户服务中心，请将以下多个服务的处理结果整合后呈现给用户。
+                As an intelligent customer service center, please present the following multi-service processing results to the user.
 
-                用户原始查询：%s
+                Original user query: %s
 
-                各服务处理结果：
+                Processing results from each service:
                 %s
 
-                请：
-                1. 整合相关信息，避免重复
-                2. 按逻辑顺序组织内容
-                3. 突出最重要和用户最关注的信息
-                4. 询问用户是否需要进一步帮助
+                Please:
+                1. Integrate related information, avoid duplication
+                2. Organize content in logical order
+                3. Highlight the most important and user-focused information
+                4. Ask if user needs further assistance
 
-                直接输出最终回复，不要有额外说明。
+                Output the final response directly, no additional explanations.
                 """.formatted(query, allResults.toString());
 
-            var response = model.generate(
+            var response = model.stream(
                 java.util.List.of(
-                    io.agentscope.core.message.Msg.of(
-                        io.agentscope.core.message.MsgRole.USER,
-                        io.agentscope.core.message.TextBlock.of(prompt)
-                    )
-                )
-            ).block();
+                    io.agentscope.core.message.Msg.builder()
+                        .role(io.agentscope.core.message.MsgRole.USER)
+                        .content(io.agentscope.core.message.TextBlock.builder().text(prompt).build())
+                        .build()
+                ),
+                null,
+                null
+            ).blockLast(java.time.Duration.ofSeconds(60));
 
             if (response != null && response.getContent() != null) {
                 return extractTextContent(response);
             }
 
         } catch (Exception e) {
-            log.error("多结果合成失败", e);
+            log.error("Multi-result synthesis failed", e);
         }
 
-        // 返回简单的拼接结果
+        // Return simple concatenation on failure
         return results.values().stream()
             .reduce((a, b) -> a + "\n\n" + b)
-            .orElse("服务暂时不可用");
+            .orElse("Service temporarily unavailable");
     }
 
     /**
-     * 构建合成提示词
+     * Build synthesis prompt
      */
     private String buildSynthesisPrompt(String query, String agentResult, String category) {
         String serviceName = getServiceName(category);
         String focusNote = getFocusNote(category);
 
         return """
-            作为智能客户服务中心，请将以下处理结果以友好的方式呈现给用户。
+            As an intelligent customer service center, please present the following processing results to the user in a friendly manner.
 
-            用户原始查询：%s
+            Original user query: %s
 
-            处理服务：%s
+            Processing service: %s
 
-            处理结果：
+            Processing result:
             %s
 
-            注意事项：
+            Notes:
             %s
 
-            请用简洁、有条理的方式回复用户，突出关键信息，并询问是否需要其他帮助。
+            Please respond to the user in a concise and organized manner, highlighting key information and asking if other assistance is needed.
 
-            直接输出最终回复，不要有额外说明。
+            Output the final response directly, no additional explanations.
             """.formatted(query, serviceName, agentResult, focusNote);
     }
 
     /**
-     * 获取服务名称
+     * Get service name
      */
     private String getServiceName(String category) {
         return switch (category) {
-            case "ORDER_QUERY" -> "订单查询服务";
-            case "ADDRESS_UPDATE" -> "地址更新服务";
-            case "GENERAL_QUERY" -> "综合查询服务";
-            default -> "客户服务";
+            case "ORDER_QUERY" -> "Order Query Service";
+            case "ADDRESS_UPDATE" -> "Address Update Service";
+            case "GENERAL_QUERY" -> "General Query Service";
+            default -> "Customer Service";
         };
     }
 
     /**
-     * 获取关注点说明
+     * Get focus notes
      */
     private String getFocusNote(String category) {
         return switch (category) {
             case "ORDER_QUERY" -> """
-                - 清晰展示订单状态
-                - 对于运输中订单，强调预计送达时间
-                - 如有异常，给出建议""";
+                - Clearly show order status
+                - For in-transit orders, emphasize estimated delivery time
+                - Provide suggestions if any anomalies""";
             case "ADDRESS_UPDATE" -> """
-                - 展示更新前后的地址对比
-                - 确认更新成功
-                - 提醒用户核对收货信息""";
+                - Show before/after address comparison
+                - Confirm update success
+                - Remind user to verify shipping information""";
             case "GENERAL_QUERY" -> """
-                - 清晰展示查询结果
-                - 突出优惠有效期等重要信息
-                - 给出下一步行动建议""";
-            default -> "- 用友好专业的语气回复";
+                - Clearly show query results
+                - Highlight important information like promotion validity
+                - Provide next-step suggestions""";
+            default -> "- Respond in a friendly and professional manner";
         };
     }
 
     /**
-     * 从响应中提取文本内容
+     * Extract text content from response
      */
     private String extractTextContent(Object response) {
         if (response instanceof io.agentscope.core.message.Msg msg) {

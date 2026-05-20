@@ -61,7 +61,7 @@ public class Application {
             System.out.println("✓ Agent created via Micronaut dependency injection");
             System.out.println("✓ Configuration loaded from application.yml");
             System.out.println("✓ Agent name: " + agent.getName());
-            System.out.println("✓ Agent max iterations: " + agent.getMaxIterations());
+            System.out.println("✓ Agent max iterations: " + agent.getMaxIters());
             System.out.println();
 
             // Demonstrate chat with the agent

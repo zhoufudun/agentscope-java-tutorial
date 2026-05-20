@@ -91,7 +91,7 @@ public class LoggingHook implements Hook {
         log.info("Agent 名称: {}", event.getAgent().getName());
         log.info("输入消息数: {}", event.getInputMessages().size());
         if (event.getSystemMessage() != null) {
-            String content = event.getSystemMessage().getContentAsString();
+            String content = event.getSystemMessage().getTextContent();
             log.info("系统提示词: {}",
                     content.length() > 100 ? content.substring(0, 100) + "..." : content);
         }
@@ -138,12 +138,22 @@ public class LoggingHook implements Hook {
         ToolResultBlock result = event.getToolResult();
         ToolUseBlock toolUse = event.getToolUse();
 
-        String output = result.getOutputAsString();
+        // 从 output 中提取文本内容
+        String output = result.getOutput().stream()
+                .filter(block -> block instanceof TextBlock)
+                .map(block -> ((TextBlock) block).getText())
+                .reduce((a, b) -> a + "\n" + b)
+                .orElse("");
+
+        // 检查是否有错误标记
+        boolean isError = result.getMetadata() != null &&
+                          result.getMetadata().containsKey("error");
+
         toolExecutions.add(String.format("%s: %s",
                 toolUse.getName(),
-                result.isError() ? "错误" : "成功"));
+                isError ? "错误" : "成功"));
 
-        if (result.isError()) {
+        if (isError) {
             log.warn("[工具执行] 完成 - {}: 错误 - {}",
                     toolUse.getName(), truncate(output, 100));
         } else {
@@ -185,7 +195,7 @@ public class LoggingHook implements Hook {
         }
 
         Msg response = event.getFinalMessage();
-        log.info("最终响应长度: {} 字符", response.getContentAsString().length());
+        log.info("最终响应长度: {} 字符", response.getTextContent().length());
         log.info("=".repeat(60));
     }
 

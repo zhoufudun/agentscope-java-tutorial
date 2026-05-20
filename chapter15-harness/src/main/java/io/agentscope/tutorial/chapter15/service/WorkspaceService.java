@@ -4,7 +4,7 @@ import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.harness.agent.filesystem.AbstractFilesystem;
 import io.agentscope.harness.agent.filesystem.model.*;
 import io.agentscope.tutorial.chapter15.sandbox.InMemorySandbox;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -28,7 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @Service
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 public class WorkspaceService {
 
     private final CodeExecutionService codeExecutionService;

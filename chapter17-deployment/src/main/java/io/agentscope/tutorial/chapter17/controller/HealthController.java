@@ -15,7 +15,7 @@
  */
 package io.agentscope.tutorial.chapter17.controller;
 
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.availability.AvailabilityChangeEvent;
@@ -62,7 +62,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/actuator")
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 @Slf4j
 public class HealthController {
 
@@ -203,7 +203,7 @@ public class HealthController {
     public void onApplicationReady(ApplicationReadyEvent event) {
         log.info("Application is ready - switching to ACCEPTING_TRAFFIC state");
         readinessState = ReadinessState.ACCEPTING_TRAFFIC;
-        eventPublisher.publishEvent(new AvailabilityChangeEvent<>(this, readinessState, ReadinessState.ACCEPTING_TRAFFIC));
+        AvailabilityChangeEvent.publish(eventPublisher, this, ReadinessState.ACCEPTING_TRAFFIC);
     }
 
     /**
@@ -213,14 +213,14 @@ public class HealthController {
     public void onApplicationStarted(org.springframework.boot.context.event.ApplicationStartedEvent event) {
         log.info("Application started - liveness check passed");
         livenessState = LivenessState.CORRECT;
-        eventPublisher.publishEvent(new AvailabilityChangeEvent<>(this, livenessState, LivenessState.CORRECT));
+        AvailabilityChangeEvent.publish(eventPublisher, this, LivenessState.CORRECT);
     }
 
     /**
      * 数据库健康检查指示器.
      */
     @org.springframework.stereotype.Component
-    @RequiredArgs构造函数
+    @RequiredArgsConstructor
     public static class DatabaseHealthIndicator {
         private final javax.sql.DataSource dataSource;
 
@@ -240,7 +240,7 @@ public class HealthController {
      * Redis 健康检查指示器.
      */
     @org.springframework.stereotype.Component
-    @RequiredArgs构造函数
+    @RequiredArgsConstructor
     public static class RedisHealthIndicator {
         private final org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
 

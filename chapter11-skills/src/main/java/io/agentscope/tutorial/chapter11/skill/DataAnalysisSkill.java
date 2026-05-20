@@ -1,7 +1,7 @@
 package io.agentscope.tutorial.chapter11.skill;
 
-import io.agentscope.core.tool.AgentTool;
-import io.agentscope.core.tool.ToolCallParam;
+import io.agentscope.core.tool.Tool;
+import io.agentscope.core.tool.ToolParam;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
@@ -52,11 +52,11 @@ public class DataAnalysisSkill {
      * @param options 额外选项（可选）
      * @return 分析结果
      */
-    @AgentTool(name = "analyze_data")
+    @Tool(name = "analyze_data")
     public String analyzeData(
-            @ToolCallParam(description = "数据源，可以是文件路径或 CSV 内容") String dataSource,
-            @ToolCallParam(description = "要执行的统计操作，如 sum,avg,count,min,max,group_by") List<String> operations,
-            @ToolCallParam(description = "额外选项，如分组字段、过滤条件等", required = false) Map<String, Object> options) {
+            @ToolParam(name = "data_source", description = "数据源，可以是文件路径或 CSV 内容") String dataSource,
+            @ToolParam(name = "operations", description = "要执行的统计操作，如 sum,avg,count,min,max,group_by") List<String> operations,
+            @ToolParam(name = "options", description = "额外选项，如分组字段、过滤条件等", required = false) Map<String, Object> options) {
 
         log.info("Analyzing data from: {}, operations: {}", dataSource, operations);
 
@@ -97,11 +97,11 @@ public class DataAnalysisSkill {
      * @param dataSummary 数据摘要
      * @return 报告内容
      */
-    @AgentTool(name = "generate_report")
+    @Tool(name = "generate_report")
     public String generateReport(
-            @ToolCallParam(description = "报告标题") String title,
-            @ToolCallParam(description = "统计周期，如 2024-01") String period,
-            @ToolCallParam(description = "数据摘要内容", required = false) String dataSummary) {
+            @ToolParam(name = "title", description = "报告标题") String title,
+            @ToolParam(name = "period", description = "统计周期，如 2024-01") String period,
+            @ToolParam(name = "data_summary", description = "数据摘要内容", required = false) String dataSummary) {
 
         log.info("Generating report: {} for period: {}", title, period);
 
@@ -130,11 +130,11 @@ public class DataAnalysisSkill {
      * @param config 可视化配置
      * @return 可视化信息
      */
-    @AgentTool(name = "create_visualization")
+    @Tool(name = "create_visualization")
     public String createVisualization(
-            @ToolCallParam(description = "图表类型: bar, line, pie, scatter") String chartType,
-            @ToolCallParam(description = "数据源标识") String dataSource,
-            @ToolCallParam(description = "可视化配置，如标题、颜色等") Map<String, Object> config) {
+            @ToolParam(name = "chart_type", description = "图表类型: bar, line, pie, scatter") String chartType,
+            @ToolParam(name = "data_source", description = "数据源标识") String dataSource,
+            @ToolParam(name = "config", description = "可视化配置，如标题、颜色等") Map<String, Object> config) {
 
         log.info("Creating {} visualization for: {}", chartType, dataSource);
 

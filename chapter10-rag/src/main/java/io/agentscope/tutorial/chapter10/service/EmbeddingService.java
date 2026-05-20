@@ -19,7 +19,7 @@ import io.agentscope.core.embedding.EmbeddingModel;
 import io.agentscope.core.embedding.ollama.OllamaTextEmbedding;
 import io.agentscope.tutorial.chapter10.config.RAGConfig;
 import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -42,7 +42,7 @@ import java.util.List;
  */
 @Slf4j
 @Service
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 public class EmbeddingService {
 
     private final RAGConfig ragConfig;
@@ -137,9 +137,10 @@ public class EmbeddingService {
      */
     public java.util.concurrent.CompletableFuture<List<double[]>> embedTexts(List<String> texts) {
         log.debug("Generating embeddings for {} texts", texts.size());
-        List<io.agentscope.core.message.ContentBlock> blocks = texts.stream()
-                .map(t -> io.agentscope.core.message.TextBlock.builder().text(t).build())
-                .toList();
+        List<io.agentscope.core.message.ContentBlock> blocks = new java.util.ArrayList<>();
+        for (String t : texts) {
+            blocks.add(io.agentscope.core.message.TextBlock.builder().text(t).build());
+        }
 
         return reactor.core.publisher.Flux.fromIterable(blocks)
                 .flatMap(embeddingModel::embed)

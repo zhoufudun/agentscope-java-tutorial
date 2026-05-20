@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -138,9 +139,9 @@ public class ChatService {
      */
     private Msg callModel(List<Msg> conversationHistory) {
         try {
-            // 调用模型 (使用 stream().blockFirst() 获取单个响应)
+            // 调用模型 (使用 blockLast() 获取单个响应)
             ChatResponse response = chatModel.stream(conversationHistory, null, null)
-                    .blockFirst(60, TimeUnit.SECONDS);
+                    .blockLast(Duration.ofSeconds(60));
 
             if (response != null && response.getContent() != null && !response.getContent().isEmpty()) {
                 // 从 ContentBlock 列表中提取文本内容
@@ -239,7 +240,7 @@ public class ChatService {
      */
     private ChatResponseDTO buildResponse(ChatSession session, Msg userMsg,
                                           Msg assistantMsg, long durationMs) {
-        List<ChatResponseDTO.MessageInfo> history = conversationHistories.getOr默认(
+        List<ChatResponseDTO.MessageInfo> history = conversationHistories.getOrDefault(
                 session.getSessionId(), new ArrayList<>()).stream()
                 .filter(m -> m.getRole() != MsgRole.SYSTEM)
                 .map(this::toMessageInfo)
@@ -343,6 +344,6 @@ public class ChatService {
      * 获取当前内存中的对话历史
      */
     public List<Msg> getCurrentHistory(String sessionId) {
-        return new ArrayList<>(conversationHistories.getOr默认(sessionId, new ArrayList<>()));
+        return new ArrayList<>(conversationHistories.getOrDefault(sessionId, new ArrayList<>()));
     }
 }

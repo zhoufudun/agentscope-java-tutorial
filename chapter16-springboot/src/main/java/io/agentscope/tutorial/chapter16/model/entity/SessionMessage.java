@@ -15,10 +15,10 @@
  */
 package io.agentscope.tutorial.chapter16.model.entity;
 
-import lombok.AllArgs构造函数;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgs构造函数;
+import lombok.NoArgsConstructor;
 
 import java.time.Instant;
 
@@ -31,8 +31,8 @@ import java.time.Instant;
  */
 @Data
 @Builder
-@NoArgs构造函数
-@AllArgs构造函数
+@NoArgsConstructor
+@AllArgsConstructor
 public class SessionMessage {
 
     /** 消息 ID（自增） */

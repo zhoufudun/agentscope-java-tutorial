@@ -65,7 +65,7 @@ public class AgentFactory {
     public ReActAgent customAgent(ReActAgent autoConfiguredAgent) {
         log.info("Creating custom agent configuration");
         log.info("Base agent name: {}", autoConfiguredAgent.getName());
-        log.info("Base agent max iterations: {}", autoConfiguredAgent.getMaxIterations());
+        log.info("Base agent max iterations: {}", autoConfiguredAgent.getMaxIters());
 
         // You can customize the agent here if needed
         // For example, wrap it with additional logic, add interceptors, etc.

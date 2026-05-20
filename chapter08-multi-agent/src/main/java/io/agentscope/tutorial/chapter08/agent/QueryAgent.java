@@ -32,7 +32,7 @@ public class QueryAgent {
     private ReActAgent createQueryAgent(Model model) {
         // 创建工具集
         Toolkit toolkit = new Toolkit();
-        toolkit.registerObject(new QueryTools());
+        toolkit.registerTool(new QueryTools());
 
         return ReActAgent.builder()
             .name("query_agent")
@@ -90,7 +90,7 @@ public class QueryAgent {
         try {
             var response = agent.call(io.agentscope.core.message.Msg.builder()
                 .role(io.agentscope.core.message.MsgRole.USER)
-                .content(query)
+                .content(io.agentscope.core.message.TextBlock.builder().text(query).build())
                 .build()).block();
 
             String result = response != null ? response.getTextContent() : "";

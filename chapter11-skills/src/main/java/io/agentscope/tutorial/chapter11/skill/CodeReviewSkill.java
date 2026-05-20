@@ -1,7 +1,7 @@
 package io.agentscope.tutorial.chapter11.skill;
 
-import io.agentscope.core.tool.AgentTool;
-import io.agentscope.core.tool.ToolCallParam;
+import io.agentscope.core.tool.Tool;
+import io.agentscope.core.tool.ToolParam;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
@@ -35,10 +35,10 @@ import java.util.*;
  * check_security("src", ["sql_injection", "xss", "csrf"]);
  *
  * // 性能分析
- * analyze_performance("src/Service.java", {"metrics": ["time", "memory"]});
+ * analyze_performance("src/Service.java", ["time_complexity", "memory"]);
  *
  * // 生成修复建议
- * generate_fix_suggestions("issues.json", {"language": "java"});
+ * generate_fix_suggestions("issues.json", "java");
  * }</pre>
  *
  * @author AgentScope Tutorial
@@ -56,11 +56,11 @@ public class CodeReviewSkill {
      * @param options 额外选项
      * @return 审查结果
      */
-    @AgentTool(name = "review_code")
+    @Tool(name = "review_code")
     public String reviewCode(
-            @ToolCallParam(description = "要审查的代码文件路径") String filePath,
-            @ToolCallParam(description = "检查类型列表: style, bugs, best_practices, documentation") List<String> checkTypes,
-            @ToolCallParam(description = "额外选项，如忽略规则、特定检查项等", required = false) Map<String, Object> options) {
+            @ToolParam(name = "file_path", description = "要审查的代码文件路径") String filePath,
+            @ToolParam(name = "check_types", description = "检查类型列表: style, bugs, best_practices, documentation") List<String> checkTypes,
+            @ToolParam(name = "options", description = "额外选项，如忽略规则、特定检查项等", required = false) Map<String, Object> options) {
 
         log.info("Reviewing code: {}, checks: {}", filePath, checkTypes);
 
@@ -93,10 +93,10 @@ public class CodeReviewSkill {
      * @param securityChecks 安全检查类型（sql_injection, xss, csrf, hardcode, etc）
      * @return 安全检查结果
      */
-    @AgentTool(name = "check_security")
+    @Tool(name = "check_security")
     public String checkSecurity(
-            @ToolCallParam(description = "源代码目录或文件路径") String sourcePath,
-            @ToolCallParam(description = "安全检查类型: sql_injection, xss, csrf, hardcode, weak_crypto") List<String> securityChecks) {
+            @ToolParam(name = "source_path", description = "源代码目录或文件路径") String sourcePath,
+            @ToolParam(name = "security_checks", description = "安全检查类型: sql_injection, xss, csrf, hardcode, weak_crypto") List<String> securityChecks) {
 
         log.info("Security check for: {}, checks: {}", sourcePath, securityChecks);
 
@@ -147,11 +147,11 @@ public class CodeReviewSkill {
      * @param options 额外选项
      * @return 性能分析结果
      */
-    @AgentTool(name = "analyze_performance")
+    @Tool(name = "analyze_performance")
     public String analyzePerformance(
-            @ToolCallParam(description = "要分析的代码文件路径") String filePath,
-            @ToolCallParam(description = "分析指标: time_complexity, space_complexity, resource_usage") List<String> metrics,
-            @ToolCallParam(description = "额外选项，如分析深度、阈值等", required = false) Map<String, Object> options) {
+            @ToolParam(name = "file_path", description = "要分析的代码文件路径") String filePath,
+            @ToolParam(name = "metrics", description = "分析指标: time_complexity, space_complexity, resource_usage") List<String> metrics,
+            @ToolParam(name = "options", description = "额外选项，如分析深度、阈值等", required = false) Map<String, Object> options) {
 
         log.info("Performance analysis for: {}, metrics: {}", filePath, metrics);
 
@@ -183,10 +183,10 @@ public class CodeReviewSkill {
      * @param language 编程语言
      * @return 修复建议
      */
-    @AgentTool(name = "generate_fix_suggestions")
+    @Tool(name = "generate_fix_suggestions")
     public String generateFixSuggestions(
-            @ToolCallParam(description = "问题列表，JSON 格式") String issuesJson,
-            @ToolCallParam(description = "编程语言: java, python, javascript, etc") String language) {
+            @ToolParam(name = "issues_json", description = "问题列表，JSON 格式") String issuesJson,
+            @ToolParam(name = "language", description = "编程语言: java, python, javascript, etc") String language) {
 
         log.info("Generating fix suggestions for {} issues in {}", issuesJson, language);
 
@@ -284,7 +284,7 @@ public class CodeReviewSkill {
     }
 
     private String getSecurityRating(int issues) {
-        return switch {
+        return switch (issues) {
             case 0 -> "优秀 (A)";
             case 1 -> "良好 (B)";
             case 2 -> "一般 (C)";

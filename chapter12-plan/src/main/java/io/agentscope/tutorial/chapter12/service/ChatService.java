@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 聊天服务 - 管理 Agent 对话和状态.
@@ -73,7 +74,7 @@ public class ChatService implements InitializingBean {
 
     /** 待处理的上下文行（用于 SSE 调试） */
     private final ConcurrentLinkedQueue<String> pendingContextLines = new ConcurrentLinkedQueue<>();
-    private final AtomicBoolean contextSeq = new AtomicBoolean(0);
+    private final AtomicInteger contextSeq = new AtomicInteger(0);
 
     public ChatService(PlanNotebook planNotebook, ReActAgent planAgent) {
         this.planNotebook = planNotebook;
@@ -138,9 +139,13 @@ public class ChatService implements InitializingBean {
             );
         } else {
             log.warn("Tried to resume but agent is not paused [session={}]", sessionId);
-            return Flux.just(SSE_JSON.writeValueAsString(
-                    Map.of("t", "error", "d", "Agent is not paused or is already resuming.")
-            ));
+            try {
+                return Flux.just(SSE_JSON.writeValueAsString(
+                        Map.of("t", "error", "d", "Agent is not paused or is already resuming.")
+                ));
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                return Flux.just("{\"t\":\"error\",\"d\":\"Agent is not paused or is already resuming.\"}");
+            }
         }
     }
 

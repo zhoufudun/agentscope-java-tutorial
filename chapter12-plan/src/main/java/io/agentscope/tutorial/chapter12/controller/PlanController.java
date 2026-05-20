@@ -235,7 +235,7 @@ public class PlanController {
      */
     @PostMapping("/finish")
     public Mono<ResponseEntity<Map<String, Object>>> finishPlan(@RequestBody Map<String, String> body) {
-        String state = body.getOr默认("state", "done");
+        String state = body.getOrDefault("state", "done");
         String outcome = body.get("outcome");
 
         return planNotebook.finishPlan(state, outcome)

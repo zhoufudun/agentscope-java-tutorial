@@ -18,7 +18,7 @@ package io.agentscope.tutorial.chapter10.controller;
 import io.agentscope.core.rag.model.Document;
 import io.agentscope.tutorial.chapter10.config.RAGConfig;
 import io.agentscope.tutorial.chapter10.service.RAGService;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -53,7 +53,7 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 @RestController
 @RequestMapping("/api/chat")
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 public class ChatController {
 
     private final RAGService ragService;
@@ -110,7 +110,7 @@ public class ChatController {
      */
     @GetMapping("/retrieve")
     public ResponseEntity<Map<String, Object>> retrieve(
-            @Request参数 String query,
+            @RequestParam String query,
             @RequestParam(value = "topK", required = false) Integer topK) {
 
         log.info("Received retrieval request: query='{}', topK={}", query, topK);

@@ -21,7 +21,7 @@ import io.agentscope.core.rag.reader.SplitStrategy;
 import io.agentscope.core.rag.reader.TextChunker;
 import io.agentscope.tutorial.chapter10.config.RAGConfig;
 import io.agentscope.tutorial.chapter10.model.DocumentStatus;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -61,7 +61,7 @@ import java.util.concurrent.CompletableFuture;
  */
 @Slf4j
 @Service
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 public class DocumentService {
 
     private final RAGConfig ragConfig;
@@ -177,7 +177,7 @@ public class DocumentService {
                     // Create Document with metadata
                     Map<String, Object> payload = new HashMap<>();
                     payload.put("title", chunk.metadata().get("title"));
-                    payload.put("chunkIndex", chunk.chunkIndex());
+                    payload.put("chunkIndex", chunk.metadata().get("chunkIndex"));
                     payload.put("totalChunks", chunk.metadata().get("totalChunks"));
 
                     io.agentscope.core.rag.model.DocumentMetadata metadata =
@@ -188,11 +188,8 @@ public class DocumentService {
                                     payload
                             );
 
-                    Document doc = Document.builder()
-                            .id(UUID.randomUUID().toString())
-                            .metadata(metadata)
-                            .embedding(embedding)
-                            .build();
+                    Document doc = new Document(metadata);
+                    doc.setEmbedding(embedding);
 
                     documents.add(doc);
                 } catch (Exception e) {

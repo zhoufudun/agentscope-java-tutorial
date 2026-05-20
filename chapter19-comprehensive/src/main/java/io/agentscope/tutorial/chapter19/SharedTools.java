@@ -15,9 +15,10 @@
  */
 package io.agentscope.tutorial.chapter19;
 
+import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.message.ToolResultBlock;
 import io.agentscope.core.tool.Tool;
-import io.agentscope.core.tool.ToolResult;
-import io.agentscope.core.tool.ToolSpec;
+import io.agentscope.core.tool.ToolParam;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -40,83 +41,10 @@ import java.util.List;
 public class SharedTools {
 
     /**
-     * 获取工具规格列表
-     */
-    public static List<ToolSpec> getToolSpecs() {
-        return List.of(
-                ToolSpec.builder()
-                        .name("get_current_time")
-                        .description("获取当前日期和时间")
-                        .paramSpec("""
-                                {
-                                    "type": "object",
-                                    "properties": {}
-                                }
-                                """)
-                        .build(),
-
-                ToolSpec.builder()
-                        .name("calculate")
-                        .description("执行数学计算")
-                        .paramSpec("""
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "expression": {
-                                            "type": "string",
-                                            "description": "数学表达式（如 2+3*4）"
-                                        }
-                                    },
-                                    "required": ["expression"]
-                                }
-                                """)
-                        .build(),
-
-                ToolSpec.builder()
-                        .name("format_text")
-                        .description("格式化文本")
-                        .paramSpec("""
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "text": {
-                                            "type": "string",
-                                            "description": "要格式化的文本"
-                                        },
-                                        "format": {
-                                            "type": "string",
-                                            "description": "格式类型（upper/lower/title/first）"
-                                        }
-                                    },
-                                    "required": ["text", "format"]
-                                }
-                                """)
-                        .build(),
-
-                ToolSpec.builder()
-                        .name("random_choice")
-                        .description("从列表中随机选择一个")
-                        .paramSpec("""
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "options": {
-                                            "type": "array",
-                                            "items": {"type": "string"},
-                                            "description": "选项列表"
-                                        }
-                                    },
-                                    "required": ["options"]
-                                }
-                                """)
-                        .build()
-        );
-    }
-
-    /**
      * 获取当前时间
      */
-    public ToolResult getCurrentTime() {
+    @Tool(name = "get_current_time", description = "获取当前日期和时间")
+    public ToolResultBlock getCurrentTime() {
         java.time.LocalDateTime now = java.time.LocalDateTime.now();
         java.time.format.DateTimeFormatter formatter =
                 java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -130,13 +58,15 @@ public class SharedTools {
                 now.getDayOfWeek().getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.CHINESE)
         );
 
-        return ToolResult.success("当前时间获取成功", result);
+        return ToolResultBlock.text(result);
     }
 
     /**
      * 数学计算
      */
-    public ToolResult calculate(String expression) {
+    @Tool(name = "calculate", description = "执行数学计算")
+    public ToolResultBlock calculate(
+            @ToolParam(name = "expression", description = "数学表达式（如 2+3*4）") String expression) {
         try {
             // 安全的数学计算（仅支持基本运算）
             String sanitized = expression.replaceAll("[^0-9+\\-*/().%^]", "");
@@ -148,9 +78,9 @@ public class SharedTools {
                     result % 1 == 0 ? (long) result : result
             );
 
-            return ToolResult.success("计算完成", resultStr);
+            return ToolResultBlock.text(resultStr);
         } catch (Exception e) {
-            return ToolResult.failure("计算失败：" + e.getMessage());
+            return ToolResultBlock.error("计算失败：" + e.getMessage());
         }
     }
 
@@ -172,7 +102,10 @@ public class SharedTools {
     /**
      * 格式化文本
      */
-    public ToolResult formatText(String text, String format) {
+    @Tool(name = "format_text", description = "格式化文本")
+    public ToolResultBlock formatText(
+            @ToolParam(name = "text", description = "要格式化的文本") String text,
+            @ToolParam(name = "format", description = "格式类型（upper/lower/title/first）") String format) {
         String result = switch (format.toLowerCase()) {
             case "upper" -> text.toUpperCase();
             case "lower" -> text.toLowerCase();
@@ -197,26 +130,26 @@ public class SharedTools {
             default -> text;
         };
 
-        return ToolResult.success("格式化完成",
-                String.format("原文：%s\n格式：%s\n结果：%s", text, format, result));
+        return ToolResultBlock.text(String.format("原文：%s\n格式：%s\n结果：%s", text, format, result));
     }
 
     /**
      * 随机选择
      */
-    public ToolResult randomChoice(List<String> options) {
+    @Tool(name = "random_choice", description = "从列表中随机选择一个")
+    public ToolResultBlock randomChoice(
+            @ToolParam(name = "options", description = "选项列表") List<String> options) {
         if (options == null || options.isEmpty()) {
-            return ToolResult.failure("选项列表不能为空");
+            return ToolResultBlock.error("选项列表不能为空");
         }
 
         int index = (int) (Math.random() * options.size());
         String selected = options.get(index);
 
-        return ToolResult.success("随机选择完成",
-                String.format("所有选项：%s\n随机选择：%s（索引：%d/%d）",
-                        String.join(", ", options),
-                        selected,
-                        index + 1,
-                        options.size()));
+        return ToolResultBlock.text(String.format("所有选项：%s\n随机选择：%s（索引：%d/%d）",
+                String.join(", ", options),
+                selected,
+                index + 1,
+                options.size()));
     }
 }

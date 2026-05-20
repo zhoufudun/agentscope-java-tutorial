@@ -22,7 +22,7 @@ import io.agentscope.tutorial.chapter09.tools.TutorialTools;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.自动注入;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -92,11 +92,11 @@ public class A2AService {
     private ReActAgent createAgent(Toolkit toolkit) {
         ReActAgent.Builder builder = ReActAgent.builder()
                 .name("a2a-tutorial-agent")
-                .systemPrompt(buildSystemPrompt());
+                .sysPrompt(buildSystemPrompt());
 
         // Register tools if toolkit is available
-        if (toolkit != null && !toolkit.getTools().isEmpty()) {
-            log.info("Registering {} tools from toolkit", toolkit.getTools().size());
+        if (toolkit != null && !toolkit.getToolNames().isEmpty()) {
+            log.info("Registering {} tools from toolkit", toolkit.getToolNames().size());
             builder.toolkit(toolkit);
         } else {
             // Register default tutorial tools

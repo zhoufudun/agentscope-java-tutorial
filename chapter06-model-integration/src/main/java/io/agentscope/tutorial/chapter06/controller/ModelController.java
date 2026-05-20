@@ -11,7 +11,7 @@ import io.agentscope.tutorial.chapter06.entity.ModelProvider;
 import io.agentscope.tutorial.chapter06.repository.ChatConfigRepository;
 import io.agentscope.tutorial.chapter06.repository.ModelProviderRepository;
 import io.agentscope.tutorial.chapter06.service.ModelService;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -25,7 +25,7 @@ import java.util.*;
  */
 @RestController
 @RequestMapping("/api/models")
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 @Slf4j
 public class ModelController {
 
@@ -194,7 +194,7 @@ public class ModelController {
                         "success", true,
                         "model", modelName,
                         "provider", provider,
-                        "response", response.getContent().getText(),
+                        "response", extractText(response),
                         "usage", response.getUsage()
                 ));
             } else {
@@ -244,8 +244,8 @@ public class ModelController {
         return model.stream(List.of(userMsg), null, options)
                 .map(response -> {
                     Map<String, Object> result = new HashMap<>();
-                    result.put("content", response.getContent().getText());
-                    result.put("done", response.isDone());
+                    result.put("content", extractText(response));
+                    result.put("done", isResponseDone(response));
                     if (response.getUsage() != null) {
                         result.put("usage", response.getUsage());
                     }
@@ -264,7 +264,7 @@ public class ModelController {
         @SuppressWarnings("unchecked")
         List<Map<String, String>> modelList = (List<Map<String, String>>) request.get("models");
         String message = (String) request.get("message");
-        String systemPrompt = (String) request.getOr默认("systemPrompt",
+        String systemPrompt = (String) request.getOrDefault("systemPrompt",
                 "You are a helpful AI assistant.");
 
         if (modelList == null || modelList.isEmpty() || message == null) {
@@ -318,7 +318,7 @@ public class ModelController {
 
                 if (response != null) {
                     result.put("success", true);
-                    result.put("response", response.getContent().getText());
+                    result.put("response", extractText(response));
                     result.put("duration", duration);
                     if (response.getUsage() != null) {
                         result.put("usage", response.getUsage());
@@ -381,24 +381,24 @@ public class ModelController {
      * Get default configuration
      */
     @GetMapping("/config/default")
-    public ResponseEntity<Optional<ChatConfig>> get默认Config() {
-        return ResponseEntity.ok(configRepository.findByIs默认True());
+    public ResponseEntity<Optional<ChatConfig>> getDefaultConfig() {
+        return ResponseEntity.ok(configRepository.findByIsDefaultTrue());
     }
 
     /**
      * Set default configuration
      */
     @PostMapping("/config/set-default/{id}")
-    public ResponseEntity<Map<String, Object>> set默认Config(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> setDefaultConfig(@PathVariable Long id) {
         // Clear current default
-        configRepository.findByIs默认True().ifPresent(config -> {
-            config.setIs默认(false);
+        configRepository.findByIsDefaultTrue().ifPresent(config -> {
+            config.setIsDefault(false);
             configRepository.save(config);
         });
 
         // Set new default
         configRepository.findById(id).ifPresent(config -> {
-            config.setIs默认(true);
+            config.setIsDefault(true);
             configRepository.save(config);
         });
 
@@ -412,5 +412,34 @@ public class ModelController {
     public ResponseEntity<Map<String, Object>> deleteConfig(@PathVariable Long id) {
         configRepository.deleteById(id);
         return ResponseEntity.ok(Map.of("success", true));
+    }
+
+    // ==================== Helper Methods ====================
+
+    /**
+     * Extract text content from ChatResponse
+     */
+    private String extractText(ChatResponse response) {
+        if (response == null || response.getContent() == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (io.agentscope.core.message.ContentBlock block : response.getContent()) {
+            if (block instanceof io.agentscope.core.message.TextBlock textBlock) {
+                sb.append(textBlock.getText());
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Check if response is done based on content
+     */
+    private boolean isResponseDone(ChatResponse response) {
+        if (response == null || response.getContent() == null) {
+            return false;
+        }
+        return response.getContent().stream()
+                .anyMatch(block -> block instanceof io.agentscope.core.message.TextBlock);
     }
 }

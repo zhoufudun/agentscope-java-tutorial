@@ -1,25 +1,7 @@
-/*
- * Copyright 2024-2026 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package io.agentscope.tutorial.chapter09.config;
 
 import io.agentscope.core.a2a.server.card.ConfigurableAgentCard;
-import io.agentscope.core.a2a.server.transport.DeploymentProperties;
 import io.agentscope.core.a2a.server.transport.TransportProperties;
-import io.agentscope.core.a2a.server.transport.jsonrpc.JsonRpcTransportMetadata;
 import io.agentscope.tutorial.chapter09.service.A2AService;
 import io.a2a.spec.AgentProvider;
 import io.a2a.spec.AgentSkill;
@@ -29,6 +11,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * A2A Protocol Configuration.
@@ -83,21 +66,6 @@ public class A2AConfig {
     private String contextPath;
 
     /**
-     * Build custom deployment properties.
-     *
-     * <p>Deployment properties are used to generate the agent's URL
-     * and endpoint information in the AgentCard.
-     */
-    @Bean
-    public DeploymentProperties deploymentProperties() {
-        return new DeploymentProperties.Builder()
-                .host(serverHost)
-                .port(serverPort)
-                .path(normalizePath(contextPath))
-                .build();
-    }
-
-    /**
      * Build custom transport properties for JSON-RPC.
      *
      * <p>The transport properties define how the A2A server exposes
@@ -109,9 +77,8 @@ public class A2AConfig {
                 .host(serverHost)
                 .port(serverPort)
                 .path(normalizePath(contextPath))
-                .metadata(new JsonRpcTransportMetadata.Builder()
-                        .contentType("application/json")
-                        .build())
+                .supportTls(false)
+                .extra(Map.of("contentType", "application/json"))
                 .build();
     }
 
@@ -121,22 +88,6 @@ public class A2AConfig {
      * <p>The AgentCard is the core metadata document for A2A service discovery.
      * It provides information about the agent's capabilities, skills, and
      * transport endpoints.
-     *
-     * <p><b>Example AgentCard JSON:</b>
-     * <pre>{@code
-     * {
-     *   "name": "tutorial-a2a-agent",
-     *   "description": "Tutorial agent for A2A protocol",
-     *   "url": "http://localhost:8888",
-     *   "version": "1.0.0",
-     *   "provider": {
-     *     "name": "AgentScope Team"
-     *   },
-     *   "skills": [
-     *     {"id": "text-chat", "name": "Text Chat"}
-     *   ]
-     * }
-     * }</pre>
      */
     @Bean
     public ConfigurableAgentCard configurableAgentCard() {
@@ -144,9 +95,9 @@ public class A2AConfig {
                 .name("tutorial-a2a-agent")
                 .description("Tutorial agent demonstrating A2A protocol communication")
                 .url("http://" + serverHost + ":" + serverPort + normalizePath(contextPath))
+                .provider(new AgentProvider("AgentScope Team", "https://agentscope.io"))
                 .version("1.0.0")
                 .documentationUrl("http://" + serverHost + ":" + serverPort + normalizePath(contextPath) + "docs")
-                .provider(new AgentProvider("AgentScope Team", "https://agentscope.io"))
                 .defaultInputModes(List.of("text"))
                 .defaultOutputModes(List.of("text", "streaming"))
                 .skills(buildSkills())
@@ -163,26 +114,10 @@ public class A2AConfig {
      */
     private List<AgentSkill> buildSkills() {
         return List.of(
-                AgentSkill.builder()
-                        .id("text-chat")
-                        .name("Text Chat")
-                        .description("General text-based conversation with AI assistant")
-                        .build(),
-                AgentSkill.builder()
-                        .id("calculation")
-                        .name("Calculation")
-                        .description("Mathematical calculations using the calculate tool")
-                        .build(),
-                AgentSkill.builder()
-                        .id("weather")
-                        .name("Weather Query")
-                        .description("Get weather information for cities using get_weather tool")
-                        .build(),
-                AgentSkill.builder()
-                        .id("time")
-                        .name("Time Query")
-                        .description("Get current date and time using get_current_time tool")
-                        .build()
+                new AgentSkill("text-chat", "Text Chat", "General text-based conversation with AI assistant", null, null, null, null, null),
+                new AgentSkill("calculation", "Calculation", "Mathematical calculations using the calculate tool", null, null, null, null, null),
+                new AgentSkill("weather", "Weather Query", "Get weather information for cities using get_weather tool", null, null, null, null, null),
+                new AgentSkill("time", "Time Query", "Get current date and time using get_current_time tool", null, null, null, null, null)
         );
     }
 

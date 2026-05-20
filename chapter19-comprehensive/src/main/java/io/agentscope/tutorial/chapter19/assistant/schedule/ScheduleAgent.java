@@ -168,7 +168,7 @@ public class ScheduleAgent {
     public String querySchedules(String userId, String date) {
         logger.info("查询日程: {} on {}", userId, date);
 
-        List<Schedule> schedules = userSchedules.getOr默认(userId, new ArrayList<>());
+        List<Schedule> schedules = userSchedules.getOrDefault(userId, new ArrayList<>());
 
         // 如果指定了日期，过滤该日期的日程
         if (date != null && !date.isEmpty()) {

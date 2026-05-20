@@ -1,12 +1,14 @@
 package io.agentscope.tutorial.chapter11.service;
 
-import com.alibaba.cloud.ai.model.ChatCompletion;
-import com.alibaba.dashscope.common.Message;
-import com.alibaba.dashscope.common.Role;
+import io.agentscope.core.message.ContentBlock;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.model.ChatResponse;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.tutorial.chapter11.entity.SkillDefinition;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -39,7 +41,7 @@ import java.util.stream.Collectors;
  * @see SkillService
  */
 @Service
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 @Slf4j
 public class ChatService {
 
@@ -90,7 +92,7 @@ public class ChatService {
      * @param request 聊天请求
      * @return 聊天响应
      */
-    public ChatResponse chat(ChatRequest request) {
+    public ChatResponseDto chat(ChatRequest request) {
         try {
             // 获取或创建会话
             String sessionId = request.getSessionId() != null
@@ -102,14 +104,14 @@ public class ChatService {
             history.add(new ChatMessage("user", request.getMessage()));
 
             // 构建消息列表
-            List<Message> messages = buildMessages(sessionId, request.getMessage());
+            List<Msg> messages = buildMessages(sessionId, request.getMessage());
 
             // 调用模型
-            ChatCompletion response = model.chatComplete(messages);
+            ChatResponse response = model.stream(messages, null, null)
+                    .blockLast(java.time.Duration.ofSeconds(60));
 
             // 解析响应
-            String content = parseContent(response);
-            List<ToolCall> toolCalls = parseToolCalls(response);
+            String content = extractText(response);
 
             // 添加助手消息到历史
             history.add(new ChatMessage("assistant", content));
@@ -119,16 +121,16 @@ public class ChatService {
                 history.remove(1);
             }
 
-            return ChatResponse.builder()
+            return ChatResponseDto.builder()
                     .sessionId(sessionId)
                     .content(content)
-                    .toolCalls(toolCalls)
+                    .toolCalls(Collections.emptyList())
                     .success(true)
                     .build();
 
         } catch (Exception e) {
             log.error("Chat error: {}", e.getMessage(), e);
-            return ChatResponse.builder()
+            return ChatResponseDto.builder()
                     .sessionId(request.getSessionId())
                     .content("抱歉，发生了错误：" + e.getMessage())
                     .success(false)
@@ -138,68 +140,35 @@ public class ChatService {
     }
 
     /**
-     * 解析模型响应内容
-     */
-    private String parseContent(ChatCompletion response) {
-        if (response == null) {
-            return "模型返回为空";
-        }
-        try {
-            var choices = response.getChoices();
-            if (choices != null && !choices.isEmpty()) {
-                var first = choices.get(0);
-                var message = first.getMessage();
-                if (message != null) {
-                    var content = message.getContent();
-                    if (content != null && !content.isEmpty()) {
-                        return content;
-                    }
-                }
-            }
-            return "模型未返回有效内容";
-        } catch (Exception e) {
-            log.warn("Failed to parse content: {}", e.getMessage());
-            return "解析响应失败";
-        }
-    }
-
-    /**
-     * 解析工具调用
-     */
-    private List<ToolCall> parseToolCalls(ChatCompletion response) {
-        // 简化实现，实际需要根据具体响应格式解析
-        return Collections.emptyList();
-    }
-
-    /**
      * 构建消息列表
      *
      * <p>包含系统消息（带技能信息）、历史消息和当前用户消息。
      */
-    private List<Message> buildMessages(String sessionId, String userMessage) {
-        List<Message> messages = new ArrayList<>();
+    private List<Msg> buildMessages(String sessionId, String userMessage) {
+        List<Msg> messages = new ArrayList<>();
 
         // 1. 系统消息（包含技能提示词）
         String systemContent = buildSystemPrompt();
-        messages.add(Message.builder()
-                .role(Role.SYSTEM.getValue())
-                .content(systemContent)
+        messages.add(Msg.builder()
+                .role(MsgRole.SYSTEM)
+                .content(TextBlock.builder().text(systemContent).build())
                 .build());
 
         // 2. 会话历史
-        List<ChatMessage> history = sessions.getOr默认(sessionId, Collections.emptyList());
+        List<ChatMessage> history = sessions.getOrDefault(sessionId, Collections.emptyList());
         for (int i = 0; i < history.size() - 1; i++) { // 排除最后一条用户消息
             ChatMessage msg = history.get(i);
-            messages.add(Message.builder()
-                    .role("user".equals(msg.getRole()) ? Role.USER.getValue() : Role.ASSISTANT.getValue())
-                    .content(msg.getContent())
+            MsgRole role = "user".equals(msg.getRole()) ? MsgRole.USER : MsgRole.ASSISTANT;
+            messages.add(Msg.builder()
+                    .role(role)
+                    .content(TextBlock.builder().text(msg.getContent()).build())
                     .build());
         }
 
         // 3. 当前用户消息
-        messages.add(Message.builder()
-                .role(Role.USER.getValue())
-                .content(userMessage)
+        messages.add(Msg.builder()
+                .role(MsgRole.USER)
+                .content(TextBlock.builder().text(userMessage).build())
                 .build());
 
         return messages;
@@ -225,13 +194,7 @@ public class ChatService {
     }
 
     /**
-     * 处理带工具调用的响应
-     *
-     * <p>当模型返回工具调用时，执行工具并返回结果。
-     *
-     * @param sessionId 会话 ID
-     * @param toolCalls 工具调用列表
-     * @return 工具结果
+     * 处理工具调用
      */
     public List<ToolResult> processToolCalls(String sessionId, List<ToolCall> toolCalls) {
         if (toolCalls == null || toolCalls.isEmpty()) {
@@ -239,47 +202,26 @@ public class ChatService {
         }
 
         List<ToolResult> results = new ArrayList<>();
-        List<ChatMessage> history = sessions.get(sessionId);
-
         for (ToolCall toolCall : toolCalls) {
             try {
-                // 执行工具
-                String result = executeTool(toolCall);
-
-                // 添加工具结果到历史
-                if (history != null) {
-                    history.add(new ChatMessage("tool", result));
-                }
-
+                // 简化实现，实际需要根据具体响应格式解析
                 results.add(ToolResult.builder()
                         .toolCallId(toolCall.getId())
                         .toolName(toolCall.getName())
-                        .result(result)
+                        .result("Tool executed: " + toolCall.getName())
                         .success(true)
                         .build());
-
             } catch (Exception e) {
-                log.error("Tool execution error: {} - {}", toolCall.getName(), e.getMessage());
-
                 results.add(ToolResult.builder()
                         .toolCallId(toolCall.getId())
                         .toolName(toolCall.getName())
-                        .result("工具执行失败：" + e.getMessage())
+                        .result("Tool execution failed: " + e.getMessage())
                         .success(false)
                         .error(e.getMessage())
                         .build());
             }
         }
-
         return results;
-    }
-
-    /**
-     * 执行工具
-     */
-    private String executeTool(ToolCall toolCall) {
-        // 工具执行逻辑
-        return "Tool executed: " + toolCall.getName();
     }
 
     /**
@@ -289,7 +231,7 @@ public class ChatService {
      * @return 消息历史
      */
     public List<ChatMessage> getHistory(String sessionId) {
-        return new ArrayList<>(sessions.getOr默认(sessionId, Collections.emptyList()));
+        return new ArrayList<>(sessions.getOrDefault(sessionId, Collections.emptyList()));
     }
 
     /**
@@ -349,6 +291,22 @@ public class ChatService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 从 ChatResponse 提取文本内容
+     */
+    private String extractText(ChatResponse response) {
+        if (response == null || response.getContent() == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (ContentBlock block : response.getContent()) {
+            if (block instanceof TextBlock textBlock) {
+                sb.append(textBlock.getText());
+            }
+        }
+        return sb.toString();
+    }
+
     // ==================== DTO 类 ====================
 
     /**
@@ -367,7 +325,7 @@ public class ChatService {
      */
     @lombok.Data
     @lombok.Builder
-    public static class ChatResponse {
+    public static class ChatResponseDto {
         private String sessionId;
         private String content;
         private List<ToolCall> toolCalls;
@@ -379,7 +337,7 @@ public class ChatService {
      * 聊天消息
      */
     @lombok.Data
-    @lombok.AllArgs构造函数
+    @lombok.AllArgsConstructor
     public static class ChatMessage {
         private String role;
         private String content;

@@ -60,7 +60,7 @@ public class AgentBean {
         this.agent = agent;
         log.info("=== AgentScope Quarkus Integration ===");
         log.info("Agent initialized: {}", agent.getName());
-        log.info("Agent max iterations: {}", agent.getMaxIterations());
+        log.info("Agent max iterations: {}", agent.getMaxIters());
     }
 
     /**

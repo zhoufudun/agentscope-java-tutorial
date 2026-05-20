@@ -16,10 +16,10 @@
 package io.agentscope.tutorial.chapter16.dto;
 
 import jakarta.validation.constraints.NotEmpty;
-import lombok.AllArgs构造函数;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgs构造函数;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
@@ -41,8 +41,8 @@ import java.util.List;
  */
 @Data
 @Builder
-@NoArgs构造函数
-@AllArgs构造函数
+@NoArgsConstructor
+@AllArgsConstructor
 public class ChatRequest {
 
     /** 消息列表（包含角色和内容） */
@@ -63,8 +63,8 @@ public class ChatRequest {
      */
     @Data
     @Builder
-    @NoArgs构造函数
-    @AllArgs构造函数
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class Message {
         /** 角色：system | user | assistant | tool */
         private String role;

@@ -88,9 +88,9 @@ public class AgentConfig {
         Toolkit toolkit = new Toolkit();
 
         // 注册工具类（自动发现所有 @Tool 注解方法）
-        toolkit.registerObject(new WeatherTool());
-        toolkit.registerObject(new CalculatorTool());
-        toolkit.registerObject(new DateTimeTool());
+        toolkit.registerTool(new WeatherTool());
+        toolkit.registerTool(new CalculatorTool());
+        toolkit.registerTool(new DateTimeTool());
 
         log.info("工具包已创建，注册了以下工具:");
         log.info("  - get_current_weather: 获取当前天气");
@@ -101,14 +101,6 @@ public class AgentConfig {
         log.info("  - get_current_time: 获取当前时间");
         log.info("  - calculate_days_between: 计算日期差");
         log.info("  - get_day_of_week: 获取星期几");
-
-        // 配置工具执行超时时间
-        toolkit.set默认ExecutionConfig(
-                ExecutionConfig.builder()
-                        .timeout(Duration.ofSeconds(60))
-                        .maxRetries(2)
-                        .build()
-        );
 
         return toolkit;
     }

@@ -32,7 +32,7 @@ public class OrderAgent {
     private ReActAgent createOrderAgent(Model model) {
         // 创建工具集
         Toolkit toolkit = new Toolkit();
-        toolkit.registerObject(new OrderTools());
+        toolkit.registerTool(new OrderTools());
 
         return ReActAgent.builder()
             .name("order_agent")
@@ -82,7 +82,7 @@ public class OrderAgent {
         try {
             var response = agent.call(io.agentscope.core.message.Msg.builder()
                 .role(io.agentscope.core.message.MsgRole.USER)
-                .content(query)
+                .content(io.agentscope.core.message.TextBlock.builder().text(query).build())
                 .build()).block();
 
             String result = response != null ? response.getTextContent() : "";

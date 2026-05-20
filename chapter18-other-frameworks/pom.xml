@@ -38,6 +38,7 @@
         <spring-boot.version>3.2.5</spring-boot.version>
         <micronaut.version>4.5.0</micronaut.version>
         <quarkus.version>3.30.6</quarkus.version>
+        <commons-lang3.version>3.14.0</commons-lang3.version>
     </properties>
 
     <modules>

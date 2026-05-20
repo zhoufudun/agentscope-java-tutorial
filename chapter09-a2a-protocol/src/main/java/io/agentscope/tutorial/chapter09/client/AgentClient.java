@@ -1,19 +1,3 @@
-/*
- * Copyright 2024-2026 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package io.agentscope.tutorial.chapter09.client;
 
 import io.agentscope.core.a2a.agent.A2aAgent;
@@ -45,19 +29,6 @@ import java.util.UUID;
  * <p>The A2A client uses the well-known URI pattern to discover
  * the remote agent's AgentCard, which contains its endpoint and
  * capabilities information.
- *
- * <p><b>Usage Example:</b>
- * <pre>{@code
- * // Send a message
- * Msg message = Msg.of("Hello, calculate 2 + 2");
- * String response = agentClient.chat(message).block();
- *
- * // Stream responses
- * agentClient.streamChat(message)
- *     .doOnNext(chunk -> System.out.print(chunk))
- *     .then()
- *     .block();
- * }</pre>
  */
 @Component
 public class AgentClient {
@@ -99,8 +70,8 @@ public class AgentClient {
             // Create AgentCard resolver using well-known URI
             AgentCardResolver agentCardResolver = WellKnownAgentCardResolver.builder()
                     .baseUrl(baseUrl)
-                    .path(agentCardPath)
-                    .headers(Map.of())
+                    .relativeCardPath(agentCardPath)
+                    .authHeaders(Map.of())
                     .build();
 
             // Build A2A agent client
@@ -130,7 +101,7 @@ public class AgentClient {
      */
     public Msg chat(Msg message) {
         log.info("Sending message to remote agent: {}", message.getContent());
-        return a2aAgent.call(message);
+        return a2aAgent.call(message).block();
     }
 
     /**
@@ -144,34 +115,18 @@ public class AgentClient {
         Msg message = Msg.builder()
                 .role(MsgRole.USER)
                 .content(TextBlock.builder().text(content).build())
-                .contextId(contextId)
                 .build();
         return chat(message);
     }
 
     /**
      * Stream chat responses from the remote agent.
-     *
-     * <p>该方法 returns a Flux of response chunks, allowing
-     * for real-time streaming of the agent's response.
-     *
-     * <p><b>Usage:</b>
-     * <pre>{@code
-     * agentClient.streamChat(message)
-     *     .doOnNext(chunk -> System.out.print(chunk))
-     *     .doOnComplete(() -> System.out.println())
-     *     .subscribe();
-     * }</pre>
-     *
-     * @param message The message to send
-     * @return A Flux of response text chunks
      */
     public Flux<String> streamChat(Msg message) {
         log.info("Starting streaming chat with remote agent");
 
         return a2aAgent.stream(message)
                 .map(event -> {
-                    // Process the event
                     if (event.isLast()) {
                         return "";
                     }
@@ -181,7 +136,6 @@ public class AgentClient {
                         return "";
                     }
 
-                    // Extract text content from message
                     StringBuilder text = new StringBuilder();
                     responseMessage.getContent().stream()
                             .filter(block -> block instanceof TextBlock)
@@ -203,23 +157,8 @@ public class AgentClient {
         Msg message = Msg.builder()
                 .role(MsgRole.USER)
                 .content(TextBlock.builder().text(content).build())
-                .contextId(contextId)
                 .build();
         return streamChat(message);
-    }
-
-    /**
-     * Send a message and get streaming events.
-     *
-     * <p>This provides access to the full event stream, including
-     * task status updates and other metadata.
-     *
-     * @param message The message to send
-     * @return A Flux of task events
-     */
-    public Flux<io.agentscope.core.a2a.agent.event.ClientEventContext> streamEvents(Msg message) {
-        return a2aAgent.stream(message)
-                .map(event -> event);
     }
 
     /**

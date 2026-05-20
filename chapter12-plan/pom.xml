@@ -63,7 +63,8 @@
 
         <!-- Reactor for reactive streams -->
         <dependency>
-            <groupId>reactor-core</groupId>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-core</artifactId>
         </dependency>
 
         <!-- Jackson for JSON -->

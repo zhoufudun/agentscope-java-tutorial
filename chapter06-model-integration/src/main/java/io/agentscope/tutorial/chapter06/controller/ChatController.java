@@ -4,7 +4,7 @@ import io.agentscope.core.message.Msg;
 import io.agentscope.core.model.ChatResponse;
 import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.tutorial.chapter06.service.ChatService;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -22,7 +22,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/chat")
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 @Slf4j
 public class ChatController {
 
@@ -36,8 +36,8 @@ public class ChatController {
         String provider = (String) request.get("provider");
         String modelName = (String) request.get("modelName");
         String message = (String) request.get("message");
-        String sessionId = (String) request.getOr默认("sessionId", "default");
-        Boolean includeSystemPrompt = (Boolean) request.getOr默认("includeSystemPrompt", true);
+        String sessionId = (String) request.getOrDefault("sessionId", "default");
+        Boolean includeSystemPrompt = (Boolean) request.getOrDefault("includeSystemPrompt", true);
 
         Double temperature = request.containsKey("temperature")
                 ? ((Number) request.get("temperature")).doubleValue() : null;
@@ -62,7 +62,7 @@ public class ChatController {
 
             Map<String, Object> result = new HashMap<>();
             result.put("success", true);
-            result.put("response", response.getContent().getText());
+            result.put("response", extractText(response));
             if (response.getUsage() != null) {
                 result.put("usage", response.getUsage());
             }
@@ -96,8 +96,8 @@ public class ChatController {
         return chatService.streamChat(provider, modelName, message, options)
                 .map(response -> {
                     Map<String, Object> result = new HashMap<>();
-                    result.put("content", response.getContent().getText());
-                    result.put("done", response.isDone());
+                    result.put("content", extractText(response));
+                    result.put("done", isResponseDone(response));
                     if (response.getUsage() != null) {
                         result.put("usage", response.getUsage());
                     }
@@ -128,5 +128,33 @@ public class ChatController {
     public ResponseEntity<Map<String, Object>> clearHistory(@PathVariable String sessionId) {
         chatService.clearHistory(sessionId);
         return ResponseEntity.ok(Map.of("success", true));
+    }
+
+    /**
+     * Extract text content from ChatResponse
+     */
+    private String extractText(ChatResponse response) {
+        if (response == null || response.getContent() == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (io.agentscope.core.message.ContentBlock block : response.getContent()) {
+            if (block instanceof io.agentscope.core.message.TextBlock textBlock) {
+                sb.append(textBlock.getText());
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Check if response is done based on content
+     */
+    private boolean isResponseDone(ChatResponse response) {
+        if (response == null || response.getContent() == null) {
+            return false;
+        }
+        // Consider done if there's text content and it's the final response
+        return response.getContent().stream()
+                .anyMatch(block -> block instanceof io.agentscope.core.message.TextBlock);
     }
 }

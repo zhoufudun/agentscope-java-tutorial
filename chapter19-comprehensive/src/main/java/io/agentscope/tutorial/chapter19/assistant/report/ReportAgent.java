@@ -347,7 +347,7 @@ public class ReportAgent {
 
         List<Report> reports = reportStorage.values().stream()
                 .filter(r -> r.userId.equals(userId))
-                .sorted(Comparator.comparing(r -> r.createdAt).reversed())
+                .sorted(Comparator.comparing((Report r) -> r.createdAt).reversed())
                 .limit(limit)
                 .toList();
 

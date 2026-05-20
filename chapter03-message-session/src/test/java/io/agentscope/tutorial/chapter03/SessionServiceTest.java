@@ -12,7 +12,7 @@ import io.agentscope.tutorial.chapter03.repository.MessageRepository;
 import io.agentscope.tutorial.chapter03.repository.SessionRepository;
 import io.agentscope.tutorial.chapter03.service.SessionService;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.自动注入;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 

@@ -128,7 +128,7 @@ public class ProductionConfig {
         var runtime = ManagementFactory.getRuntimeMXBean();
         log.info("JVM Version: {}", runtime.getVmName());
         log.info("JVM Arguments: {}", runtime.getInputArguments());
-        log.info("Java Home: {}", runtime.getJavaHome());
+        log.info("Java Home: {}", System.getProperty("java.home"));
 
         // 系统信息
         var os = ManagementFactory.getOperatingSystemMXBean();

@@ -130,7 +130,7 @@ public class AuditController {
      */
     @GetMapping("/records/tool")
     public ResponseEntity<Map<String, Object>> getRecordsByTool(
-            @Request参数 String tool) {
+            @RequestParam String tool) {
 
         List<AuditHook.ToolAuditRecord> memoryRecords = auditHook.getAuditRecordsByTool(tool);
         List<AuditLog> dbRecords = auditLogRepository.findByToolName(tool);

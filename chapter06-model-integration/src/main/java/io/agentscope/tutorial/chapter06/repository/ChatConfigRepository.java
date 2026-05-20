@@ -17,7 +17,7 @@ public interface ChatConfigRepository extends JpaRepository<ChatConfig, Long> {
     /**
      * Find all non-default configurations
      */
-    List<ChatConfig> findByIs默认False();
+    List<ChatConfig> findByIsDefaultFalse();
 
     /**
      * Find configurations by provider type
@@ -27,7 +27,7 @@ public interface ChatConfigRepository extends JpaRepository<ChatConfig, Long> {
     /**
      * Find default configuration
      */
-    Optional<ChatConfig> findByIs默认True();
+    Optional<ChatConfig> findByIsDefaultTrue();
 
     /**
      * Find configuration by name

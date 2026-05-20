@@ -91,7 +91,7 @@ public class RouterAgent {
             // 调用路由代理分析意图
             var response = agent.call(io.agentscope.core.message.Msg.builder()
                 .role(io.agentscope.core.message.MsgRole.USER)
-                .content(query)
+                .content(io.agentscope.core.message.TextBlock.builder().text(query).build())
                 .build()).block();
 
             String responseText = response != null ? response.getTextContent() : "";

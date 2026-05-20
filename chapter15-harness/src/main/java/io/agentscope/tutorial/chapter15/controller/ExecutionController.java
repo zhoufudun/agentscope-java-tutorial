@@ -4,7 +4,7 @@ import io.agentscope.tutorial.chapter15.model.ExecutionRequest;
 import io.agentscope.tutorial.chapter15.model.ExecutionResult;
 import io.agentscope.tutorial.chapter15.service.CodeExecutionService;
 import jakarta.validation.Valid;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -26,7 +26,7 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api/execute")
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 public class ExecutionController {
 
     private final CodeExecutionService codeExecutionService;
@@ -66,7 +66,7 @@ public class ExecutionController {
             @RequestBody Map<String, Object> request) {
 
         String command = (String) request.get("command");
-        String workspace = (String) request.getOr默认("workspace", "default");
+        String workspace = (String) request.getOrDefault("workspace", "default");
         Integer timeout = request.get("timeoutSeconds") != null
                 ? ((Number) request.get("timeoutSeconds")).intValue()
                 : null;

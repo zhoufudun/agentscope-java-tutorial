@@ -7,7 +7,7 @@ import io.agentscope.core.tool.file.WriteFileTool;
 import io.agentscope.core.tool.coding.ShellCommandTool;
 import io.agentscope.tutorial.chapter11.service.SkillService;
 import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -50,7 +50,7 @@ import java.util.stream.Stream;
  * @see Toolkit
  */
 @Configuration
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 @Slf4j
 public class SkillConfig {
 

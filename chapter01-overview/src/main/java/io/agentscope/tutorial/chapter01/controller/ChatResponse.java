@@ -16,10 +16,10 @@
 package io.agentscope.tutorial.chapter01.controller;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import lombok.AllArgs构造函数;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgs构造函数;
+import lombok.NoArgsConstructor;
 
 /**
  * 聊天响应类.
@@ -46,8 +46,8 @@ import lombok.NoArgs构造函数;
  */
 @Data
 @Builder
-@NoArgs构造函数
-@AllArgs构造函数
+@NoArgsConstructor
+@AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class ChatResponse {
 

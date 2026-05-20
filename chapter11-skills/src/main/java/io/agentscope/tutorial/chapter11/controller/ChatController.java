@@ -3,7 +3,7 @@ package io.agentscope.tutorial.chapter11.controller;
 import io.agentscope.tutorial.chapter11.entity.SkillDefinition;
 import io.agentscope.tutorial.chapter11.service.ChatService;
 import io.agentscope.tutorial.chapter11.service.SkillService;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -38,7 +38,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/chat")
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 @Slf4j
 public class ChatController {
 
@@ -67,7 +67,7 @@ public class ChatController {
                 request.getSessionId(),
                 request.getMessage() != null ? request.getMessage().length() : 0);
 
-        ChatService.ChatResponse response = chatService.chat(
+        ChatService.ChatResponseDto response = chatService.chat(
                 ChatService.ChatRequest.builder()
                         .sessionId(request.getSessionId())
                         .message(request.getMessage())
@@ -82,7 +82,9 @@ public class ChatController {
                 .toolCalls(response.getToolCalls())
                 .success(response.isSuccess())
                 .error(response.getError())
-                .skillRecommendations(chatService.recommendSkills(request.getMessage()))
+                .skillRecommendations(chatService.recommendSkills(request.getMessage()).stream()
+                        .map(SkillDTO::fromEntity)
+                        .toList())
                 .build();
 
         return ResponseEntity.ok(chatResponse);
@@ -179,8 +181,8 @@ public class ChatController {
      */
     @PostMapping("/tool-result")
     public ResponseEntity<ChatResponse> submitToolResult(@RequestBody ToolResultRequest request) {
-        log.info("Tool result submitted - session: {}, tool: {}",
-                request.getSessionId(), request.getToolCallId());
+        log.info("Tool result submitted - session: {}, tool count: {}",
+                request.getSessionId(), request.getToolCalls() != null ? request.getToolCalls().size() : 0);
 
         // 工具执行已在客户端完成，这里处理工具结果的后续对话
         List<ChatService.ToolResult> toolResults = chatService.processToolCalls(
@@ -189,7 +191,7 @@ public class ChatController {
         );
 
         // 继续对话
-        ChatService.ChatResponse response = chatService.chat(
+        ChatService.ChatResponseDto response = chatService.chat(
                 ChatService.ChatRequest.builder()
                         .sessionId(request.getSessionId())
                         .message("[TOOL_RESULT] " + formatToolResults(toolResults))

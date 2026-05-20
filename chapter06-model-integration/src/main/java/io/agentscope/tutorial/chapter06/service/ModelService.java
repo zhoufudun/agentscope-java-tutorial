@@ -14,7 +14,7 @@ import io.agentscope.tutorial.chapter06.entity.ModelProvider;
 import io.agentscope.tutorial.chapter06.repository.ChatConfigRepository;
 import io.agentscope.tutorial.chapter06.repository.ModelProviderRepository;
 import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -31,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Service
 @Slf4j
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 public class ModelService {
 
     private final ModelProviderRepository providerRepository;
@@ -184,7 +184,7 @@ public class ModelService {
     /**
      * Switch default model
      */
-    public void switch默认Model(String provider, String modelName) {
+    public void switchDefaultModel(String provider, String modelName) {
         String cacheKey = provider + ":" + modelName;
         if (!modelCache.containsKey(cacheKey)) {
             throw new IllegalArgumentException("Model does not exist: " + cacheKey);

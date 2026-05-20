@@ -127,6 +127,7 @@ public class AgentService {
                 .build();
 
         return agent.stream(userMsg)
+                .next()
                 .map(event -> {
                     // 这里可以处理流式事件，如思考过程、工具调用结果等
                     Msg msg = event.getMessage();

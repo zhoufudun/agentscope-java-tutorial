@@ -6,7 +6,7 @@ import io.agentscope.tutorial.chapter14.repository.ApprovalRepository;
 import io.agentscope.tutorial.chapter14.service.ApprovalService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.自动注入;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 

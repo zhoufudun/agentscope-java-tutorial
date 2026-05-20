@@ -1,10 +1,10 @@
 package io.agentscope.tutorial.chapter06.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgs构造函数;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgs构造函数;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
@@ -16,8 +16,8 @@ import java.time.LocalDateTime;
 @Table(name = "model_provider")
 @Data
 @Builder
-@NoArgs构造函数
-@AllArgs构造函数
+@NoArgsConstructor
+@AllArgsConstructor
 public class ModelProvider {
 
     @Id
@@ -52,14 +52,14 @@ public class ModelProvider {
      * Whether this provider is enabled
      */
     @Column(nullable = false)
-    @Builder.默认
+    @Builder.Default
     private Boolean enabled = true;
 
     /**
      * Priority (lower number = higher priority)
      */
     @Column(nullable = false)
-    @Builder.默认
+    @Builder.Default
     private Integer priority = 100;
 
     /**
@@ -72,14 +72,14 @@ public class ModelProvider {
      * Creation timestamp
      */
     @Column(nullable = false, updatable = false)
-    @Builder.默认
+    @Builder.Default
     private LocalDateTime createTime = LocalDateTime.now();
 
     /**
      * Last update timestamp
      */
     @Column(nullable = false)
-    @Builder.默认
+    @Builder.Default
     private LocalDateTime updateTime = LocalDateTime.now();
 
     @PreUpdate

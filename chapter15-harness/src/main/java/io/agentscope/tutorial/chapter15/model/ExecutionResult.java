@@ -1,10 +1,10 @@
 package io.agentscope.tutorial.chapter15.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import lombok.AllArgs构造函数;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgs构造函数;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
@@ -23,8 +23,8 @@ import java.time.LocalDateTime;
  */
 @Data
 @Builder
-@NoArgs构造函数
-@AllArgs构造函数
+@NoArgsConstructor
+@AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class ExecutionResult {
 
@@ -33,17 +33,17 @@ public class ExecutionResult {
     private String stdout;
     private String stderr;
 
-    @Builder.默认
+    @Builder.Default
     private Long executionTimeMs = 0L;
 
-    @Builder.默认
+    @Builder.Default
     private String workspace = "default";
 
     private String sandboxId;
     private String errorMessage;
     private Boolean truncated;
 
-    @Builder.默认
+    @Builder.Default
     private LocalDateTime executedAt = LocalDateTime.now();
 
     /**

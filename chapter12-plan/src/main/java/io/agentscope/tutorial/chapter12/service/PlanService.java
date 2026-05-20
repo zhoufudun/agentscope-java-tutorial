@@ -139,7 +139,7 @@ public class PlanService implements PlanStorage {
         PlanResponse response = getCurrentPlanResponse();
         planSink.tryEmitNext(response);
         log.debug("Plan change broadcasted: {}",
-                response.getName() != null ? response.getName() : "null");
+                response.name != null ? response.name : "null");
     }
 
     /**

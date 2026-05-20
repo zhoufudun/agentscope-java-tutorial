@@ -25,7 +25,7 @@ import io.agentscope.tutorial.chapter19.boba.supervisor.OrderSupervisorAgent;
 import io.agentscope.tutorial.chapter19.werewolf.game.WerewolfGame;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.自动注入;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -95,10 +95,10 @@ public class Chapter19Controller {
      */
     @PostMapping("/boba/order")
     public ResponseEntity<String> placeOrder(@RequestBody Map<String, String> request) {
-        String drink = request.getOr默认("drink", "");
-        String sweetness = request.getOr默认("sweetness", "正常糖");
-        String ice = request.getOr默认("ice", "正常冰");
-        String topping = request.getOr默认("topping", "");
+        String drink = request.getOrDefault("drink", "");
+        String sweetness = request.getOrDefault("sweetness", "正常糖");
+        String ice = request.getOrDefault("ice", "正常冰");
+        String topping = request.getOrDefault("topping", "");
 
         logger.info("收到奶茶订单: {} {} {} {}", drink, sweetness, ice, topping);
 
@@ -129,9 +129,9 @@ public class Chapter19Controller {
      */
     @PostMapping("/boba/price")
     public ResponseEntity<String> calculatePrice(@RequestBody Map<String, Object> request) {
-        String drink = (String) request.getOr默认("drink", "");
+        String drink = (String) request.getOrDefault("drink", "");
         @SuppressWarnings("unchecked")
-        java.util.List<String> toppings = (java.util.List<String>) request.getOr默认("toppings", java.util.List.of());
+        java.util.List<String> toppings = (java.util.List<String>) request.getOrDefault("toppings", java.util.List.of());
 
         double price = bobaOrderService.calculatePrice(drink, toppings);
         return ResponseEntity.ok(String.format("%.2f 元", price));
@@ -197,7 +197,7 @@ public class Chapter19Controller {
      */
     @PostMapping("/assistant/chat")
     public ResponseEntity<String> chat(@RequestBody Map<String, String> request) {
-        String message = request.getOr默认("message", "");
+        String message = request.getOrDefault("message", "");
 
         if (message.isEmpty()) {
             return ResponseEntity.badRequest().body("消息不能为空");
@@ -234,10 +234,10 @@ public class Chapter19Controller {
      */
     @PostMapping("/assistant/schedule")
     public ResponseEntity<String> createSchedule(@RequestBody Map<String, String> request) {
-        String title = request.getOr默认("title", "");
-        String description = request.getOr默认("description", "");
-        String startTime = request.getOr默认("startTime", "");
-        String endTime = request.getOr默认("endTime", "");
+        String title = request.getOrDefault("title", "");
+        String description = request.getOrDefault("description", "");
+        String startTime = request.getOrDefault("startTime", "");
+        String endTime = request.getOrDefault("endTime", "");
 
         if (title.isEmpty() || startTime.isEmpty() || endTime.isEmpty()) {
             return ResponseEntity.badRequest()

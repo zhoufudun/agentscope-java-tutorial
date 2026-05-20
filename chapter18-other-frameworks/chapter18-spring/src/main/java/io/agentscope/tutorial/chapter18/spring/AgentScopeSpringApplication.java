@@ -35,9 +35,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * @author AgentScope Tutorial
  */
 @SpringBootApplication
-public class SpringApplication {
+public class AgentScopeSpringApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(SpringApplication.class, args);
+        SpringApplication.run(AgentScopeSpringApplication.class, args);
     }
 }

@@ -3,7 +3,7 @@ package io.agentscope.tutorial.chapter11.controller;
 import io.agentscope.core.skill.AgentSkill;
 import io.agentscope.tutorial.chapter11.entity.SkillDefinition;
 import io.agentscope.tutorial.chapter11.service.SkillService;
-import lombok.RequiredArgs构造函数;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -41,7 +41,7 @@ import java.util.stream.Collectors;
  */
 @RestController
 @RequestMapping("/skills")
-@RequiredArgs构造函数
+@RequiredArgsConstructor
 @Slf4j
 public class SkillController {
 

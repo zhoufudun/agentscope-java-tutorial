@@ -99,16 +99,16 @@ public class WeatherTool {
         return Mono.fromCallable(() -> {
             simulateDelay(800, 1500);
 
-            // 限制天数范围
-            days = Math.max(1, Math.min(days, 7));
+            // 限制天数范围 - 使用新变量而不是修改参数
+            int effectiveDays = Math.max(1, Math.min(days, 7));
 
             StringBuilder forecast = new StringBuilder();
-            forecast.append(String.format("【%s 天气预报（未来%d天）】\n\n", city, days));
+            forecast.append(String.format("【%s 天气预报（未来%d天）】\n\n", city, effectiveDays));
 
             String[] conditions = {"晴", "多云", "阴", "小雨", "中雨", "雷阵雨"};
             LocalDateTime date = LocalDateTime.now();
 
-            for (int i = 0; i < days; i++) {
+            for (int i = 0; i < effectiveDays; i++) {
                 date = date.plusDays(1);
                 String condition = conditions[RANDOM.nextInt(conditions.length)];
                 int highTemp = RANDOM.nextInt(15) + 20;  // 20-35°C

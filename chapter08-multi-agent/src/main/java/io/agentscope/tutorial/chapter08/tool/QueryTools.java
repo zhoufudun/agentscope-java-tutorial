@@ -6,175 +6,170 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 通用查询工具（模拟实现）
+ * General query tools (simulated implementation)
  *
- * 提供产品查询、优惠查询、地址更新等通用功能
+ * Provides product search, promotion query, address update and other general functions
  */
 public class QueryTools {
 
     private static final Logger log = LoggerFactory.getLogger(QueryTools.class);
 
-    private QueryTools() {}
+    public QueryTools() {}
 
-    // ==================== 产品搜索 ====================
+    // ==================== Product Search ====================
 
     /**
-     * 搜索产品
+     * Search products
      *
-     * @param keyword 搜索关键词
-     * @return 产品列表
+     * @param keyword Search keyword
+     * @return Product list
      */
     @Tool(
         name = "search_products",
-        description = "搜索商品或产品信息。" +
-                      "适用于用户询问"有什么推荐的产品"或"XX产品多少钱"等问题。"
+        description = "Search for products or merchandise information. Use when user asks for product recommendations or prices."
     )
     public static String searchProducts(
-            @ToolParam(name = "keyword", description = "搜索关键词")
+            @ToolParam(name = "keyword", description = "Search keyword")
             String keyword) {
 
-        log.info("搜索产品，关键词：{}", keyword);
+        log.info("Searching products, keyword: {}", keyword);
 
         return """
-            搜索结果（关键词：%s）：
-            1. 【热销】智能蓝牙耳机 Pro - ¥299.00 - 好评率 98%%
-            2. 【新品】无线充电器 15W - ¥89.00 - 好评率 95%%
-            3. 【特惠】手机保护套 适用 iPhone 15 - ¥39.00 - 好评率 92%%
+            Search Results (keyword: %s):
+            1. [Hot] Smart Bluetooth Earphones Pro - ¥299.00 - 98%% positive reviews
+            2. [New] Wireless Charger 15W - ¥89.00 - 95%% positive reviews
+            3. [Special] Phone Case for iPhone 15 - ¥39.00 - 92%% positive reviews
             """.formatted(keyword);
     }
 
-    // ==================== 优惠查询 ====================
+    // ==================== Promotion Query ====================
 
     /**
-     * 查询优惠政策
+     * Query available promotions
      *
-     * @param userId 用户 ID
-     * @return 可用的优惠政策
+     * @param userId User ID
+     * @return Available promotions
      */
     @Tool(
         name = "query_promotions",
-        description = "查询当前可用的优惠活动。" +
-                      "适用于用户询问"有什么优惠"或"能打折吗"等问题。"
+        description = "Query current available promotional activities. Use when user asks about discounts or special offers."
     )
     public static String queryPromotions(
-            @ToolParam(name = "user_id", description = "用户 ID")
+            @ToolParam(name = "user_id", description = "User ID")
             String userId) {
 
-        log.info("查询优惠活动，用户ID：{}", userId);
+        log.info("Querying promotions, user ID: {}", userId);
 
         return """
-            当前可用的优惠活动：
-            1. 新用户首单立减 ¥50（限未下单新用户）
-            2. 满 ¥200 减 ¥30（有效期至 2024-01-31）
-            3. 会员日 9 折券（每月 18 日会员日）
-            4. 积分兑换抵现（100 积分 = ¥1）
-            5. 【限时】冬季保暖用品专区 8 折起
+            Current Available Promotions:
+            1. New User First Order Discount ¥50 (for users who haven't placed order yet)
+            2. ¥200 off ¥30 (valid until 2024-01-31)
+            3. Member Day 10%% Off Coupon (18th of each month)
+            4. Points Exchange (100 points = ¥1)
+            5. [Limited Time] Winter Essentials 20%% Off or more
             """;
     }
 
-    // ==================== 账户信息 ====================
+    // ==================== Account Info ====================
 
     /**
-     * 查询账户信息
+     * Query account information
      *
-     * @param userId 用户 ID
-     * @return 账户相关信息
+     * @param userId User ID
+     * @return Account related information
      */
     @Tool(
         name = "query_account_info",
-        description = "查询用户的账户信息，包括积分、优惠券、会员等级等。" +
-                      "适用于用户询问"我的积分是多少"或"我有多少优惠券"等问题。"
+        description = "Query user's account information including points, coupons, membership level, etc. Use when user asks about points or coupons."
     )
     public static String queryAccountInfo(
-            @ToolParam(name = "user_id", description = "用户 ID")
+            @ToolParam(name = "user_id", description = "User ID")
             String userId) {
 
-        log.info("查询账户信息，用户ID：{}", userId);
+        log.info("Querying account info, user ID: {}", userId);
 
         return """
-            账户信息：
-            会员等级：黄金会员
-            当前积分：2,580 积分
-            可用优惠券：3 张
-              - ¥20 优惠券（满 ¥200 可用，有效期至 2024-01-31）
-              - ¥10 优惠券（满 ¥100 可用，有效期至 2024-02-15）
-              - 9 折会员日券（每月 18 日可用）
+            Account Information:
+            Membership Level: Gold Member
+            Current Points: 2,580 points
+            Available Coupons: 3
+              - ¥20 Coupon (¥200 minimum, valid until 2024-01-31)
+              - ¥10 Coupon (¥100 minimum, valid until 2024-02-15)
+              - 10%% Off Member Day Coupon (available on 18th of each month)
             """;
     }
 
-    // ==================== 地址管理 ====================
+    // ==================== Address Management ====================
 
     /**
-     * 获取当前收货地址
+     * Get current shipping address
      *
-     * @param userId 用户 ID
-     * @return 当前收货地址
+     * @param userId User ID
+     * @return Current shipping address
      */
     @Tool(
         name = "get_shipping_address",
-        description = "获取用户当前的默认收货地址。" +
-                      "在需要更新地址前，应先查询当前地址信息。"
+        description = "Get user's current default shipping address. Query current address before updating."
     )
     public static String getShippingAddress(
-            @ToolParam(name = "user_id", description = "用户 ID")
+            @ToolParam(name = "user_id", description = "User ID")
             String userId) {
 
-        log.info("查询用户收货地址，用户ID：{}", userId);
+        log.info("Querying shipping address, user ID: {}", userId);
 
         return """
-            当前收货地址：
-            收货人：张三
-            手机号：138****5678
-            省市区：浙江省杭州市西湖区
-            详细地址：文三路 123 号 XX 小区 1 栋 1001 室
-            邮编：310000
+            Current Shipping Address:
+            Recipient: Zhang San
+            Phone: 138****5678
+            Province/City/District: Zhejiang Province, Hangzhou City, Xihu District
+            Detailed Address: Building 1, Unit 1001, XX Community, 123 Wensan Road
+            Postal Code: 310000
             """;
     }
 
     /**
-     * 更新收货地址
+     * Update shipping address
      *
-     * @param userId 用户 ID
-     * @param province 省份
-     * @param city 城市
-     * @param district 区/县
-     * @param detailAddress 详细地址
-     * @param recipient 收货人姓名
-     * @param phone 手机号
-     * @return 更新结果
+     * @param userId User ID
+     * @param province Province
+     * @param city City
+     * @param district District/County
+     * @param detailAddress Detailed address
+     * @param recipient Recipient name
+     * @param phone Phone number
+     * @return Update result
      */
     @Tool(
         name = "update_shipping_address",
-        description = "更新用户的收货地址。" +
-                      "需要提供完整的地址信息，包括省市区和详细地址。"
+        description = "Update user's shipping address. Complete address information including province, city, district and detailed address is required."
     )
     public static String updateShippingAddress(
-            @ToolParam(name = "user_id", description = "用户 ID")
+            @ToolParam(name = "user_id", description = "User ID")
             String userId,
-            @ToolParam(name = "province", description = "省份，如：浙江省")
+            @ToolParam(name = "province", description = "Province, e.g.: Zhejiang Province")
             String province,
-            @ToolParam(name = "city", description = "城市，如：杭州市")
+            @ToolParam(name = "city", description = "City, e.g.: Hangzhou City")
             String city,
-            @ToolParam(name = "district", description = "区/县，如：西湖区")
+            @ToolParam(name = "district", description = "District/County, e.g.: Xihu District")
             String district,
-            @ToolParam(name = "detail_address", description = "详细地址，包含街道、小区、门牌号")
+            @ToolParam(name = "detail_address", description = "Detailed address including street, community, house number")
             String detailAddress,
-            @ToolParam(name = "recipient", description = "收货人姓名")
+            @ToolParam(name = "recipient", description = "Recipient name")
             String recipient,
-            @ToolParam(name = "phone", description = "手机号")
+            @ToolParam(name = "phone", description = "Phone number")
             String phone) {
 
-        log.info("更新用户收货地址，用户ID：{}，新地址：{} {} {} {}",
+        log.info("Updating shipping address, user ID: {}, new address: {} {} {} {}",
             userId, province, city, district, detailAddress);
 
         return """
-            地址更新成功！
-            新收货地址：
-            收货人：%s
-            手机号：%s
-            省市区：%s %s %s
-            详细地址：%s
-            更新时间：2024-01-18 15:30:00
+            Address Update Successful!
+            New Shipping Address:
+            Recipient: %s
+            Phone: %s
+            Province/City/District: %s %s %s
+            Detailed Address: %s
+            Update Time: 2024-01-18 15:30:00
             """.formatted(recipient, phone, province, city, district, detailAddress);
     }
 }

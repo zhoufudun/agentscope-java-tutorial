@@ -46,7 +46,7 @@ public class DateTimeTool {
             required = false
         ) String format
     ) {
-        ZoneId zoneId = ZoneId.system默认();
+        ZoneId zoneId = ZoneId.systemDefault();
         if (timezone != null && !timezone.isBlank()) {
             try {
                 zoneId = ZoneId.of(timezone);
@@ -224,7 +224,7 @@ public class DateTimeTool {
             // 判断是秒还是毫秒
             long millis = timestamp > 1_000_000_000_000L ? timestamp : timestamp * 1000;
 
-            ZoneId zoneId = ZoneId.system默认();
+            ZoneId zoneId = ZoneId.systemDefault();
             if (timezone != null && !timezone.isBlank()) {
                 zoneId = ZoneId.of(timezone);
             }
@@ -271,7 +271,7 @@ public class DateTimeTool {
         StringBuilder result = new StringBuilder();
         result.append("🌍 常用时区列表：\n\n");
 
-        ZoneId systemZone = ZoneId.system默认();
+        ZoneId systemZone = ZoneId.systemDefault();
         LocalDateTime now = LocalDateTime.now();
 
         for (String tz : timezones) {
