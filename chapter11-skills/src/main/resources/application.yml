@@ -2,14 +2,6 @@ spring:
   application:
     name: chapter11-skills
 
-  # 允许 Bean 循环依赖：
-  # SkillConfig(构造注入 SkillService) -> SkillService(@Resource setter 注入 SkillBox)
-  # -> SkillBox(由 SkillConfig 的 @Bean 方法创建) 形成闭环。
-  # 该闭环本就依赖 SkillService 的 setter 注入来"延迟解耦"，在 Spring Boot 2.6+ 默认禁止
-  # 循环依赖后需显式开启此开关，才能让 setter 注入生效并成功启动上下文。
-  main:
-    allow-circular-references: true
-
   # H2 开发数据库配置
   datasource:
     url: jdbc:h2:mem:skilldb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE

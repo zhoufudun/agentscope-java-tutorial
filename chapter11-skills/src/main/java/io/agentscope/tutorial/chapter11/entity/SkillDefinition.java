@@ -1,7 +1,6 @@
 package io.agentscope.tutorial.chapter11.entity;
 
 import io.agentscope.core.skill.AgentSkill;
-import io.agentscope.core.skill.util.SkillUtil;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -147,7 +146,17 @@ public class SkillDefinition {
         if (skillContent == null || skillContent.isEmpty()) {
             throw new IllegalStateException("Skill content cannot be null or empty");
         }
-        return SkillUtil.createFrom(skillContent, resources, source);
+        // 注意：数据库中的 skillContent 存储的是 SKILL.md “去除 YAML Front Matter 之后的正文”
+        // （AgentSkill.getSkillContent() 返回的就是正文，见 SkillUtil.createFrom 的解析逻辑）。
+        // 因此这里不能再用 SkillUtil.createFrom(skillContent, ...) 把正文当作“完整 SKILL.md”重新解析，
+        // 否则会因缺少 name/description 的 Front Matter 而抛出 IllegalArgumentException。
+        // 正确做法：直接使用实体已持久化的 name/description/source 等字段重建 AgentSkill。
+        return new AgentSkill(
+                name,
+                description,
+                skillContent,
+                resources,
+                source != null ? source : "custom");
     }
 
     /**
@@ -247,8 +256,12 @@ public class SkillDefinition {
 
     /**
      * 获取资源
+     *
+     * <p>注意：{@code resources} 是 {@code @Transient} 字段。通过 Lombok {@code @Builder}
+     * （如 {@link #fromAgentSkill}）创建实例时，字段初始化器不会生效，{@code resources} 可能为
+     * {@code null}。因此这里做空值保护，避免 {@code new HashMap<>(null)} 抛出 NPE。
      */
     public Map<String, String> getResources() {
-        return new HashMap<>(resources);
+        return resources != null ? new HashMap<>(resources) : new HashMap<>();
     }
 }

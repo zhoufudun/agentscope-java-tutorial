@@ -23,6 +23,7 @@ import org.springframework.boot.info.BuildProperties;
 import org.springframework.boot.info.GitProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -76,8 +77,13 @@ public class ProductionConfig {
 
     /**
      * Agent 任务执行器（用于 AI 推理）.
+     *
+     * <p>标记为 {@link Primary}，作为默认的 {@link Executor}，
+     * 以便在存在多个 Executor（taskExecutor / agentExecutor / taskScheduler）时，
+     * 按类型注入（如 ChatService）能够无歧义地解析到该 Bean。
      */
     @Bean(name = "agentExecutor")
+    @Primary
     public Executor agentExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(2);

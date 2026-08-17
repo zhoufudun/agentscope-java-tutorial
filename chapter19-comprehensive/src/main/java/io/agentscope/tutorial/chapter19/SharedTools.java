@@ -85,17 +85,124 @@ public class SharedTools {
     }
 
     /**
-     * 简单的表达式求值
+     * 简单的表达式求值。
+     *
+     * <p>使用自实现的递归下降解析器，支持 {@code + - * / % ^}、括号与一元正负号，
+     * 并正确处理运算符优先级（如 {@code 2+3*4 = 14}）。
+     *
+     * <p>注意：早期实现依赖 {@code ScriptEngineManager.getEngineByName("JavaScript")}
+     * （Nashorn 引擎），而 Nashorn 已在 JDK 15+ 中被移除，会导致引擎为 {@code null} 并抛出异常，
+     * 因此改为纯 Java 实现，避免对运行环境的隐式依赖。
      */
     private double evaluateExpression(String expression) {
-        // 使用 ScriptEngine 进行安全的计算
         try {
-            javax.script.ScriptEngineManager m = new javax.script.ScriptEngineManager();
-            javax.script.ScriptEngine engine = m.getEngineByName("JavaScript");
-            Object result = engine.eval(expression);
-            return Double.parseDouble(result.toString());
-        } catch (Exception e) {
+            return new ExpressionParser(expression).parse();
+        } catch (RuntimeException e) {
             throw new RuntimeException("无效的表达式");
+        }
+    }
+
+    /**
+     * 轻量级四则运算解析器（递归下降）。
+     *
+     * <p>文法（优先级由低到高）：
+     * <pre>
+     *   expression := term (('+' | '-') term)*
+     *   term       := factor (('*' | '/' | '%') factor)*
+     *   factor     := ('+' | '-') factor | base ('^' factor)?
+     *   base       := number | '(' expression ')'
+     * </pre>
+     */
+    private static final class ExpressionParser {
+
+        private final String expr;
+        private int pos = -1;
+        private int ch;
+
+        ExpressionParser(String expr) {
+            this.expr = expr == null ? "" : expr;
+        }
+
+        double parse() {
+            nextChar();
+            double x = parseExpression();
+            if (pos < expr.length()) {
+                throw new IllegalArgumentException("非预期字符: " + (char) ch);
+            }
+            return x;
+        }
+
+        private void nextChar() {
+            ch = (++pos < expr.length()) ? expr.charAt(pos) : -1;
+        }
+
+        private boolean eat(int charToEat) {
+            while (ch == ' ') {
+                nextChar();
+            }
+            if (ch == charToEat) {
+                nextChar();
+                return true;
+            }
+            return false;
+        }
+
+        private double parseExpression() {
+            double x = parseTerm();
+            for (; ; ) {
+                if (eat('+')) {
+                    x += parseTerm();
+                } else if (eat('-')) {
+                    x -= parseTerm();
+                } else {
+                    return x;
+                }
+            }
+        }
+
+        private double parseTerm() {
+            double x = parseFactor();
+            for (; ; ) {
+                if (eat('*')) {
+                    x *= parseFactor();
+                } else if (eat('/')) {
+                    x /= parseFactor();
+                } else if (eat('%')) {
+                    x %= parseFactor();
+                } else {
+                    return x;
+                }
+            }
+        }
+
+        private double parseFactor() {
+            if (eat('+')) {
+                return parseFactor();
+            }
+            if (eat('-')) {
+                return -parseFactor();
+            }
+
+            double x;
+            int startPos = pos;
+            if (eat('(')) {
+                x = parseExpression();
+                if (!eat(')')) {
+                    throw new IllegalArgumentException("缺少 ')'");
+                }
+            } else if ((ch >= '0' && ch <= '9') || ch == '.') {
+                while ((ch >= '0' && ch <= '9') || ch == '.') {
+                    nextChar();
+                }
+                x = Double.parseDouble(expr.substring(startPos, pos));
+            } else {
+                throw new IllegalArgumentException("非预期字符: " + (char) ch);
+            }
+
+            if (eat('^')) {
+                x = Math.pow(x, parseFactor());
+            }
+            return x;
         }
     }
 

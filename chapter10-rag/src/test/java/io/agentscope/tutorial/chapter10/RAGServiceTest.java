@@ -218,6 +218,12 @@ class RAGServiceTest {
     @Test
     @DisplayName("Should process document and create chunks")
     void testProcessDocument() throws Exception {
+        // 2.x 的 TextChunker 是“按 chunkSize 打包”的：PARAGRAPH 策略会把多个小段落
+        // 合并进同一个 chunk 直到接近 chunkSize。默认 chunkSize=500 时，本用例这段
+        // 约 355 字的短文本会被合并成 1 个 chunk。为验证“多段落被切分成多个块”的意图，
+        // 这里将 chunkSize 调小到 100（与 testChunkByParagraph 一致），使每个段落各成一块。
+        ragConfig.getChunking().setChunkSize(100);
+
         String title = "Test Document";
         String content = """
             This is a test document for RAG processing.

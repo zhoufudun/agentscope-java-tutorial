@@ -83,8 +83,13 @@ class SkillServiceTest {
 
     @BeforeEach
     void setUp() {
-        // 清理测试数据
+        // 清理测试数据（数据库）
         skillRepository.deleteAll();
+        // SkillBox 是共享的单例 Bean，deleteAll() 只清理了数据库，并不会清空 SkillBox
+        // 中累积的技能（还包含启动时自动加载的示例技能）。这里同步清空 SkillBox，
+        // 保证每个用例之间相互隔离，避免 getAllSkillIds()/isSkillActive() 等断言互相干扰。
+        Set<String> registeredIds = new java.util.HashSet<>(skillBox.getAllSkillIds());
+        registeredIds.forEach(skillBox::removeSkill);
     }
 
     // ==================== 技能注册测试 ====================
@@ -205,18 +210,31 @@ class SkillServiceTest {
     @DisplayName("测试搜索技能")
     void testSearchSkills() {
         skillService.registerSkillFromContent(TEST_SKILL_MD, null, "test");
-        skillService.registerSkillFromContent(
-                TEST_SKILL_MD.replace("test-skill", "data-analysis-skill")
-                        .replace("测试技能", "数据分析技能"),
-                null, "test"
-        );
+        // 第二个技能必须与第一个“可搜索内容”完全不相交，否则子串搜索会同时命中两者。
+        // 原写法只替换了 "测试技能"，但描述里仍保留 "用于单元测试"（含"测试"）、标签仍为 test/demo，
+        // 导致搜索 "测试" 与 "demo" 都会命中两个技能。这里改用一个内容独立的技能定义。
+        String otherSkillMd = """
+                ---
+                name: data-analysis-skill
+                description: 数据分析技能 - 用于生产环境的数据处理
+                version: 1.0.0
+                author: AgentScope Tutorial
+                tags:
+                  - analysis
+                  - report
+                ---
+                # 数据分析技能
 
-        // 搜索关键字
+                这是一个独立的数据分析技能。
+                """;
+        skillService.registerSkillFromContent(otherSkillMd, null, "test");
+
+        // 搜索关键字（仅 test-skill 的描述包含"测试"）
         List<SkillDefinition> results = skillService.searchSkills("测试");
         assertEquals(1, results.size());
         assertEquals("test-skill", results.get(0).getName());
 
-        // 搜索标签
+        // 搜索标签（仅 test-skill 拥有 demo 标签）
         results = skillService.searchSkills("demo");
         assertEquals(1, results.size());
 

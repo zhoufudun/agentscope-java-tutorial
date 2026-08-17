@@ -2,6 +2,7 @@ package io.agentscope.tutorial.chapter11.repository;
 
 import io.agentscope.tutorial.chapter11.entity.SkillDefinition;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -120,6 +121,7 @@ public interface SkillRepository extends JpaRepository<SkillDefinition, Long> {
      *
      * @param skillIds 技能 ID 列表
      */
+    @Modifying
     @Query("UPDATE SkillDefinition s SET s.isActive = true WHERE s.skillId IN :skillIds")
     void activateSkills(@Param("skillIds") List<String> skillIds);
 
@@ -128,6 +130,7 @@ public interface SkillRepository extends JpaRepository<SkillDefinition, Long> {
      *
      * @param skillIds 技能 ID 列表
      */
+    @Modifying
     @Query("UPDATE SkillDefinition s SET s.isActive = false WHERE s.skillId IN :skillIds")
     void deactivateSkills(@Param("skillIds") List<String> skillIds);
 

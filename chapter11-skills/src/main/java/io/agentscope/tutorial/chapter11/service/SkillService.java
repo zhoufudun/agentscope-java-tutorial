@@ -117,7 +117,9 @@ public class SkillService {
             skillDef.setDescription(agentSkill.getDescription());
             skillDef.setSkillContent(agentSkill.getSkillContent());
             skillDef.setTags(extractTags(agentSkill.getMetadata()));
-            skillDef.setVersion(incrementVersion(skillDef.getVersion()));
+            // 版本递增应以“本次传入内容声明的版本”为基准（若未声明则退回沿用已存版本），
+            // 而非无条件在旧版本上 +1。例如内容声明 version: 2.0.0 时，更新后应为 2.0.1。
+            skillDef.setVersion(incrementVersion(resolveBaseVersion(agentSkill, skillDef.getVersion())));
             skillDef.setResources(agentSkill.getResources());
             log.info("Updating existing skill: {}", skillId);
         } else {
@@ -134,10 +136,33 @@ public class SkillService {
         if (skillBox != null) {
             AgentSkill registeredSkill = skillDef.toAgentSkill(skillDef.getResources());
             skillBox.registerSkill(registeredSkill);
+            // SkillBox 中新注册的技能默认是“未激活”状态，而数据库实体默认 isActive=true。
+            // 这里把数据库的激活状态同步到 SkillBox，使 isSkillActive() 与实体状态保持一致。
+            skillBox.setSkillActive(skillDef.getSkillId(), skillDef.isActivated());
             log.info("Skill registered to SkillBox: {}", skillId);
         }
 
         return skillDef;
+    }
+
+    /**
+     * 计算版本递增的基准版本。
+     *
+     * <p>优先使用本次传入 {@link AgentSkill} 元数据中声明的 {@code version}；
+     * 若未声明或为空白，则退回沿用数据库中已存的版本。
+     *
+     * @param agentSkill     本次传入的技能
+     * @param currentVersion 数据库中已存的版本
+     * @return 用于递增的基准版本号
+     */
+    private String resolveBaseVersion(AgentSkill agentSkill, String currentVersion) {
+        Object declaredVersion = agentSkill.getMetadata() != null
+                ? agentSkill.getMetadata().get("version")
+                : null;
+        if (declaredVersion != null && !declaredVersion.toString().isBlank()) {
+            return declaredVersion.toString();
+        }
+        return currentVersion;
     }
 
     /**
