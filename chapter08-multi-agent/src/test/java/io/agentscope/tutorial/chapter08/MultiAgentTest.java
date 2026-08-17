@@ -1,6 +1,6 @@
 package io.agentscope.tutorial.chapter08;
 
-import io.agentscope.core.model.DashScopeChatModel;
+import io.agentscope.extensions.model.dashscope.DashScopeChatModel;
 import io.agentscope.core.model.Model;
 import io.agentscope.tutorial.chapter08.agent.AddressUpdateAgent;
 import io.agentscope.tutorial.chapter08.agent.OrderAgent;

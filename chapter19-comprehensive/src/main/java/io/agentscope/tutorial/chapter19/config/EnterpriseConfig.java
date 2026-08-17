@@ -16,9 +16,8 @@
 package io.agentscope.tutorial.chapter19.config;
 
 import io.agentscope.core.ReActAgent;
-import io.agentscope.core.formatter.dashscope.DashScopeChatFormatter;
-import io.agentscope.core.memory.InMemoryMemory;
-import io.agentscope.core.model.DashScopeChatModel;
+import io.agentscope.extensions.model.dashscope.formatter.DashScopeChatFormatter;
+import io.agentscope.extensions.model.dashscope.DashScopeChatModel;
 import io.agentscope.core.tool.Toolkit;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -79,7 +78,6 @@ public class EnterpriseConfig {
                 .sysPrompt(sysPrompt)
                 .model(buildModel())
                 .toolkit(toolkit)
-                .memory(new InMemoryMemory())
                 .maxIters(10)
                 .build();
     }
@@ -122,7 +120,6 @@ public class EnterpriseConfig {
                 .sysPrompt(sysPrompt)
                 .model(buildModel())
                 .toolkit(new Toolkit())
-                .memory(new InMemoryMemory())
                 .maxIters(5)
                 .build();
     }
@@ -160,7 +157,6 @@ public class EnterpriseConfig {
                 .sysPrompt(sysPrompt)
                 .model(buildModel())
                 .toolkit(new Toolkit())
-                .memory(new InMemoryMemory())
                 .maxIters(5)
                 .build();
     }
@@ -205,16 +201,18 @@ public class EnterpriseConfig {
                 .sysPrompt(sysPrompt)
                 .model(buildModel())
                 .toolkit(new Toolkit())
-                .memory(new InMemoryMemory())
                 .maxIters(30)
                 .build();
     }
 
     /**
      * 村民 Agent 工厂方法
+     *
+     * <p>Bean 名使用 {@code villagerReActAgent}，以避免与 {@code @Component} 标注的
+     * {@link io.agentscope.tutorial.chapter19.werewolf.role.VillagerAgent}（默认 bean 名 villagerAgent）冲突。
      */
     @Bean
-    public ReActAgent villagerAgent() {
+    public ReActAgent villagerReActAgent() {
         String sysPrompt = """
                 你是狼人杀游戏中的村民。
 
@@ -234,16 +232,18 @@ public class EnterpriseConfig {
                 .sysPrompt(sysPrompt)
                 .model(buildModel())
                 .toolkit(new Toolkit())
-                .memory(new InMemoryMemory())
                 .maxIters(10)
                 .build();
     }
 
     /**
      * 狼人 Agent 工厂方法
+     *
+     * <p>Bean 名使用 {@code werewolfReActAgent}，以避免与 {@code @Component} 标注的
+     * {@link io.agentscope.tutorial.chapter19.werewolf.role.WerewolfAgent}（默认 bean 名 werewolfAgent）冲突。
      */
     @Bean
-    public ReActAgent werewolfAgent() {
+    public ReActAgent werewolfReActAgent() {
         String sysPrompt = """
                 你是狼人杀游戏中的狼人。
 
@@ -265,7 +265,6 @@ public class EnterpriseConfig {
                 .sysPrompt(sysPrompt)
                 .model(buildModel())
                 .toolkit(new Toolkit())
-                .memory(new InMemoryMemory())
                 .maxIters(10)
                 .build();
     }
@@ -278,7 +277,7 @@ public class EnterpriseConfig {
      * <p>负责接收用户请求并协调各专业 Agent 处理任务。
      */
     @Bean
-    public ReActAgent enterpriseAssistantAgent() {
+    public ReActAgent enterpriseAssistantReActAgent() {
         Toolkit toolkit = new Toolkit();
 
         String sysPrompt = """
@@ -303,7 +302,6 @@ public class EnterpriseConfig {
                 .sysPrompt(sysPrompt)
                 .model(buildModel())
                 .toolkit(toolkit)
-                .memory(new InMemoryMemory())
                 .maxIters(10)
                 .build();
     }
@@ -314,7 +312,7 @@ public class EnterpriseConfig {
      * <p>负责回答用户关于企业知识库的问题。
      */
     @Bean
-    public ReActAgent knowledgeAgent() {
+    public ReActAgent knowledgeReActAgent() {
         String sysPrompt = """
                 你是一个企业知识库助手，负责回答用户关于公司制度、业务流程等问题。
 
@@ -332,7 +330,6 @@ public class EnterpriseConfig {
                 .sysPrompt(sysPrompt)
                 .model(buildModel())
                 .toolkit(new Toolkit())
-                .memory(new InMemoryMemory())
                 .maxIters(5)
                 .build();
     }
@@ -343,7 +340,7 @@ public class EnterpriseConfig {
      * <p>负责创建、查询、管理用户的日程安排。
      */
     @Bean
-    public ReActAgent scheduleAgent() {
+    public ReActAgent scheduleReActAgent() {
         String sysPrompt = """
                 你是一个日程管理助手，帮助用户安排和管理日程。
 
@@ -361,7 +358,6 @@ public class EnterpriseConfig {
                 .sysPrompt(sysPrompt)
                 .model(buildModel())
                 .toolkit(new Toolkit())
-                .memory(new InMemoryMemory())
                 .maxIters(5)
                 .build();
     }
@@ -372,7 +368,7 @@ public class EnterpriseConfig {
      * <p>负责生成各类数据报表和图表。
      */
     @Bean
-    public ReActAgent reportAgent() {
+    public ReActAgent reportReActAgent() {
         String sysPrompt = """
                 你是一个报表生成助手，帮助用户生成数据报表和图表。
 
@@ -390,7 +386,6 @@ public class EnterpriseConfig {
                 .sysPrompt(sysPrompt)
                 .model(buildModel())
                 .toolkit(new Toolkit())
-                .memory(new InMemoryMemory())
                 .maxIters(5)
                 .build();
     }

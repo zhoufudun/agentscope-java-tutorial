@@ -65,7 +65,7 @@ public class ChatController {
         return ResponseEntity.ok(Map.of(
                 "response", response != null ? response : "无响应",
                 "agentName", agentService.getAgent().getName(),
-                "messageCount", agentService.getAgent().getMemory().getMessages().size()
+                "messageCount", agentService.getAgent().getAgentState().getContext().size()
         ));
     }
 

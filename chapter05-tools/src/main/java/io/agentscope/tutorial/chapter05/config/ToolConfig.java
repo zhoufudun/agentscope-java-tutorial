@@ -1,9 +1,8 @@
 package io.agentscope.tutorial.chapter05.config;
 
 import io.agentscope.core.ReActAgent;
-import io.agentscope.core.formatter.dashscope.DashScopeChatFormatter;
-import io.agentscope.core.memory.InMemoryMemory;
-import io.agentscope.core.model.DashScopeChatModel;
+import io.agentscope.extensions.model.dashscope.formatter.DashScopeChatFormatter;
+import io.agentscope.extensions.model.dashscope.DashScopeChatModel;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.tutorial.chapter05.service.ToolService;
 import org.springframework.beans.factory.annotation.Value;
@@ -63,7 +62,7 @@ public class ToolConfig {
                     .build()
             )
             .toolkit(toolkit)
-            .memory(new InMemoryMemory())
+            // 2.x 移除了 .memory(...)：会话历史改由 AgentState 管理
             .enableMetaTool(true)  // 启用元工具，允许 Agent 动态管理工具分组
             .build();
     }

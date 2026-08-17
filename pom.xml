@@ -45,7 +45,7 @@
         <spring-boot.version>3.2.5</spring-boot.version>
 
         <!-- AgentScope 版本 -->
-        <agentscope.version>2.0.0</agentscope.version>
+        <agentscope.version>2.0.3-SNAPSHOT</agentscope.version>
 
         <!-- 第三方依赖版本 -->
         <lombok.version>1.18.32</lombok.version>
@@ -76,6 +76,18 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- Jackson BOM：置于 spring-boot-dependencies 之前，统一所有 jackson 构件版本，
+                 避免 jackson-databind 与 jackson-core/annotations 版本错配
+                 （2.x agentscope 需要 jackson-databind 2.17，若 core 仍为 Spring Boot 管理的 2.15
+                 会出现 NoSuchMethodError: BufferRecycler.releaseToPool()） -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
             <!-- Spring Boot 依赖 -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
@@ -110,6 +122,44 @@
             <dependency>
                 <groupId>io.agentscope</groupId>
                 <artifactId>agentscope-a2a-spring-boot-starter</artifactId>
+                <version>${agentscope.version}</version>
+            </dependency>
+
+            <!-- AgentScope Core 测试工具类（MockModel、MockToolkit 等，来自 core 的 test-jar） -->
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-core</artifactId>
+                <version>${agentscope.version}</version>
+                <type>test-jar</type>
+                <scope>test</scope>
+            </dependency>
+
+            <!-- AgentScope 模型扩展（2.x 起各模型提供方拆分到独立扩展模块） -->
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-extensions-model-dashscope</artifactId>
+                <version>${agentscope.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-extensions-model-openai</artifactId>
+                <version>${agentscope.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-extensions-model-gemini</artifactId>
+                <version>${agentscope.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-extensions-model-ollama</artifactId>
+                <version>${agentscope.version}</version>
+            </dependency>
+
+            <!-- AgentScope RAG 简单实现扩展 -->
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-extensions-rag-simple</artifactId>
                 <version>${agentscope.version}</version>
             </dependency>
 

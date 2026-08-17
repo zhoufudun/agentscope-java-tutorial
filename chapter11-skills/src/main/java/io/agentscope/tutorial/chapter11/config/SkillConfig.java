@@ -7,11 +7,12 @@ import io.agentscope.core.tool.file.WriteFileTool;
 import io.agentscope.core.tool.coding.ShellCommandTool;
 import io.agentscope.tutorial.chapter11.service.SkillService;
 import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 
@@ -50,14 +51,22 @@ import java.util.stream.Stream;
  * @see Toolkit
  */
 @Configuration
-@RequiredArgsConstructor
 @Slf4j
 public class SkillConfig {
 
     /**
      * 技能服务
+     *
+     * <p>使用 {@link Lazy} + 字段注入打破循环依赖：
+     * {@code SkillConfig -> SkillService -> SkillBox（由本类的 @Bean 方法创建）-> SkillConfig}。
+     * 其中 {@code SkillConfig} 原先通过构造器注入 {@code SkillService}，而构造器注入的循环
+     * 无法被 Spring 的循环依赖解析打破（Spring Boot 2.6+ 默认还禁止循环依赖）。
+     * 改为惰性字段注入后，创建 {@code SkillConfig} 时只注入一个代理对象，
+     * 直到 {@link #initSkills()} 真正调用时才解析为完整的 {@code SkillService} Bean，从而打破闭环。
      */
-    private final SkillService skillService;
+    @Lazy
+    @Autowired
+    private SkillService skillService;
 
     /**
      * 技能文件存储路径
@@ -142,7 +151,7 @@ public class SkillConfig {
 
         // 配置代码执行能力
         if (codeExecutionEnabled) {
-            configureCodeExecution(skillBox);
+            configureCodeExecution(skillBox, toolkit);
         }
 
         // 注册技能加载工具（load_skill_through_path）
@@ -155,30 +164,49 @@ public class SkillConfig {
 
     /**
      * 配置代码执行能力
+     *
+     * <p><b>2.x API 变化：</b>1.x 中的 {@code skillBox.codeExecution()....enable()} 链式构建器
+     * 在 2.x 已被移除。2.x 推荐的等价做法是：
+     * <ol>
+     *   <li>把 Shell/读文件/写文件等代码执行工具直接注册到 {@link Toolkit}；</li>
+     *   <li>通过 {@link SkillBox#setWorkDir(java.nio.file.Path)} 指定技能资源的工作目录。</li>
+     * </ol>
+     * 技能激活并调用 {@link SkillBox#uploadSkillFiles()} 后，技能资源会被写入
+     * {@code workDir/skills/<skillId>/} 目录，从而被上述工具访问，实现"技能 + 代码执行"的能力。
+     *
+     * <p><b>遗留说明：</b>1.x 的 {@code includeFolders}/{@code includeExtensions} 文件过滤能力，
+     * 在 2.x 公开 API 中已没有对应的外部设置入口（{@code SkillFileFilter} 现为内部使用，
+     * {@link SkillBox#uploadSkillFiles()} 默认接受全部资源），因此此处不再配置文件过滤。
+     *
+     * @param skillBox 技能工具箱
+     * @param toolkit  工具箱（代码执行工具注册到此处）
      */
-    private void configureCodeExecution(SkillBox skillBox) {
+    private void configureCodeExecution(SkillBox skillBox, Toolkit toolkit) {
         // 解析允许的命令
         Set<String> allowedCommands = parseCommands(shellCommands);
 
-        // 配置 Shell 命令工具
+        // 1) Shell 命令工具：限制在工作目录内、使用命令白名单、无需人工确认
         ShellCommandTool shellTool = new ShellCommandTool(
                 workDir,
                 allowedCommands,
                 null // 无需用户确认
         );
+        // ShellCommandTool 实现了 AgentTool，registerTool(Object) 会自动识别为 AgentTool 并注册
+        toolkit.registerTool(shellTool);
 
-        // 使用 CodeExecutionBuilder 链式配置
-        skillBox.codeExecution()
-                .workDir(workDir)
-                .includeFolders(Set.of("scripts/", "assets/"))
-                .includeExtensions(Set.of(".py", ".js", ".sh", ".sql"))
-                .withShell(shellTool)
-                .withRead()
-                .withWrite()
-                .enable();
+        // 2) 读/写文件工具：限制在工作目录内（POJO + @Tool，由 registerTool 扫描注册）
+        if (readEnabled) {
+            toolkit.registerTool(new ReadFileTool(workDir));
+        }
+        if (writeEnabled) {
+            toolkit.registerTool(new WriteFileTool(workDir));
+        }
 
-        log.info("Code execution configured with workDir={}, allowedCommands={}",
-                workDir, allowedCommands);
+        // 3) 指定 SkillBox 工作目录：uploadSkillFiles() 会把技能资源写入 workDir/skills/<skillId>/
+        skillBox.setWorkDir(Paths.get(workDir));
+
+        log.info("Code execution configured with workDir={}, allowedCommands={}, read={}, write={}",
+                workDir, allowedCommands, readEnabled, writeEnabled);
     }
 
     /**

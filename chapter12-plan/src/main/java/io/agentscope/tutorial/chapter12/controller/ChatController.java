@@ -1,6 +1,6 @@
 package io.agentscope.tutorial.chapter12.controller;
 
-import io.agentscope.core.plan.model.Plan;
+import io.agentscope.tutorial.chapter12.model.Plan;
 import io.agentscope.tutorial.chapter12.dto.ChatRequest;
 import io.agentscope.tutorial.chapter12.service.ChatService;
 import org.slf4j.Logger;

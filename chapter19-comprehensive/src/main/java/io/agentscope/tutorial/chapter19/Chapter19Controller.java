@@ -15,18 +15,15 @@
  */
 package io.agentscope.tutorial.chapter19;
 
-import io.agentscope.core.ReActAgent;
 import io.agentscope.tutorial.chapter19.assistant.EnterpriseAssistantAgent;
 import io.agentscope.tutorial.chapter19.assistant.knowledge.KnowledgeAgent;
 import io.agentscope.tutorial.chapter19.assistant.report.ReportAgent;
 import io.agentscope.tutorial.chapter19.assistant.schedule.ScheduleAgent;
 import io.agentscope.tutorial.chapter19.boba.service.BobaOrderService;
 import io.agentscope.tutorial.chapter19.boba.supervisor.OrderSupervisorAgent;
-import io.agentscope.tutorial.chapter19.werewolf.game.WerewolfGame;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -64,15 +61,8 @@ public class Chapter19Controller {
     private BobaOrderService bobaOrderService;
 
     // ==================== 狼人杀案例 ====================
-
-    @Autowired
-    private ReActAgent moderatorAgent;
-
-    @Autowired
-    private ReActAgent villagerAgent;
-
-    @Autowired
-    private ReActAgent werewolfAgent;
+    // 狼人杀相关的 HTTP 接口由专用的 GameController（@RequestMapping("/api/werewolf")）统一提供，
+    // 包含 start/status/stream/rules 等完整生命周期，这里不再重复映射，避免 Ambiguous mapping。
 
     // ==================== 企业助手案例 ====================
 
@@ -138,57 +128,8 @@ public class Chapter19Controller {
     }
 
     // ==================== 狼人杀 API ====================
-
-    /**
-     * 开始狼人杀游戏
-     */
-    @PostMapping("/werewolf/start")
-    public ResponseEntity<String> startWerewolfGame() {
-        logger.info("开始狼人杀游戏");
-
-        try {
-            WerewolfGame game = new WerewolfGame(moderatorAgent, villagerAgent, werewolfAgent);
-            String result = game.startGame();
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            logger.error("游戏启动失败", e);
-            return ResponseEntity.internalServerError()
-                    .body("游戏启动失败：" + e.getMessage());
-        }
-    }
-
-    /**
-     * 获取狼人杀游戏规则
-     */
-    @GetMapping("/werewolf/rules")
-    public ResponseEntity<String> getWerewolfRules() {
-        String rules = """
-                ===== 狼人杀游戏规则 =====
-
-                【角色介绍】
-                - 村民: 无特殊能力，需要靠逻辑找出狼人
-                - 狼人: 每晚可以击杀一名玩家
-                - 预言家: 每晚可以查验一名玩家身份
-                - 女巫: 拥有一瓶解药和一瓶毒药
-                - 猎人: 死亡时可以带走一名玩家
-
-                【游戏流程】
-                1. 夜晚阶段：狼人→女巫→预言家
-                2. 白天阶段：死讯公布→自由讨论→投票放逐
-
-                【胜负条件】
-                - 狼人胜利：狼人数量 >= 村民数量
-                - 村民胜利：所有狼人死亡
-
-                【游戏配置】
-                - 村民: 3人
-                - 狼人: 3人
-                - 预言家: 1人
-                - 女巫: 1人
-                - 猎人: 1人
-                """;
-        return ResponseEntity.ok(rules);
-    }
+    // 狼人杀接口（POST /api/werewolf/start、GET /api/werewolf/rules 等）由 GameController 提供，
+    // 详见 io.agentscope.tutorial.chapter19.werewolf.controller.GameController。
 
     // ==================== 企业助手 API ====================
 

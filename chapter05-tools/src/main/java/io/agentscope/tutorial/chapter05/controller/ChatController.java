@@ -106,8 +106,8 @@ public class ChatController {
     @PostMapping("/reset")
     public Map<String, Object> reset() {
         try {
-            // 清空内存
-            agent.getMemory().clear();
+            // 2.x：会话历史保存在 AgentState 中，清空可变上下文即可重置会话
+            agent.getAgentState().contextMutable().clear();
             return Map.of(
                 "success", true,
                 "message", "会话已重置"
@@ -129,7 +129,7 @@ public class ChatController {
             "name", agent.getName(),
             "tools", toolService.getRegisteredTools(),
             "activeGroups", toolService.getActiveGroups(),
-            "memorySize", agent.getMemory().getMessages().size()
+            "memorySize", agent.getAgentState().getContext().size()
         );
     }
 

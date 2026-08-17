@@ -8,7 +8,7 @@
         <groupId>io.agentscope.tutorial</groupId>
         <artifactId>tutorial-parent</artifactId>
         <version>1.0.0</version>
-        <relativePath>../../</relativePath>
+        <relativePath>../pom.xml</relativePath>
     </parent>
 
     <groupId>io.agentscope.tutorial</groupId>

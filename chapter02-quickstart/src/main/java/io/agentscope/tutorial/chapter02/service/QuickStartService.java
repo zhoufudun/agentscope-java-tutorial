@@ -19,14 +19,13 @@ import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.EventType;
 import io.agentscope.core.agent.StreamOptions;
-import io.agentscope.core.formatter.dashscope.DashScopeChatFormatter;
-import io.agentscope.core.memory.InMemoryMemory;
+import io.agentscope.extensions.model.dashscope.formatter.DashScopeChatFormatter;
 import io.agentscope.core.message.ContentBlock;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ThinkingBlock;
-import io.agentscope.core.model.DashScopeChatModel;
+import io.agentscope.extensions.model.dashscope.DashScopeChatModel;
 import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.tutorial.chapter02.config.AgentConfig;
@@ -132,9 +131,6 @@ public class QuickStartService {
      * @return 配置好的 ReActAgent 实例
      */
     public ReActAgent createAgent(String name, String sysPrompt) {
-        // 创建内存组件
-        InMemoryMemory memory = new InMemoryMemory();
-
         // 创建工具包
         Toolkit toolkit = new Toolkit();
 
@@ -142,11 +138,12 @@ public class QuickStartService {
         var model = createDashScopeModel();
 
         // 构建 Agent
+        // 注意：2.x 起 ReActAgent 不再通过 builder 配置 memory，
+        // 会话历史由 AgentState 内部维护，需要持久化时使用 stateStore + defaultSessionId。
         return ReActAgent.builder()
                 .name(name)
                 .sysPrompt(sysPrompt)
                 .model(model)
-                .memory(memory)
                 .toolkit(toolkit)
                 .build();
     }

@@ -1,12 +1,7 @@
 package io.agentscope.tutorial.chapter08.agent;
 
 import io.agentscope.core.ReActAgent;
-import io.agentscope.core.memory.InMemoryMemory;
-import io.agentscope.core.memory.Memory;
 import io.agentscope.core.model.Model;
-import io.agentscope.core.tool.Toolkit;
-import io.agentscope.tutorial.chapter08.tool.OrderTools;
-import io.agentscope.tutorial.chapter08.tool.QueryTools;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -74,7 +69,6 @@ public class RouterAgent {
 
                 不要输出其他解释文字。
                 """)
-            .memory(new InMemoryMemory())
             .build();
     }
 

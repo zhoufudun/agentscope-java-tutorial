@@ -109,11 +109,11 @@ class ModelServiceTest {
     @Test
     void testModelSwitch() {
         // Verify switching doesn't throw exception for existing model
-        assertDoesNotThrow(() -> modelService.switch默认Model("dashscope", "qwen-plus"));
+        assertDoesNotThrow(() -> modelService.switchDefaultModel("dashscope", "qwen-plus"));
 
         // Verify exception for non-existing model
         assertThrows(IllegalArgumentException.class,
-                () -> modelService.switch默认Model("dashscope", "non-existent-model"));
+                () -> modelService.switchDefaultModel("dashscope", "non-existent-model"));
     }
 
     @Test

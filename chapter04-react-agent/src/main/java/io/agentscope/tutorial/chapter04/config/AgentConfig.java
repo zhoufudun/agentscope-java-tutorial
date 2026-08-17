@@ -16,10 +16,9 @@
 package io.agentscope.tutorial.chapter04.config;
 
 import io.agentscope.core.ReActAgent;
-import io.agentscope.core.formatter.dashscope.DashScopeChatFormatter;
+import io.agentscope.extensions.model.dashscope.formatter.DashScopeChatFormatter;
 import io.agentscope.core.hook.Hook;
-import io.agentscope.core.memory.InMemoryMemory;
-import io.agentscope.core.model.DashScopeChatModel;
+import io.agentscope.extensions.model.dashscope.DashScopeChatModel;
 import io.agentscope.core.model.ExecutionConfig;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.tool.Toolkit;
@@ -164,7 +163,9 @@ public class AgentConfig {
                 .sysPrompt(systemPrompt)
                 .model(model)
                 .toolkit(toolkit)
-                .memory(new InMemoryMemory())
+                // 2.x 起 ReActAgent 不再通过 builder 配置 memory，
+                // 会话历史改由 AgentState 内部维护（可通过 agent.getAgentState().getContext() 访问），
+                // 需要持久化时使用 .stateStore(store).defaultSessionId(id)。
                 .maxIters(15)  // 最多15次推理-行动循环
                 .hooks(List.of(loggingHook))
                 .build();

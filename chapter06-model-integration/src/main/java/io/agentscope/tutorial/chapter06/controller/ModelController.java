@@ -95,7 +95,7 @@ public class ModelController {
                 case "openai" -> modelService.registerOpenAIModel(
                         modelName,
                         "https://api.openai.com/v1",
-                        new io.agentscope.core.formatter.openai.OpenAIChatFormatter()
+                        new io.agentscope.extensions.model.openai.formatter.OpenAIChatFormatter()
                 );
                 default -> {
                     return ResponseEntity.badRequest().body(Map.of(

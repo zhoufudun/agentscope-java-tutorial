@@ -117,7 +117,8 @@ public class AgentService {
      * 获取对话历史
      */
     public List<Map<String, String>> getHistory() {
-        List<Msg> messages = agent.getMemory().getMessages();
+        // 2.x 起会话历史由 AgentState 维护，通过 getAgentState().getContext() 读取
+        List<Msg> messages = agent.getAgentState().getContext();
 
         return messages.stream()
                 .map(msg -> Map.of(
@@ -132,10 +133,10 @@ public class AgentService {
      * 清除对话历史
      */
     public void clearHistory() {
-        log.info("清除对话历史，当前消息数: {}", agent.getMemory().getMessages().size());
-        // 注意：InMemoryMemory 不支持直接清除，需要重新创建
-        // 这里通过创建一个新的 memory 实例来"清除"
-        agent.getMemory().clear();
+        log.info("清除对话历史，当前消息数: {}", agent.getAgentState().getContext().size());
+        // 2.x 起使用 clearContext 清除默认会话的对话上下文（保留会话身份、权限、工具状态等）。
+        // 传入 null 使用 builder 配置的 defaultSessionId。
+        agent.clearContext(null, agent.getDefaultSessionId());
     }
 
     /**
@@ -147,7 +148,7 @@ public class AgentService {
                 "name", agent.getName(),
                 "description", agent.getDescription(),
                 "maxIterations", agent.getMaxIters(),
-                "messageCount", agent.getMemory().getMessages().size(),
+                "messageCount", agent.getAgentState().getContext().size(),
                 "sysPrompt", StringUtils.abbreviate(agent.getSysPrompt(), 200)
         );
     }

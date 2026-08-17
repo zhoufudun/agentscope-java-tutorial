@@ -47,6 +47,12 @@
             <artifactId>agentscope-core</artifactId>
         </dependency>
 
+        <!-- AgentScope DashScope 模型扩展 -->
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-extensions-model-dashscope</artifactId>
+        </dependency>
+
         <!-- Spring Boot Web -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -1,4 +1,4 @@
 -------------------------------------------------------------------------------
 Test set: io.agentscope.tutorial.chapter15.HarnessTest
 -------------------------------------------------------------------------------
-Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 6.019 s -- in io.agentscope.tutorial.chapter15.HarnessTest
+Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.220 s -- in io.agentscope.tutorial.chapter15.HarnessTest

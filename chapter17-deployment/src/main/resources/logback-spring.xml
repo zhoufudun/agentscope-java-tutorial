@@ -23,11 +23,28 @@
   - Separate log files for different concerns
   - Sensitive data masking
   - Performance optimized
+
+  日志文件路径说明（LOG_PATH）:
+  - 默认使用相对路径 "logs"（相对于应用启动时的工作目录），保证本地开发与 CI/测试
+    环境始终可写，不会因为无法创建绝对路径（如 /app/logs）而导致启动失败。
+  - 生产 / 容器环境请通过环境变量覆盖，例如 Docker / K8s 中设置：
+        LOG_PATH=/app/logs
+    在 Dockerfile / docker-compose.yml / k8s-deployment.yaml 中以环境变量注入即可，
+    容器内需保证该目录存在且可写（通常挂载数据卷）。
+
+  测试环境（test profile）说明:
+  - 所有基于文件的 appender（FILE / ERROR_FILE / AGENT_FILE 及其异步包装）都被
+    <springProfile name="!test"> 包裹，因此在 test profile 下不会被创建，
+    也就不会尝试创建日志目录，测试只输出到 CONSOLE。
 -->
 <configuration>
     <!-- Properties from Spring Boot -->
     <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="chapter17-deployment"/>
-    <property name="LOG_PATH" value="${LOG_PATH:-/app/logs}"/>
+    <!--
+      LOG_PATH: 日志根目录。
+      默认相对路径 "logs"（可写，适配本地/CI/测试）；生产环境通过环境变量 LOG_PATH=/app/logs 覆盖。
+    -->
+    <property name="LOG_PATH" value="${LOG_PATH:-logs}"/>
     <property name="LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"/>
 
     <!-- Colors for console output -->
@@ -52,86 +69,110 @@
         </appender>
     </springProfile>
 
-    <!-- File Appender with Rotation -->
-    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_PATH}/application.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_PATH}/application.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
-            <maxFileSize>100MB</maxFileSize>
-            <maxHistory>30</maxHistory>
-            <totalSizeCap>10GB</totalSizeCap>
-            <cleanHistoryOnStart>true</cleanHistoryOnStart>
-        </rollingPolicy>
-        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
-            <pattern>${LOG_PATTERN}</pattern>
-            <charset>UTF-8</charset>
-        </encoder>
-    </appender>
+    <!--
+      文件日志 appender 与基于文件的 logger / root 配置。
+      仅在非 test profile 下启用，避免测试/CI 环境创建日志目录导致启动失败。
+    -->
+    <springProfile name="!test">
+        <!-- File Appender with Rotation -->
+        <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>${LOG_PATH}/application.log</file>
+            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+                <fileNamePattern>${LOG_PATH}/application.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+                <maxFileSize>100MB</maxFileSize>
+                <maxHistory>30</maxHistory>
+                <totalSizeCap>10GB</totalSizeCap>
+                <cleanHistoryOnStart>true</cleanHistoryOnStart>
+            </rollingPolicy>
+            <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+                <pattern>${LOG_PATTERN}</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
 
-    <!-- Error Log Appender -->
-    <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_PATH}/error.log</file>
-        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-            <level>ERROR</level>
-        </filter>
-        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_PATH}/error.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
-            <maxFileSize>100MB</maxFileSize>
-            <maxHistory>60</maxHistory>
-            <totalSizeCap>20GB</totalSizeCap>
-        </rollingPolicy>
-        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
-            <pattern>${LOG_PATTERN}</pattern>
-            <charset>UTF-8</charset>
-        </encoder>
-    </appender>
+        <!-- Error Log Appender -->
+        <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>${LOG_PATH}/error.log</file>
+            <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+                <level>ERROR</level>
+            </filter>
+            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+                <fileNamePattern>${LOG_PATH}/error.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+                <maxFileSize>100MB</maxFileSize>
+                <maxHistory>60</maxHistory>
+                <totalSizeCap>20GB</totalSizeCap>
+            </rollingPolicy>
+            <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+                <pattern>${LOG_PATTERN}</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
 
-    <!-- AgentScope Specific Log -->
-    <appender name="AGENT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_PATH}/agentscope.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_PATH}/agentscope.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
-            <maxFileSize>100MB</maxFileSize>
-            <maxHistory>30</maxHistory>
-            <totalSizeCap>5GB</totalSizeCap>
-        </rollingPolicy>
-        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
-            <pattern>${LOG_PATTERN}</pattern>
-            <charset>UTF-8</charset>
-        </encoder>
-    </appender>
+        <!-- AgentScope Specific Log -->
+        <appender name="AGENT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>${LOG_PATH}/agentscope.log</file>
+            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+                <fileNamePattern>${LOG_PATH}/agentscope.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+                <maxFileSize>100MB</maxFileSize>
+                <maxHistory>30</maxHistory>
+                <totalSizeCap>5GB</totalSizeCap>
+            </rollingPolicy>
+            <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+                <pattern>${LOG_PATTERN}</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
 
-    <!-- Async Appender for better performance -->
-    <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
-        <queueSize>512</queueSize>
-        <discardingThreshold>0</discardingThreshold>
-        <includeCallerData>false</includeCallerData>
-        <neverBlock>true</neverBlock>
-        <appender-ref ref="FILE"/>
-    </appender>
+        <!-- Async Appender for better performance -->
+        <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
+            <queueSize>512</queueSize>
+            <discardingThreshold>0</discardingThreshold>
+            <includeCallerData>false</includeCallerData>
+            <neverBlock>true</neverBlock>
+            <appender-ref ref="FILE"/>
+        </appender>
 
-    <appender name="ASYNC_ERROR" class="ch.qos.logback.classic.AsyncAppender">
-        <queueSize>256</queueSize>
-        <discardingThreshold>0</discardingThreshold>
-        <includeCallerData>false</includeCallerData>
-        <neverBlock>true</neverBlock>
-        <appender-ref ref="ERROR_FILE"/>
-    </appender>
+        <appender name="ASYNC_ERROR" class="ch.qos.logback.classic.AsyncAppender">
+            <queueSize>256</queueSize>
+            <discardingThreshold>0</discardingThreshold>
+            <includeCallerData>false</includeCallerData>
+            <neverBlock>true</neverBlock>
+            <appender-ref ref="ERROR_FILE"/>
+        </appender>
 
-    <appender name="ASYNC_AGENT" class="ch.qos.logback.classic.AsyncAppender">
-        <queueSize>512</queueSize>
-        <discardingThreshold>0</discardingThreshold>
-        <includeCallerData>false</includeCallerData>
-        <neverBlock>true</neverBlock>
-        <appender-ref ref="AGENT_FILE"/>
-    </appender>
+        <appender name="ASYNC_AGENT" class="ch.qos.logback.classic.AsyncAppender">
+            <queueSize>512</queueSize>
+            <discardingThreshold>0</discardingThreshold>
+            <includeCallerData>false</includeCallerData>
+            <neverBlock>true</neverBlock>
+            <appender-ref ref="AGENT_FILE"/>
+        </appender>
 
-    <!-- Logger Configurations -->
+        <!-- AgentScope Logger（写入独立文件） -->
+        <logger name="io.agentscope" level="DEBUG" additivity="true">
+            <appender-ref ref="ASYNC_AGENT"/>
+        </logger>
 
-    <!-- AgentScope Logger -->
-    <logger name="io.agentscope" level="DEBUG" additivity="true">
-        <appender-ref ref="ASYNC_AGENT"/>
-    </logger>
+        <!-- Root Logger（控制台 + 文件） -->
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="ASYNC_FILE"/>
+            <appender-ref ref="ASYNC_ERROR"/>
+        </root>
+    </springProfile>
+
+    <!--
+      Test Profile:
+      仅使用 CONSOLE appender，不创建任何日志文件，避免测试环境无法写入日志目录。
+    -->
+    <springProfile name="test">
+        <logger name="io.agentscope" level="DEBUG" additivity="true"/>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- Logger Configurations（级别控制，对所有 profile 生效） -->
 
     <!-- Spring Framework -->
     <logger name="org.springframework" level="INFO" additivity="true"/>
@@ -165,35 +206,8 @@
     <!-- OpenTelemetry -->
     <logger name="io.opentelemetry" level="INFO" additivity="true"/>
 
-    <!-- Root Logger -->
-    <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="ASYNC_FILE"/>
-        <appender-ref ref="ASYNC_ERROR"/>
-    </root>
-
-    <!-- Production Profile - More aggressive optimizations -->
-    <springProfile name="prod">
-        <root level="INFO">
-            <appender-ref ref="CONSOLE"/>
-            <appender-ref ref="ASYNC_FILE"/>
-            <appender-ref ref="ASYNC_ERROR"/>
-        </root>
-    </springProfile>
-
-    <!-- Development Profile - More verbose -->
+    <!-- Development Profile - More verbose（在 !test 的 root 基础上提高 io.agentscope 级别） -->
     <springProfile name="dev,development">
-        <root level="DEBUG">
-            <appender-ref ref="CONSOLE"/>
-            <appender-ref ref="FILE"/>
-        </root>
         <logger name="io.agentscope" level="TRACE" additivity="true"/>
-    </springProfile>
-
-    <!-- Test Profile -->
-    <springProfile name="test">
-        <root level="INFO">
-            <appender-ref ref="CONSOLE"/>
-        </root>
     </springProfile>
 </configuration>

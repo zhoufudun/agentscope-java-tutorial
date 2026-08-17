@@ -50,12 +50,18 @@ class MemoryServiceTest {
 
     private MemoryService memoryService;
 
+    /**
+     * 2.x 会话状态存储：使用内存实现，便于单元测试隔离。
+     */
+    private io.agentscope.core.state.AgentStateStore agentStateStore;
+
     private static final String TEST_SESSION_ID = "test-session-001";
     private static final String TEST_SESSION_ID_2 = "test-session-002";
 
     @BeforeEach
     void setUp() {
-        memoryService = new MemoryService(memoryRepository, memoryConfig, model);
+        agentStateStore = new io.agentscope.core.state.InMemoryAgentStateStore();
+        memoryService = new MemoryService(memoryRepository, memoryConfig, model, agentStateStore);
     }
 
     // ==================== Memory Record Tests ====================

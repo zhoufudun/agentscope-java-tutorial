@@ -188,10 +188,27 @@ public class SynthesisAgent {
 
     /**
      * Extract text content from response
+     *
+     * <p>In AgentScope 2.x, {@code model.stream(...)} emits {@link io.agentscope.core.model.ChatResponse}
+     * elements whose content is a list of {@link io.agentscope.core.message.ContentBlock}.
+     * We concatenate the text of every {@link io.agentscope.core.message.TextBlock} to obtain the
+     * plain-text answer. A {@link io.agentscope.core.message.Msg} branch is kept for convenience.
      */
     private String extractTextContent(Object response) {
         if (response instanceof io.agentscope.core.message.Msg msg) {
             return msg.getTextContent();
+        }
+        if (response instanceof io.agentscope.core.model.ChatResponse chatResponse) {
+            if (chatResponse.getContent() == null) {
+                return "";
+            }
+            StringBuilder sb = new StringBuilder();
+            for (io.agentscope.core.message.ContentBlock block : chatResponse.getContent()) {
+                if (block instanceof io.agentscope.core.message.TextBlock textBlock) {
+                    sb.append(textBlock.getText());
+                }
+            }
+            return sb.toString();
         }
         return response != null ? response.toString() : "";
     }

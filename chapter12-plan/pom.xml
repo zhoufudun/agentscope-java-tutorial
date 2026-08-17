@@ -61,6 +61,19 @@
             <version>${agentscope.version}</version>
         </dependency>
 
+        <!-- AgentScope Harness（2.x 的计划模式 Plan Mode 位于 harness 模块） -->
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-harness</artifactId>
+            <version>${agentscope.version}</version>
+        </dependency>
+
+        <!-- AgentScope DashScope 模型扩展 -->
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-extensions-model-dashscope</artifactId>
+        </dependency>
+
         <!-- Reactor for reactive streams -->
         <dependency>
             <groupId>io.projectreactor</groupId>

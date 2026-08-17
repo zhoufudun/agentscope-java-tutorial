@@ -40,7 +40,7 @@ public class VillagerAgent {
     private final ReActAgent villagerAgent;
 
     public VillagerAgent(
-            @Qualifier("villagerAgent") ReActAgent villagerAgent) {
+            @Qualifier("villagerReActAgent") ReActAgent villagerAgent) {
         this.villagerAgent = villagerAgent;
         logger.info("VillagerAgent 初始化完成");
     }

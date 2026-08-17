@@ -40,7 +40,7 @@ public class WerewolfAgent {
     private final ReActAgent werewolfAgent;
 
     public WerewolfAgent(
-            @Qualifier("werewolfAgent") ReActAgent werewolfAgent) {
+            @Qualifier("werewolfReActAgent") ReActAgent werewolfAgent) {
         this.werewolfAgent = werewolfAgent;
         logger.info("WerewolfAgent 初始化完成");
     }

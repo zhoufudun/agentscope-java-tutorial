@@ -18,9 +18,6 @@ package io.agentscope.tutorial.chapter01;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agent.test.MockModel;
 import io.agentscope.core.agent.test.MockToolkit;
-import io.agentscope.core.memory.InMemoryMemory;
-import io.agentscope.core.message.Msg;
-import io.agentscope.core.message.TextBlock;
 import io.agentscope.tutorial.chapter01.controller.ChatRequest;
 import io.agentscope.tutorial.chapter01.controller.ChatResponse;
 import io.agentscope.tutorial.chapter01.service.AgentService;
@@ -73,7 +70,6 @@ class AgentServiceTest {
                 .name("TestAssistant")
                 .sysPrompt("你是一个测试助手。")
                 .model(mockModel)
-                .memory(new InMemoryMemory())
                 .toolkit(new MockToolkit())
                 .maxIters(5)
                 .build();
@@ -187,7 +183,6 @@ class AgentServiceTest {
                 .name("ErrorAgent")
                 .sysPrompt("测试异常")
                 .model(errorModel)
-                .memory(new InMemoryMemory())
                 .toolkit(new MockToolkit())
                 .maxIters(5)
                 .build();

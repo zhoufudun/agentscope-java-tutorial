@@ -17,11 +17,9 @@ package io.agentscope.tutorial.chapter04;
 
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.hook.Hook;
-import io.agentscope.core.memory.InMemoryMemory;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
-import io.agentscope.core.model.ExecutionConfig;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.tutorial.chapter04.hook.LoggingHook;
@@ -83,7 +81,7 @@ class ReActAgentTest {
                 .sysPrompt("你是一个测试助手。请简洁地回答问题。")
                 .model(model)
                 .toolkit(toolkit)
-                .memory(new InMemoryMemory())
+                // 2.x 起不再通过 builder 配置 memory，会话历史由 AgentState 维护
                 .maxIters(5)
                 .hooks(List.of(loggingHook))
                 .build();
@@ -95,7 +93,7 @@ class ReActAgentTest {
         assertNotNull(agent, "Agent 不应该为空");
         assertEquals("测试助手", agent.getName(), "Agent 名称应该正确");
         assertEquals(5, agent.getMaxIters(), "最大迭代次数应该正确");
-        assertNotNull(agent.getMemory(), "Memory 不应该为空");
+        assertNotNull(agent.getAgentState(), "AgentState 不应该为空");
         assertNotNull(agent.getModel(), "Model 不应该为空");
     }
 
@@ -118,7 +116,7 @@ class ReActAgentTest {
         Msg response = agent.call(userMessage).block(Duration.ofSeconds(60));
 
         assertNotNull(response, "响应不应该为空");
-        String content = response.getContentAsString();
+        String content = response.getTextContent();
         assertNotNull(content, "响应内容不应该为空");
         assertFalse(content.isEmpty(), "响应内容不应该为空");
         System.out.println("简单对话响应: " + content);
@@ -141,7 +139,7 @@ class ReActAgentTest {
         Msg response = agent.call(userMessage).block(Duration.ofSeconds(120));
 
         assertNotNull(response, "响应不应该为空");
-        String content = response.getContentAsString();
+        String content = response.getTextContent();
         assertNotNull(content, "响应内容不应该为空");
         System.out.println("计算器响应: " + content);
 
@@ -167,7 +165,7 @@ class ReActAgentTest {
         Msg response = agent.call(userMessage).block(Duration.ofSeconds(120));
 
         assertNotNull(response, "响应不应该为空");
-        String content = response.getContentAsString();
+        String content = response.getTextContent();
         assertNotNull(content, "响应内容不应该为空");
         System.out.println("天气查询响应: " + content);
 
@@ -193,7 +191,7 @@ class ReActAgentTest {
         Msg response = agent.call(userMessage).block(Duration.ofSeconds(120));
 
         assertNotNull(response, "响应不应该为空");
-        String content = response.getContentAsString();
+        String content = response.getTextContent();
         assertNotNull(content, "响应内容不应该为空");
         System.out.println("时间查询响应: " + content);
     }
@@ -215,7 +213,7 @@ class ReActAgentTest {
         Msg response = agent.call(userMessage).block(Duration.ofSeconds(120));
 
         assertNotNull(response, "响应不应该为空");
-        String content = response.getContentAsString();
+        String content = response.getTextContent();
         assertNotNull(content, "响应内容不应该为空");
         System.out.println("单位换算响应: " + content);
     }
@@ -237,7 +235,7 @@ class ReActAgentTest {
 
         agent.call(message1).block(Duration.ofSeconds(120));
 
-        int messageCountAfterFirst = agent.getMemory().getMessages().size();
+        int messageCountAfterFirst = agent.getAgentState().getContext().size();
         assertTrue(messageCountAfterFirst > 0, "第一轮对话后应该有消息");
 
         System.out.println("第一轮对话后消息数: " + messageCountAfterFirst);
@@ -251,7 +249,7 @@ class ReActAgentTest {
 
         agent.call(message2).block(Duration.ofSeconds(120));
 
-        int messageCountAfterSecond = agent.getMemory().getMessages().size();
+        int messageCountAfterSecond = agent.getAgentState().getContext().size();
         assertTrue(messageCountAfterSecond > messageCountAfterFirst, "第二轮对话后消息数应该增加");
 
         System.out.println("第二轮对话后消息数: " + messageCountAfterSecond);
@@ -271,7 +269,7 @@ class ReActAgentTest {
                 .sysPrompt("当你被问到计算问题时，必须连续调用 3 次计算器工具。")
                 .model(model)
                 .toolkit(createToolkit())
-                .memory(new InMemoryMemory())
+                // 2.x 起不再通过 builder 配置 memory
                 .maxIters(2)  // 设置很小的迭代次数
                 .build();
 
@@ -285,14 +283,14 @@ class ReActAgentTest {
         Msg response = limitedAgent.call(userMessage).block(Duration.ofSeconds(120));
 
         assertNotNull(response, "响应不应该为空");
-        String content = response.getContentAsString();
+        String content = response.getTextContent();
         System.out.println("限制迭代次数响应: " + content);
     }
 
     // ========== 辅助方法 ==========
 
     private Model createModel(String apiKey) {
-        return io.agentscope.core.model.DashScopeChatModel.builder()
+        return io.agentscope.extensions.model.dashscope.DashScopeChatModel.builder()
                 .apiKey(apiKey)
                 .modelName(System.getenv("MODEL_NAME") != null ?
                         System.getenv("MODEL_NAME") : "qwen-plus")
@@ -303,24 +301,24 @@ class ReActAgentTest {
 
     private Toolkit createToolkit() {
         Toolkit toolkit = new Toolkit();
-        toolkit.registerObject(new WeatherTool());
-        toolkit.registerObject(new CalculatorTool());
-        toolkit.registerObject(new DateTimeTool());
-        toolkit.setDefaultExecutionConfig(
-                ExecutionConfig.builder()
-                        .timeout(Duration.ofSeconds(30))
-                        .maxRetries(1)
-                        .build()
-        );
+        // 2.x 起统一使用 registerTool 注册带 @Tool 注解的 POJO
+        toolkit.registerTool(new WeatherTool());
+        toolkit.registerTool(new CalculatorTool());
+        toolkit.registerTool(new DateTimeTool());
+        // 2.x 起 Toolkit 不再提供 setDefaultExecutionConfig，
+        // 工具执行超时/重试改由 ReActAgent.builder().toolExecutionConfig(ExecutionConfig...) 配置。
         return toolkit;
     }
 
     private ReActAgent createMockAgent(Toolkit toolkit) {
-        // 创建一个简单的 mock Agent 用于基本测试
+        // 无有效 API Key 时用占位 Key 构建模型（仅用于属性校验，不会真正发起调用）。
+        // 名称/迭代次数与真实 Agent 保持一致，使 testAgentCreation 在无 Key 环境下也能确定性通过。
         return ReActAgent.builder()
-                .name("MockAgent")
-                .sysPrompt("Mock agent for testing")
-                .memory(new InMemoryMemory())
+                .name("测试助手")
+                .sysPrompt("你是一个测试助手。请简洁地回答问题。")
+                .model(createModel("test-placeholder-key"))
+                .toolkit(toolkit)
+                // 2.x 起不再通过 builder 配置 memory
                 .maxIters(5)
                 .build();
     }

@@ -1,42 +1,53 @@
 package io.agentscope.tutorial.chapter12.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.agentscope.core.ReActAgent;
-import io.agentscope.core.agent.Event;
-import io.agentscope.core.agent.EventType;
-import io.agentscope.core.agent.StreamOptions;
-import io.agentscope.core.hook.Hook;
-import io.agentscope.core.hook.HookEvent;
-import io.agentscope.core.hook.PostActingEvent;
-import io.agentscope.core.hook.PreReasoningEvent;
-import io.agentscope.core.message.*;
-import io.agentscope.core.plan.PlanNotebook;
-import io.agentscope.core.plan.model.Plan;
+import io.agentscope.core.agent.RuntimeContext;
+import io.agentscope.core.event.AgentEvent;
+import io.agentscope.core.event.ConfirmResult;
+import io.agentscope.core.event.RequireUserConfirmEvent;
+import io.agentscope.core.event.TextBlockDeltaEvent;
+import io.agentscope.core.event.ThinkingBlockDeltaEvent;
+import io.agentscope.core.event.ToolCallStartEvent;
+import io.agentscope.core.event.ToolResultTextDeltaEvent;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.ToolUseBlock;
+import io.agentscope.core.message.UserMessage;
+import io.agentscope.harness.agent.HarnessAgent;
+import io.agentscope.tutorial.chapter12.model.Plan;
+import io.agentscope.tutorial.chapter12.plan.PlanNotebook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 聊天服务 - 管理 Agent 对话和状态.
  *
- * <p>核心职责：
+ * <p>【2.x 迁移说明 —— 重点】
  * <ul>
- *   <li>发送消息并获取 Agent 的流式响应</li>
- *   <li>管理 Agent 的暂停/恢复/停止状态</li>
- *   <li>通过 Hook 捕获中间状态用于 SSE 展示</li>
+ *   <li>底层 Agent 由 1.x 的 {@code ReActAgent + PlanNotebook} 改为 2.x 的
+ *       {@link HarnessAgent}（开启 Plan Mode）。</li>
+ *   <li>流式接口由 1.x 的 {@code agent.stream(msg, StreamOptions)}（返回 {@code Flux<Event>}）
+ *       改为 2.x 的 {@code agent.streamEvents(msg, ctx)}（返回细粒度的 {@code Flux<AgentEvent>}）。
+ *       事件由具体子类型区分：{@code TextBlockDeltaEvent}（文本增量）、
+ *       {@code ThinkingBlockDeltaEvent}（思维增量）、{@code ToolResultTextDeltaEvent}（工具结果增量）、
+ *       {@code ToolCallStartEvent}（工具开始）、{@code RequireUserConfirmEvent}（HITL 需确认）等。</li>
+ *   <li>“暂停 / 恢复”的语义变化：1.x 靠 {@code GenerateReason.ACTING_STOP_REQUESTED} 暂停；
+ *       2.x 计划模式下 {@code plan_exit} 会触发 {@code RequireUserConfirmEvent}（人类在环 HITL），
+ *       我们据此发出 {@code {"t":"paused"}}，并在 resume 时用携带
+ *       {@code ConfirmResult} 的消息（{@code Msg.METADATA_CONFIRM_RESULTS}）批准并继续。</li>
+ *   <li>会话上下文调试推送（旧的 {@code {"t":"ctx",...}}）已移除：它依赖 1.x 的
+ *       {@code agent.getMemory().getMessages()} 内省 API；2.x 会话历史保存在 AgentState，
+ *       不再以这种方式暴露，教学上用工具事件流展示即可。</li>
  * </ul>
  *
  * @author AgentScope Tutorial
@@ -47,43 +58,29 @@ public class ChatService implements InitializingBean {
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
     private static final ObjectMapper SSE_JSON = new ObjectMapper();
 
-    /** SSE 上下文消息最大字符数 */
-    private static final int CTX_FLAT_MAX_CHARS = 48_000;
-
-    /** SSE 上下文字段最大字符数 */
-    private static final int CTX_FIELD_MAX_CHARS = 8_000;
-
-    /** 计划工具名称集合（用于日志记录） */
-    private static final Set<String> PLAN_TOOL_NAMES = Set.of(
-            "create_plan", "update_plan_info", "revise_current_plan",
-            "update_subtask_state", "finish_subtask", "get_subtask_count",
-            "finish_plan", "view_subtasks", "view_historical_plans", "recover_historical_plan"
-    );
-
     private final PlanNotebook planNotebook;
-    private final ReActAgent agent;
+    private final HarnessAgent agent;
 
-    /** 暂停状态标志 */
+    /** 暂停状态标志（等待用户对 plan_exit 的确认）. */
     private final AtomicBoolean isPaused = new AtomicBoolean(false);
 
-    /** 停止请求标志 */
+    /** 停止请求标志. */
     private final AtomicBoolean stopRequested = new AtomicBoolean(false);
 
-    /** 待处理的工具输入（用于 SSE 展示） */
-    private final ConcurrentLinkedQueue<Map<String, Object>> pendingToolInputs = new ConcurrentLinkedQueue<>();
+    /** 每个会话对应的 RuntimeContext（resume 时复用同一 session）. */
+    private final Map<String, RuntimeContext> sessionContexts = new ConcurrentHashMap<>();
 
-    /** 待处理的上下文行（用于 SSE 调试） */
-    private final ConcurrentLinkedQueue<String> pendingContextLines = new ConcurrentLinkedQueue<>();
-    private final AtomicInteger contextSeq = new AtomicInteger(0);
+    /** 每个会话待确认的 HITL 事件（通常是 plan_exit）. */
+    private final Map<String, RequireUserConfirmEvent> pendingConfirms = new ConcurrentHashMap<>();
 
-    public ChatService(PlanNotebook planNotebook, ReActAgent planAgent) {
+    public ChatService(PlanNotebook planNotebook, HarnessAgent planAgent) {
         this.planNotebook = planNotebook;
         this.agent = planAgent;
     }
 
     @Override
     public void afterPropertiesSet() {
-        // 注册计划变更 Hook
+        // 注册计划变更 Hook（针对教程自有的结构化 PlanNotebook，用于日志）
         planNotebook.addChangeHook("chatServiceLog", (notebook, plan) -> {
             if (plan != null) {
                 log.info("Plan changed: {} (state={}, subtasks={})",
@@ -94,91 +91,97 @@ public class ChatService implements InitializingBean {
                 log.info("Plan cleared");
             }
         });
-        log.info("ChatService initialized");
+        log.info("ChatService initialized (HarnessAgent plan mode)");
     }
 
     /**
      * 发送消息并获取流式响应.
      */
     public Flux<String> chat(String sessionId, String message) {
+        String sid = normalizeSession(sessionId);
+
         // 重置状态
         isPaused.set(false);
         stopRequested.set(false);
-        pendingToolInputs.clear();
-        pendingContextLines.clear();
-        contextSeq.set(0);
+        pendingConfirms.remove(sid);
 
-        // 构建用户消息
-        Msg userMsg = Msg.builder()
-                .role(MsgRole.USER)
-                .content(TextBlock.builder().text(message).build())
-                .build();
+        RuntimeContext ctx = RuntimeContext.builder().sessionId(sid).build();
+        sessionContexts.put(sid, ctx);
 
-        log.info("Chat request [session={}]: {}", sessionId, truncate(message, 100));
+        log.info("Chat request [session={}]: {}", sid, truncate(message, 100));
 
-        // 执行对话并附加上下文
-        return attachPendingContext(
-                agent.stream(userMsg, createStreamOptions())
-                        .subscribeOn(Schedulers.boundedElastic())
-        );
+        Msg userMsg = new UserMessage(message);
+        return runStream(sid, agent.streamEvents(userMsg, ctx));
     }
 
     /**
-     * 恢复暂停中的 Agent.
+     * 恢复暂停中的 Agent（批准 plan_exit 的 HITL 确认，回到 BUILD 模式继续执行）.
      */
     public Flux<String> resume(String sessionId) {
-        if (isPaused.compareAndSet(true, false)) {
-            log.info("Resuming agent execution [session={}]", sessionId);
-            pendingToolInputs.clear();
-            pendingContextLines.clear();
-            contextSeq.set(0);
+        String sid = normalizeSession(sessionId);
+        RequireUserConfirmEvent pending = pendingConfirms.remove(sid);
+        RuntimeContext ctx = sessionContexts.get(sid);
 
-            return attachPendingContext(
-                    agent.stream(createStreamOptions())
-                            .subscribeOn(Schedulers.boundedElastic())
-            );
-        } else {
-            log.warn("Tried to resume but agent is not paused [session={}]", sessionId);
-            try {
-                return Flux.just(SSE_JSON.writeValueAsString(
-                        Map.of("t", "error", "d", "Agent is not paused or is already resuming.")
-                ));
-            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-                return Flux.just("{\"t\":\"error\",\"d\":\"Agent is not paused or is already resuming.\"}");
-            }
+        if (pending == null || ctx == null) {
+            log.warn("Tried to resume but no pending confirmation [session={}]", sid);
+            return Flux.just(safeJson(Map.of(
+                    "t", "error",
+                    "d", "Agent is not paused or has no pending confirmation.")));
+        }
+
+        isPaused.set(false);
+        log.info("Resuming agent execution [session={}], approving {} tool call(s)",
+                sid, pending.getToolCalls().size());
+
+        // 批准所有待确认的工具调用（通常是 plan_exit）
+        List<ConfirmResult> results = new ArrayList<>();
+        for (ToolUseBlock call : pending.getToolCalls()) {
+            results.add(new ConfirmResult(true, call));
+        }
+        Msg resumeMsg = UserMessage.builder()
+                .metadata(Map.of(Msg.METADATA_CONFIRM_RESULTS, results))
+                .build();
+
+        return runStream(sid, agent.streamEvents(resumeMsg, ctx));
+    }
+
+    /**
+     * 请求停止 Agent.
+     *
+     * <p>【2.x 迁移说明】1.x 通过标志位在下一个计划工具后暂停；2.x 直接使用
+     * {@link HarnessAgent#interrupt()} 中断当前运行。
+     */
+    public void requestStop() {
+        log.info("Stop requested - interrupting agent");
+        stopRequested.set(true);
+        try {
+            agent.interrupt();
+        } catch (Exception e) {
+            log.warn("Interrupt failed: {}", e.getMessage());
         }
     }
 
     /**
-     * 请求停止 Agent（在下一个计划工具执行后暂停）.
-     */
-    public void requestStop() {
-        log.info("Stop requested - will pause after next plan tool");
-        stopRequested.set(true);
-    }
-
-    /**
-     * 检查 Agent 是否暂停.
+     * 检查 Agent 是否暂停（等待 plan_exit 确认）.
      */
     public boolean isPaused() {
         return isPaused.get();
     }
 
     /**
-     * 重置 Agent.
+     * 重置 Agent 状态.
      */
     public void reset() {
         log.info("Resetting agent");
         isPaused.set(false);
         stopRequested.set(false);
-        pendingToolInputs.clear();
-        pendingContextLines.clear();
-        contextSeq.set(0);
+        pendingConfirms.clear();
+        sessionContexts.clear();
         log.info("Agent reset completed");
     }
 
     /**
-     * 获取当前计划.
+     * 获取当前（教程自有结构化）计划.
      */
     public Plan getCurrentPlan() {
         return planNotebook.getCurrentPlan();
@@ -186,198 +189,93 @@ public class ChatService implements InitializingBean {
 
     // ==================== 私有辅助方法 ====================
 
-    private StreamOptions createStreamOptions() {
-        return StreamOptions.builder()
-                .eventTypes(EventType.REASONING, EventType.TOOL_RESULT, EventType.AGENT_RESULT)
-                .incremental(true)
-                .includeActingChunk(false)
-                .build();
+    private Flux<String> runStream(String sessionId, Flux<AgentEvent> events) {
+        return events
+                .concatMap(event -> {
+                    String mapped = mapEventToString(sessionId, event);
+                    return (mapped == null || mapped.isEmpty()) ? Flux.empty() : Flux.just(mapped);
+                })
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
-    private Flux<String> attachPendingContext(Flux<Event> events) {
-        return events.concatMap(event -> {
-            List<String> prefix = drainPendingContextLines();
-            String mapped = mapEventToString(event);
-            boolean hasPrefix = !prefix.isEmpty();
-            boolean hasBody = mapped != null && !mapped.isEmpty();
-            if (!hasPrefix && !hasBody) {
-                return Flux.empty();
-            }
-            Flux<String> head = Flux.fromIterable(prefix);
-            return hasBody ? head.concatWith(Flux.just(mapped)) : head;
-        });
-    }
-
-    private List<String> drainPendingContextLines() {
-        List<String> out = new ArrayList<>();
-        String line;
-        while ((line = pendingContextLines.poll()) != null) {
-            out.add(line);
-        }
-        return out;
-    }
-
-    private void offerContextLine(String phase, String modelName, List<Msg> messages) {
+    /**
+     * 将 2.x 的 {@link AgentEvent} 映射为前端 SSE JSON 字符串.
+     */
+    private String mapEventToString(String sessionId, AgentEvent event) {
         try {
-            int seq = contextSeq.incrementAndGet();
-            Map<String, Object> root = new LinkedHashMap<>();
-            root.put("t", "ctx");
-            root.put("phase", phase);
-            root.put("seq", seq);
-            root.put("model", modelName != null ? modelName : "");
-            List<Map<String, Object>> rows = new ArrayList<>();
-            for (Msg m : messages) {
-                rows.add(msgToDebugRow(m));
-            }
-            root.put("messages", rows);
-            String flat = truncateIfNeeded(buildFlatTranscript(messages), CTX_FLAT_MAX_CHARS);
-            root.put("flat", flat);
-            pendingContextLines.offer(SSE_JSON.writeValueAsString(root));
-        } catch (Exception e) {
-            log.warn("Failed to serialize context for SSE: {}", e.getMessage());
-        }
-    }
-
-    private Map<String, Object> msgToDebugRow(Msg m) {
-        Map<String, Object> row = new LinkedHashMap<>();
-        row.put("role", m.getRole().name());
-        if (m.getName() != null) {
-            row.put("name", m.getName());
-        }
-        List<Object> parts = new ArrayList<>();
-        for (ContentBlock b : m.getContent()) {
-            parts.add(contentBlockToDebugMap(b));
-        }
-        row.put("content", parts);
-        return row;
-    }
-
-    private Object contentBlockToDebugMap(ContentBlock b) {
-        if (b instanceof TextBlock tb) {
-            return Map.of("type", "text", "text", truncateIfNeeded(tb.getText(), CTX_FIELD_MAX_CHARS));
-        }
-        if (b instanceof ThinkingBlock th) {
-            return Map.of("type", "thinking", "thinking", truncateIfNeeded(th.getThinking(), CTX_FIELD_MAX_CHARS));
-        }
-        if (b instanceof ToolUseBlock tu) {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("type", "tool_use");
-            m.put("id", tu.getId());
-            m.put("name", tu.getName());
-            m.put("input", tu.getInput() != null ? tu.getInput() : Map.of());
-            return m;
-        }
-        if (b instanceof ToolResultBlock tr) {
-            return Map.of("type", "tool_result", "name", tr.getName(), "output",
-                    truncateIfNeeded(flattenToolOutput(tr), CTX_FIELD_MAX_CHARS));
-        }
-        return Map.of("type", "other");
-    }
-
-    private String buildFlatTranscript(List<Msg> messages) {
-        StringBuilder sb = new StringBuilder();
-        for (Msg m : messages) {
-            sb.append("--- ").append(m.getRole().name()).append(" ---\n");
-            for (ContentBlock b : m.getContent()) {
-                appendContentBlockForFlat(sb, b);
-            }
-            sb.append('\n');
-        }
-        return sb.toString();
-    }
-
-    private void appendContentBlockForFlat(StringBuilder sb, ContentBlock o) {
-        if (o instanceof TextBlock tb) {
-            sb.append(tb.getText() != null ? tb.getText() : "");
-        } else if (o instanceof ThinkingBlock th) {
-            sb.append(th.getThinking() != null ? th.getThinking() : "");
-        } else if (o instanceof ToolUseBlock tu) {
-            sb.append("[tool_use ").append(tu.getName()).append("] ");
-            sb.append(tu.getInput() != null ? tu.getInput().toString() : "{}");
-        } else if (o instanceof ToolResultBlock tr) {
-            sb.append("[tool_result ").append(tr.getName()).append("]\n");
-            sb.append(flattenToolOutput(tr));
-        }
-    }
-
-    private String mapEventToString(Event event) {
-        try {
-            // 处理 Agent 结果
-            if (event.getType() == EventType.AGENT_RESULT) {
-                Msg msg = event.getMessage();
-                if (msg != null && msg.getGenerateReason() == GenerateReason.ACTING_STOP_REQUESTED) {
-                    isPaused.set(true);
-                    return SSE_JSON.writeValueAsString(Map.of("t", "paused"));
+            // 思维内容增量
+            if (event instanceof ThinkingBlockDeltaEvent e) {
+                String delta = e.getDelta();
+                if (delta != null && !delta.isEmpty()) {
+                    return safeJson(Map.of("t", "think", "d", delta));
                 }
                 return "";
             }
 
-            // 处理工具结果
-            if (event.getType() == EventType.TOOL_RESULT) {
-                Msg msg = event.getMessage();
-                if (msg == null) return "";
-                List<ToolResultBlock> blocks = msg.getContentBlocks(ToolResultBlock.class);
-                if (blocks.isEmpty()) return "";
-                ToolResultBlock tr = blocks.get(0);
-                Map<String, Object> payload = new LinkedHashMap<>(4);
+            // 文本内容增量
+            if (event instanceof TextBlockDeltaEvent e) {
+                String delta = e.getDelta();
+                if (delta != null && !delta.isEmpty()) {
+                    return safeJson(Map.of("t", "text", "d", delta));
+                }
+                return "";
+            }
+
+            // 工具调用开始
+            if (event instanceof ToolCallStartEvent e) {
+                return safeJson(Map.of(
+                        "t", "tool_start",
+                        "n", nullToEmpty(e.getToolCallName())));
+            }
+
+            // 工具结果增量
+            if (event instanceof ToolResultTextDeltaEvent e) {
+                String delta = e.getDelta();
+                Map<String, Object> payload = new LinkedHashMap<>(3);
                 payload.put("t", "tool");
-                payload.put("n", tr.getName() != null ? tr.getName() : "");
-                payload.put("d", flattenToolOutput(tr));
-                Map<String, Object> inputSnapshot = pendingToolInputs.poll();
-                if (inputSnapshot != null && !inputSnapshot.isEmpty()) {
-                    payload.put("i", inputSnapshot);
-                }
-                return SSE_JSON.writeValueAsString(payload);
+                payload.put("n", nullToEmpty(e.getToolCallName()));
+                payload.put("d", nullToEmpty(delta));
+                return safeJson(payload);
             }
 
-            if (event.isLast()) return "";
-
-            Msg msg = event.getMessage();
-            if (msg == null) return "";
-
-            // 处理思维内容
-            List<ThinkingBlock> thinkingBlocks = msg.getContentBlocks(ThinkingBlock.class);
-            if (!thinkingBlocks.isEmpty()) {
-                String delta = thinkingBlocks.get(0).getThinking();
-                if (delta != null && !delta.isEmpty()) {
-                    return SSE_JSON.writeValueAsString(Map.of("t", "think", "d", delta));
-                }
+            // HITL：plan_exit 需要用户确认 -> 暂停等待前端 resume
+            if (event instanceof RequireUserConfirmEvent e) {
+                pendingConfirms.put(sessionId, e);
+                isPaused.set(true);
+                log.info("Agent paused for HITL confirmation [session={}]", sessionId);
+                return safeJson(Map.of("t", "paused"));
             }
 
-            // 处理文本内容
-            List<TextBlock> textBlocks = msg.getContentBlocks(TextBlock.class);
-            if (!textBlocks.isEmpty()) {
-                String delta = textBlocks.get(0).getText();
-                if (delta != null && !delta.isEmpty()) {
-                    return SSE_JSON.writeValueAsString(Map.of("t", "text", "d", delta));
-                }
-            }
             return "";
+        } catch (Exception ex) {
+            log.warn("Failed to encode SSE chunk: {}", ex.getMessage());
+            return "";
+        }
+    }
+
+    private String safeJson(Map<String, Object> payload) {
+        try {
+            return SSE_JSON.writeValueAsString(payload);
         } catch (Exception e) {
-            log.warn("Failed to encode SSE chunk: {}", e.getMessage());
-            return "";
+            return "{}";
         }
     }
 
-    private String flattenToolOutput(ToolResultBlock block) {
-        StringBuilder sb = new StringBuilder();
-        for (ContentBlock o : block.getOutput()) {
-            if (o instanceof TextBlock tb) {
-                sb.append(tb.getText());
-            }
-        }
-        return sb.toString();
+    private String normalizeSession(String sessionId) {
+        return (sessionId == null || sessionId.isEmpty()) ? "default" : sessionId;
     }
 
-    private String truncateIfNeeded(String s, int max) {
-        if (s == null) return "";
-        if (s.length() <= max) return s;
-        return s.substring(0, max) + "\n...(truncated)";
+    private String nullToEmpty(String s) {
+        return s != null ? s : "";
     }
 
     private String truncate(String s, int max) {
-        if (s == null) return "";
-        if (s.length() <= max) return s;
+        if (s == null) {
+            return "";
+        }
+        if (s.length() <= max) {
+            return s;
+        }
         return s.substring(0, max) + "...";
     }
 }

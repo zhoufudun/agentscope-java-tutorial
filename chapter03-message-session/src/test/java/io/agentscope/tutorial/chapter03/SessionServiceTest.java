@@ -2,9 +2,8 @@ package io.agentscope.tutorial.chapter03;
 
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
-import io.agentscope.core.message.TextBlock;
-import io.agentscope.core.session.InMemorySession;
-import io.agentscope.core.state.SimpleSessionKey;
+import io.agentscope.core.state.AgentState;
+import io.agentscope.core.state.InMemoryAgentStateStore;
 import io.agentscope.tutorial.chapter03.entity.ChatMessage;
 import io.agentscope.tutorial.chapter03.entity.ChatSession;
 import io.agentscope.tutorial.chapter03.formatter.JsonLogFormatter;
@@ -203,21 +202,35 @@ class SessionServiceTest {
     }
 
     @Test
-    void testInMemorySession() {
-        // 测试 AgentScope InMemorySession
-        var session = new InMemorySession();
-        var key = SimpleSessionKey.of("memory-test");
+    void testInMemoryAgentStateStore() {
+        // 测试 AgentScope 2.x 的 InMemoryAgentStateStore
+        // （替代已删除的 io.agentscope.core.session.InMemorySession + SimpleSessionKey）
+        // 2.x 用 (userId, sessionId) 字符串对定位会话，userId 传 null 表示匿名槽
+        var store = new InMemoryAgentStateStore();
+        String sessionId = "memory-test";
 
-        assertFalse(session.exists(key));
+        assertFalse(store.exists(null, sessionId));
 
-        // 保存数据
-        session.save(key, "test_data", "Hello World");
+        // 保存会话状态：用 AgentState 承载一条消息作为会话上下文
+        AgentState state = AgentState.builder()
+                .sessionId(sessionId)
+                .context(List.of(Msg.builder()
+                        .role(MsgRole.USER)
+                        .textContent("Hello World")
+                        .build()))
+                .build();
+        store.save(null, sessionId, "agent_state", state);
 
-        assertTrue(session.exists(key));
+        assertTrue(store.exists(null, sessionId));
+
+        // 读取并校验上下文
+        AgentState loaded = store.get(null, sessionId, "agent_state", AgentState.class).orElseThrow();
+        assertEquals(1, loaded.getContext().size());
+        assertEquals("Hello World", loaded.getContext().get(0).getTextContent());
 
         // 清理
-        session.delete(key);
-        assertFalse(session.exists(key));
+        store.delete(null, sessionId);
+        assertFalse(store.exists(null, sessionId));
     }
 
     @Test

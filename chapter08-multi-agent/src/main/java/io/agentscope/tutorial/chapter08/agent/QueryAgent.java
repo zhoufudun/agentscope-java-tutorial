@@ -1,7 +1,6 @@
 package io.agentscope.tutorial.chapter08.agent;
 
 import io.agentscope.core.ReActAgent;
-import io.agentscope.core.memory.InMemoryMemory;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.tutorial.chapter08.tool.QueryTools;
@@ -73,7 +72,6 @@ public class QueryAgent {
                 - 如有相关信息，给出行动建议
                 """)
             .toolkit(toolkit)
-            .memory(new InMemoryMemory())
             .maxIters(5)
             .build();
     }

@@ -29,7 +29,9 @@ spring:
 # AgentScope Configuration
 agentscope:
   api:
-    key: ${AGENTSOCOPE_API_KEY:}
+    # 未设置环境变量时回退到 demo-key，保证在无真实密钥时也能完成 ReActAgent Bean 的构建
+    # （构建阶段仅校验 key 非空，不会发起真实 API 调用）。
+    key: ${AGENTSOCOPE_API_KEY:demo-key}
   model:
     name: ${AGENTSCOPE_MODEL_NAME:qwen-max}
     base-url: ${AGENTSCOPE_MODEL_BASE_URL:https://dashscope.aliyuncs.com/api/v1}

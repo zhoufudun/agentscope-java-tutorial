@@ -1,12 +1,16 @@
 package io.agentscope.tutorial.chapter06.service;
 
 import io.agentscope.core.formatter.Formatter;
-import io.agentscope.core.formatter.dashscope.DashScopeChatFormatter;
-import io.agentscope.core.formatter.gemini.GeminiChatFormatter;
-import io.agentscope.core.formatter.ollama.OllamaChatFormatter;
-import io.agentscope.core.formatter.openai.DeepSeekFormatter;
-import io.agentscope.core.formatter.openai.GLMFormatter;
-import io.agentscope.core.formatter.openai.OpenAIChatFormatter;
+import io.agentscope.extensions.model.dashscope.DashScopeChatModel;
+import io.agentscope.extensions.model.dashscope.formatter.DashScopeChatFormatter;
+import io.agentscope.extensions.model.gemini.GeminiChatModel;
+import io.agentscope.extensions.model.gemini.formatter.GeminiChatFormatter;
+import io.agentscope.extensions.model.ollama.OllamaChatModel;
+import io.agentscope.extensions.model.ollama.formatter.OllamaChatFormatter;
+import io.agentscope.extensions.model.openai.OpenAIChatModel;
+import io.agentscope.extensions.model.openai.compat.deepseek.DeepSeekFormatter;
+import io.agentscope.extensions.model.openai.compat.glm.GLMFormatter;
+import io.agentscope.extensions.model.openai.formatter.OpenAIChatFormatter;
 import io.agentscope.core.model.*;
 import io.agentscope.tutorial.chapter06.config.ModelConfig;
 import io.agentscope.tutorial.chapter06.entity.ChatConfig;

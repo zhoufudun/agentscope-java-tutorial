@@ -27,13 +27,21 @@
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <spring.boot.version>3.2.5</spring.boot.version>
-        <agentscope.version>2.0.0</agentscope.version>
+        <agentscope.version>2.0.3-SNAPSHOT</agentscope.version>
         <lombok.version>1.18.32</lombok.version>
         <commons-lang3.version>3.14.0</commons-lang3.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- Jackson BOM：置于 spring-boot-dependencies 之前，agentscope 2.x 需要 jackson 2.17 -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>2.17.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
@@ -44,6 +52,12 @@
             <dependency>
                 <groupId>io.agentscope</groupId>
                 <artifactId>agentscope-core</artifactId>
+                <version>${agentscope.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-extensions-model-dashscope</artifactId>
                 <version>${agentscope.version}</version>
             </dependency>
         </dependencies>
@@ -60,6 +74,12 @@
         <dependency>
             <groupId>io.agentscope</groupId>
             <artifactId>agentscope-core</artifactId>
+        </dependency>
+
+        <!-- AgentScope DashScope 模型扩展 -->
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-extensions-model-dashscope</artifactId>
         </dependency>
 
         <!-- Web 支持 -->

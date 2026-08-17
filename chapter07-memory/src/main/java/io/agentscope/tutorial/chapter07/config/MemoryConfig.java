@@ -1,24 +1,32 @@
 package io.agentscope.tutorial.chapter07.config;
 
-import io.agentscope.core.memory.Memory;
-import io.agentscope.core.memory.InMemoryMemory;
+import io.agentscope.core.ReActAgent;
+import io.agentscope.core.model.Model;
+import io.agentscope.core.state.AgentStateStore;
+import io.agentscope.core.state.InMemoryAgentStateStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.beans.factory.annotation.Autowired;
-import io.agentscope.core.model.Model;
-import io.agentscope.core.ReActAgent;
-import io.agentscope.core.state.StatePersistence;
 
 /**
  * Memory Configuration
  *
  * <p>Provides configuration for the memory system including:
  * <ul>
- *   <li>Memory implementation beans</li>
+ *   <li>会话状态存储（AgentStateStore）</li>
  *   <li>Memory statistics tracking</li>
  *   <li>Compression settings</li>
  * </ul>
+ *
+ * <p><b>2.x 迁移说明</b>：AgentScope 2.x 移除了 {@code ReActAgent.Builder.memory(...)}
+ * 与 {@code io.agentscope.core.state.StatePersistence}。会话历史现在由 {@code AgentState}
+ * 维护，持久化改用 {@code AgentStateStore}：
+ * <ul>
+ *   <li>{@link io.agentscope.core.state.InMemoryAgentStateStore} —— 进程内内存存储；</li>
+ *   <li>{@link io.agentscope.core.state.JsonFileAgentStateStore} —— 基于 JSON 文件的持久化。</li>
+ * </ul>
+ * 在 Builder 上使用 {@code .stateStore(store).defaultSessionId(id)}，Agent 会在构建时
+ * 自动按 sessionId 载入历史，并在每次 {@code call()} 后自动保存。
  *
  * @author AgentScope Tutorial
  */
@@ -63,29 +71,38 @@ public class MemoryConfig {
     }
 
     /**
-     * Creates a default InMemoryMemory for the base agent template.
+     * 会话状态存储（2.x 记忆持久化后端）。
      *
-     * <p>This is used as a template - actual session memories are created
-     * by the MemoryService for proper multi-session isolation.
+     * <p>此处使用 {@link InMemoryAgentStateStore} 作为进程内存储，方便演示与测试。
+     * 若需要跨进程/重启保留会话历史，可改为：
+     * <pre>{@code
+     * return new JsonFileAgentStateStore(Paths.get(System.getProperty("user.home"),
+     *         ".agentscope", "chapter07", "sessions"));
+     * }</pre>
      *
-     * @return A new InMemoryMemory instance
+     * <p>该 Store 会被 {@code MemoryService} 注入，用于为每个会话的 Agent
+     * 提供 {@code AgentState} 的自动 load/save 能力。
+     *
+     * @return 共享的 AgentStateStore 实例
      */
     @Bean
-    public Memory defaultMemory() {
-        return new InMemoryMemory();
+    public AgentStateStore agentStateStore() {
+        return new InMemoryAgentStateStore();
     }
 
     /**
      * Creates a ReActAgent template for session-based conversations.
      *
-     * <p>This template agent is used by MemoryService to create session-specific
-     * agents with database-backed memory.
+     * <p>作为参考模板演示 2.x 的记忆写法：通过 {@code .stateStore(store)} 与
+     * {@code .defaultSessionId(id)} 让 Agent 自动维护/持久化会话历史（AgentState），
+     * 取代 1.x 的 {@code .memory(new InMemoryMemory())} + {@code .statePersistence(...)}。
      *
-     * @param model The AI model to use
-     * @return A configured ReActAgent builder
+     * @param model      The AI model to use
+     * @param stateStore 会话状态存储
+     * @return A configured ReActAgent using AgentState-backed memory
      */
     @Bean
-    public ReActAgent baseAgentTemplate(Model model) {
+    public ReActAgent baseAgentTemplate(Model model, AgentStateStore stateStore) {
         String systemPrompt = """
                 You are an intelligent assistant with persistent memory capabilities.
                 You can:
@@ -100,11 +117,11 @@ public class MemoryConfig {
                 .name("MemoryAssistant")
                 .sysPrompt(systemPrompt)
                 .model(model)
-                .memory(new InMemoryMemory())
                 .maxIters(10)
-                .statePersistence(StatePersistence.builder()
-                        .memoryManaged(true)
-                        .build())
+                // 2.x：会话历史由 AgentState 维护，stateStore + defaultSessionId
+                // 实现自动 load/save，替代旧的 memory(...) + statePersistence(...)
+                .stateStore(stateStore)
+                .defaultSessionId("default")
                 .build();
     }
 }

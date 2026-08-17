@@ -1,6 +1,6 @@
 package io.agentscope.tutorial.chapter08.config;
 
-import io.agentscope.core.model.DashScopeChatModel;
+import io.agentscope.extensions.model.dashscope.DashScopeChatModel;
 import io.agentscope.core.model.Model;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;

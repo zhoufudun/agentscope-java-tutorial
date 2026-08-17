@@ -51,6 +51,12 @@
             <version>${agentscope.version}</version>
         </dependency>
 
+        <!-- AgentScope DashScope 模型扩展 -->
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-extensions-model-dashscope</artifactId>
+        </dependency>
+
         <!-- Spring Boot Web 依赖：提供 REST API 能力 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

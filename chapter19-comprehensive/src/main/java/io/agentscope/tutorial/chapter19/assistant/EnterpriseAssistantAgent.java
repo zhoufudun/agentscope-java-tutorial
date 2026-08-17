@@ -66,10 +66,10 @@ public class EnterpriseAssistantAgent {
      */
     @Autowired
     public EnterpriseAssistantAgent(
-            @Qualifier("enterpriseAssistantAgent") ReActAgent mainAgent,
-            @Qualifier("knowledgeAgent") ReActAgent knowledgeAgent,
-            @Qualifier("scheduleAgent") ReActAgent scheduleAgent,
-            @Qualifier("reportAgent") ReActAgent reportAgent,
+            @Qualifier("enterpriseAssistantReActAgent") ReActAgent mainAgent,
+            @Qualifier("knowledgeReActAgent") ReActAgent knowledgeAgent,
+            @Qualifier("scheduleReActAgent") ReActAgent scheduleAgent,
+            @Qualifier("reportReActAgent") ReActAgent reportAgent,
             KnowledgeAgent knowledgeAgentService,
             ScheduleAgent scheduleAgentService,
             ReportAgent reportAgentService) {

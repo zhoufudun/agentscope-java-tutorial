@@ -1,7 +1,7 @@
 package io.agentscope.tutorial.chapter07.config;
 
-import io.agentscope.core.formatter.dashscope.DashScopeChatFormatter;
-import io.agentscope.core.model.DashScopeChatModel;
+import io.agentscope.extensions.model.dashscope.formatter.DashScopeChatFormatter;
+import io.agentscope.extensions.model.dashscope.DashScopeChatModel;
 import io.agentscope.core.model.Model;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;

@@ -2,18 +2,13 @@ package io.agentscope.tutorial.chapter14.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.core.ReActAgent;
-import io.agentscope.core.formatter.dashscope.DashScopeChatFormatter;
-import io.agentscope.core.hook.Hook;
-import io.agentscope.core.hook.recorder.JsonlTraceExporter;
-import io.agentscope.core.memory.InMemoryMemory;
-import io.agentscope.core.model.DashScopeChatModel;
-import io.agentscope.core.session.InMemorySession;
-import io.agentscope.core.session.Session;
+import io.agentscope.extensions.model.dashscope.formatter.DashScopeChatFormatter;
+import io.agentscope.extensions.model.dashscope.DashScopeChatModel;
+import io.agentscope.core.state.AgentStateStore;
+import io.agentscope.core.state.InMemoryAgentStateStore;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.tutorial.chapter14.hook.ApprovalHook;
-import io.agentscope.tutorial.chapter14.repository.ApprovalRepository;
 import io.agentscope.tutorial.chapter14.service.ApprovalService;
-import io.agentscope.tutorial.chapter14.service.WorkflowService;
 import io.agentscope.tutorial.chapter14.service.ChatService;
 import io.agentscope.tutorial.chapter14.tool.SendEmailTool;
 import io.agentscope.tutorial.chapter14.tool.DeleteDataTool;
@@ -101,11 +96,15 @@ public class HITLConfig {
     }
 
     /**
-     * 配置内存会话存储.
+     * 配置内存会话状态存储.
+     *
+     * <p>2.x 移除了 {@code io.agentscope.core.session.*} 整包，会话历史统一由
+     * {@link AgentStateStore} 家族按 {@code (userId, sessionId)} 维度持久化。这里使用内存实现，
+     * 若需重启后仍保留会话，可替换为 {@code new JsonFileAgentStateStore(Path.of("state"))}.
      */
     @Bean
-    public Session session() {
-        return new InMemorySession();
+    public AgentStateStore stateStore() {
+        return new InMemoryAgentStateStore();
     }
 
     /**
@@ -126,7 +125,7 @@ public class HITLConfig {
     public ReActAgent reactAgent(
             DashScopeChatModel chatModel,
             Toolkit toolkit,
-            Session session,
+            AgentStateStore stateStore,
             ApprovalHook approvalHook) {
 
         return ReActAgent.builder()
@@ -134,7 +133,10 @@ public class HITLConfig {
                 .sysPrompt(SYS_PROMPT)
                 .model(chatModel)
                 .toolkit(toolkit)
-                .memory(new InMemoryMemory())
+                // 2.x：不再有 .memory(...)。会话历史保存在 AgentState 中，
+                // 通过 stateStore + 每次调用携带的 sessionId 自动完成 load/save。
+                .stateStore(stateStore)
+                .defaultSessionId("default")
                 .hook(approvalHook)
                 .build();
     }
@@ -145,9 +147,9 @@ public class HITLConfig {
     @Bean
     public ChatService chatService(
             ReActAgent reactAgent,
-            Session session,
+            AgentStateStore stateStore,
             ApprovalService approvalService,
             ObjectMapper objectMapper) {
-        return new ChatService(reactAgent, session, approvalService, objectMapper);
+        return new ChatService(reactAgent, stateStore, approvalService, objectMapper);
     }
 }

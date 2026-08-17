@@ -16,7 +16,6 @@
 package io.agentscope.tutorial.chapter02;
 
 import io.agentscope.core.ReActAgent;
-import io.agentscope.core.memory.InMemoryMemory;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.tutorial.chapter02.service.QuickStartService;
 import org.junit.jupiter.api.BeforeEach;
@@ -76,23 +75,26 @@ class QuickStartTest {
     }
 
     /**
-     * 测试 Agent 使用内存组件。
+     * 测试 Agent 的会话状态。
+     *
+     * <p>2.x 起 memory 不再由 builder 配置，会话历史由 AgentState 内部维护，
+     * 通过 {@code agent.getAgentState().getContext()} 访问。
      */
     @Test
-    @DisplayName("Agent 内存组件测试")
+    @DisplayName("Agent 会话状态测试")
     void testAgentMemory() {
         // 创建自定义 Agent
         ReActAgent agent = ReActAgent.builder()
                 .name("MemoryTestAgent")
                 .sysPrompt("你是一个测试助手")
                 .model(quickStartService.createAgent().getModel())
-                .memory(new InMemoryMemory())
                 .toolkit(new Toolkit())
-                .maxIterations(5)
+                .maxIters(5)
                 .build();
 
-        // 验证内存组件已设置
-        org.junit.jupiter.api.Assertions.assertNotNull(agent.getMemory());
+        // 验证 AgentState 及其会话上下文已初始化
+        org.junit.jupiter.api.Assertions.assertNotNull(agent.getAgentState());
+        org.junit.jupiter.api.Assertions.assertNotNull(agent.getAgentState().getContext());
     }
 
     /**

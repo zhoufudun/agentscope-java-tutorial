@@ -16,11 +16,10 @@
 package io.agentscope.tutorial.chapter13.config;
 
 import io.agentscope.core.ReActAgent;
-import io.agentscope.core.formatter.dashscope.DashScopeChatFormatter;
+import io.agentscope.extensions.model.dashscope.formatter.DashScopeChatFormatter;
 import io.agentscope.core.hook.Hook;
 import io.agentscope.core.hook.recorder.JsonlTraceExporter;
-import io.agentscope.core.memory.InMemoryMemory;
-import io.agentscope.core.model.DashScopeChatModel;
+import io.agentscope.extensions.model.dashscope.DashScopeChatModel;
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.spring.boot.properties.AgentscopeProperties;
@@ -210,7 +209,6 @@ public class AgentConfig {
      *   <li>sysPrompt: 系统提示词，定义 Agent 行为</li>
      *   <li>model: 使用 DashScope 阿里云模型</li>
      *   <li>toolkit: 注册的工具集合</li>
-     *   <li>memory: 内存管理（InMemoryMemory 仅用于演示，生产环境建议使用持久化方案）</li>
      *   <li>hooks: 钩子链配置</li>
      * </ul>
      */
@@ -231,7 +229,7 @@ public class AgentConfig {
                         .formatter(new DashScopeChatFormatter())
                         .build())
                 .toolkit(agentToolkit)
-                .memory(new InMemoryMemory())
+                .maxIters(maxIters)
                 .hooks(hooks)
                 .build();
     }

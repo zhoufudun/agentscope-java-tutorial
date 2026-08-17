@@ -1,4 +1,4 @@
 -------------------------------------------------------------------------------
 Test set: io.agentscope.tutorial.chapter15.HarnessTest$RestApiTests
 -------------------------------------------------------------------------------
-Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 5.494 s -- in io.agentscope.tutorial.chapter15.HarnessTest$RestApiTests
+Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.015 s -- in io.agentscope.tutorial.chapter15.HarnessTest$RestApiTests

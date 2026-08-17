@@ -6,8 +6,9 @@ import io.agentscope.core.agent.Event;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
-import io.agentscope.core.session.Session;
-import io.agentscope.core.state.SimpleSessionKey;
+import io.agentscope.core.agent.RuntimeContext;
+import io.agentscope.core.agent.StreamOptions;
+import io.agentscope.core.state.AgentStateStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -36,8 +37,8 @@ public class ChatService {
     /** 原型代理 */
     private final ReActAgent prototypeAgent;
 
-    /** 会话存储 */
-    private final Session session;
+    /** 会话状态存储（2.x 替代旧的 Session） */
+    private final AgentStateStore stateStore;
 
     /** 审批服务 */
     private final ApprovalService approvalService;
@@ -47,13 +48,24 @@ public class ChatService {
 
     public ChatService(
             ReActAgent prototypeAgent,
-            Session session,
+            AgentStateStore stateStore,
             ApprovalService approvalService,
             ObjectMapper objectMapper) {
         this.prototypeAgent = prototypeAgent;
-        this.session = session;
+        this.stateStore = stateStore;
         this.approvalService = approvalService;
         this.objectMapper = objectMapper;
+    }
+
+    /**
+     * 构造携带 sessionId 的运行时上下文.
+     *
+     * <p>2.x 里会话不再用 {@code SessionKey} 对象标识，而是用 String sessionId。
+     * 每次调用把 sessionId 放进 {@link RuntimeContext}，Agent 便会依据它从
+     * {@link AgentStateStore} 自动 load / save 对应会话的历史（userId 传 null 表示匿名会话）。
+     */
+    private RuntimeContext sessionContext(String sessionId) {
+        return RuntimeContext.builder().sessionId(sessionId).build();
     }
 
     /**
@@ -72,7 +84,11 @@ public class ChatService {
                 .content(TextBlock.builder().text(message).build())
                 .build();
 
-        Flux<Map<String, Object>> events = agent.stream(userMsg).flatMap(this::convertEvent);
+        // 2.x：stream(Msg) 已移除，改用 stream(List<Msg>, StreamOptions, RuntimeContext)；
+        // 通过 RuntimeContext 携带 sessionId 让 Agent 自动 load/save 该会话状态。
+        Flux<Map<String, Object>> events =
+                agent.stream(List.of(userMsg), StreamOptions.defaults(), sessionContext(sessionId))
+                        .flatMap(this::convertEvent);
         return wrapWithCompletion(events, sessionId, agent);
     }
 
@@ -132,7 +148,9 @@ public class ChatService {
 
         Msg responseMsg = Msg.builder().role(MsgRole.TOOL).content(result).build();
 
-        Flux<Map<String, Object>> events = agent.stream(responseMsg).flatMap(this::convertEvent);
+        Flux<Map<String, Object>> events =
+                agent.stream(List.of(responseMsg), StreamOptions.defaults(), sessionContext(sessionId))
+                        .flatMap(this::convertEvent);
         return wrapWithCompletion(events, sessionId, agent);
     }
 
@@ -145,8 +163,9 @@ public class ChatService {
             return existing;
         }
 
-        // 从持久化存储中恢复会话状态
-        prototypeAgent.loadIfExists(session, sessionId);
+        // 2.x：不再手动 load 会话状态。Agent 已配置 stateStore + defaultSessionId，
+        // 每次调用会依据 RuntimeContext 携带的 sessionId 自动从 stateStore 恢复历史。
+        // 这里仅登记"运行中的代理"，用于后续的中断控制。
         ReActAgent agent = prototypeAgent;
         runningAgents.put(sessionId, agent);
 
@@ -168,7 +187,8 @@ public class ChatService {
                         log.error("代理执行出错: session={}, error={}", sessionId, error.getMessage()))
                 .doFinally(signal -> {
                     runningAgents.remove(sessionId);
-                    agent.saveTo(session, sessionId);
+                    // 2.x：无需手动 saveTo。每次 call 结束后，Agent 已按 sessionId 将
+                    // AgentState 自动持久化到 stateStore。
                     log.info("会话结束: session={}", sessionId);
                 });
     }
@@ -286,7 +306,8 @@ public class ChatService {
     public void interrupt(String sessionId) {
         ReActAgent agent = runningAgents.get(sessionId);
         if (agent != null) {
-            agent.interrupt();
+            // 2.x：按 sessionId 精确中断该会话的在途调用。
+            agent.interrupt(sessionContext(sessionId));
             log.info("代理已中断: session={}", sessionId);
         }
     }
@@ -296,7 +317,9 @@ public class ChatService {
      */
     public void clearSession(String sessionId) {
         runningAgents.remove(sessionId);
-        session.delete(SimpleSessionKey.of(sessionId));
+        // 2.x：用 AgentStateStore 按 (userId, sessionId) 删除持久化的会话状态；
+        // userId 传 null 表示匿名会话（与 sessionContext 中一致）。
+        stateStore.delete(null, sessionId);
         approvalService.deleteBySessionId(sessionId);
         log.info("会话已清空: session={}", sessionId);
     }

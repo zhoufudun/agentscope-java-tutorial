@@ -1,9 +1,8 @@
 package io.agentscope.tutorial.chapter12.controller;
 
-import io.agentscope.core.plan.PlanNotebook;
-import io.agentscope.core.plan.model.Plan;
-import io.agentscope.core.plan.model.PlanState;
-import io.agentscope.core.plan.model.SubTask;
+import io.agentscope.tutorial.chapter12.model.Plan;
+import io.agentscope.tutorial.chapter12.model.SubTask;
+import io.agentscope.tutorial.chapter12.plan.PlanNotebook;
 import io.agentscope.tutorial.chapter12.dto.PlanRequest;
 import io.agentscope.tutorial.chapter12.dto.SubTaskRequest;
 import io.agentscope.tutorial.chapter12.hook.PlanChangeHook;

@@ -27,6 +27,10 @@ import io.agentscope.tutorial.chapter19.werewolf.game.Player;
 import io.agentscope.tutorial.chapter19.werewolf.game.Role;
 import io.agentscope.tutorial.chapter19.werewolf.game.WerewolfGame;
 import io.agentscope.tutorial.chapter19.werewolf.role.ModeratorAgent;
+import io.agentscope.core.message.ContentBlock;
+import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.message.ToolResultBlock;
+import io.agentscope.core.message.ToolResultState;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -128,9 +132,9 @@ class ComprehensiveTest {
     @DisplayName("测试奶茶店库存检查")
     void testBobaStockCheck() {
         var result = bobaOrderService.checkStock("珍珠");
-        assertTrue(result.isSuccess());
-        assertTrue(result.getContent().contains("库存"));
-        System.out.println("库存检查成功：" + result.getContent());
+        assertTrue(isSuccess(result));
+        assertTrue(content(result).contains("库存"));
+        System.out.println("库存检查成功：" + content(result));
     }
 
     @Test
@@ -314,8 +318,8 @@ class ComprehensiveTest {
     @DisplayName("测试获取当前时间")
     void testGetCurrentTime() {
         var result = sharedTools.getCurrentTime();
-        assertTrue(result.isSuccess());
-        assertTrue(result.getContent().contains("当前时间"));
+        assertTrue(isSuccess(result));
+        assertTrue(content(result).contains("当前时间"));
         System.out.println("获取当前时间成功");
     }
 
@@ -323,8 +327,8 @@ class ComprehensiveTest {
     @DisplayName("测试数学计算")
     void testCalculate() {
         var result = sharedTools.calculate("2+3*4");
-        assertTrue(result.isSuccess());
-        assertTrue(result.getContent().contains("14"));
+        assertTrue(isSuccess(result));
+        assertTrue(content(result).contains("14"));
         System.out.println("数学计算 2+3*4 = 14 - 正确");
     }
 
@@ -332,8 +336,8 @@ class ComprehensiveTest {
     @DisplayName("测试文本格式化")
     void testFormatText() {
         var result = sharedTools.formatText("hello world", "upper");
-        assertTrue(result.isSuccess());
-        assertTrue(result.getContent().contains("HELLO"));
+        assertTrue(isSuccess(result));
+        assertTrue(content(result).contains("HELLO"));
         System.out.println("文本格式化成功");
     }
 
@@ -341,10 +345,10 @@ class ComprehensiveTest {
     @DisplayName("测试随机选择")
     void testRandomChoice() {
         var result = sharedTools.randomChoice(List.of("A", "B", "C"));
-        assertTrue(result.isSuccess());
-        assertTrue(result.getContent().contains("A") ||
-                   result.getContent().contains("B") ||
-                   result.getContent().contains("C"));
+        assertTrue(isSuccess(result));
+        assertTrue(content(result).contains("A") ||
+                   content(result).contains("B") ||
+                   content(result).contains("C"));
         System.out.println("随机选择成功");
     }
 
@@ -372,5 +376,31 @@ class ComprehensiveTest {
         }
 
         return players;
+    }
+
+    /**
+     * 判断工具结果是否成功。
+     *
+     * <p>2.x 移除了 ToolResultBlock.isSuccess()，改用 ToolResultState 表示状态，
+     * 这里将非 ERROR 状态视为成功（工具方法成功时返回 text 结果，失败时返回 error 结果）。
+     */
+    private static boolean isSuccess(ToolResultBlock result) {
+        return result.getState() != ToolResultState.ERROR;
+    }
+
+    /**
+     * 提取工具结果的文本内容。
+     *
+     * <p>2.x 移除了 ToolResultBlock.getContent()，内容改为通过 getOutput() 返回的
+     * ContentBlock 列表承载，这里拼接其中所有 TextBlock 的文本。
+     */
+    private static String content(ToolResultBlock result) {
+        StringBuilder sb = new StringBuilder();
+        for (ContentBlock block : result.getOutput()) {
+            if (block instanceof TextBlock textBlock) {
+                sb.append(textBlock.getText());
+            }
+        }
+        return sb.toString();
     }
 }

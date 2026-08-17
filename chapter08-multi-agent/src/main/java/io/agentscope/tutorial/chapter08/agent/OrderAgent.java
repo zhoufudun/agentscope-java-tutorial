@@ -1,7 +1,6 @@
 package io.agentscope.tutorial.chapter08.agent;
 
 import io.agentscope.core.ReActAgent;
-import io.agentscope.core.memory.InMemoryMemory;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.tutorial.chapter08.tool.OrderTools;
@@ -65,7 +64,6 @@ public class OrderAgent {
                 - 如有异常情况，给出适当的建议
                 """)
             .toolkit(toolkit)
-            .memory(new InMemoryMemory())
             .maxIters(5)
             .build();
     }

@@ -60,8 +60,8 @@ public class GameController {
 
     public GameController(
             @Qualifier("werewolfModeratorAgent") ReActAgent moderatorAgent,
-            @Qualifier("villagerAgent") ReActAgent villagerAgent,
-            @Qualifier("werewolfAgent") ReActAgent werewolfAgent,
+            @Qualifier("villagerReActAgent") ReActAgent villagerAgent,
+            @Qualifier("werewolfReActAgent") ReActAgent werewolfAgent,
             @Autowired ModeratorAgent moderatorRoleAgent) {
         this.moderatorAgent = moderatorAgent;
         this.villagerAgent = villagerAgent;

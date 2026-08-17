@@ -6,8 +6,9 @@ import io.agentscope.core.agent.Event;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
-import io.agentscope.core.session.Session;
-import io.agentscope.core.state.SimpleSessionKey;
+import io.agentscope.core.agent.RuntimeContext;
+import io.agentscope.core.agent.StreamOptions;
+import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.tutorial.chapter14.entity.ApprovalRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,8 +35,8 @@ public class WorkflowService {
     /** 运行中的代理映射 */
     private final ConcurrentHashMap<String, ReActAgent> runningAgents = new ConcurrentHashMap<>();
 
-    /** 会话存储 */
-    private final Session session;
+    /** 会话状态存储（2.x 替代旧的 Session） */
+    private final AgentStateStore stateStore;
 
     /** 审批服务 */
     private final ApprovalService approvalService;
@@ -43,10 +44,20 @@ public class WorkflowService {
     /** JSON 工具 */
     private final ObjectMapper objectMapper;
 
-    public WorkflowService(Session session, ApprovalService approvalService, ObjectMapper objectMapper) {
-        this.session = session;
+    public WorkflowService(AgentStateStore stateStore, ApprovalService approvalService, ObjectMapper objectMapper) {
+        this.stateStore = stateStore;
         this.approvalService = approvalService;
         this.objectMapper = objectMapper;
+    }
+
+    /**
+     * 构造携带 sessionId 的运行时上下文.
+     *
+     * <p>2.x 用 String sessionId 标识会话；把它放进 {@link RuntimeContext}，
+     * Agent 便会依据它从 {@link AgentStateStore} 自动 load / save 会话历史。
+     */
+    private RuntimeContext sessionContext(String sessionId) {
+        return RuntimeContext.builder().sessionId(sessionId).build();
     }
 
     /**
@@ -73,8 +84,8 @@ public class WorkflowService {
             return existing;
         }
 
-        // 从持久化存储中恢复会话状态
-        prototypeAgent.loadIfExists(session, sessionId);
+        // 2.x：不再手动 load。Agent 已配置 stateStore + defaultSessionId，
+        // 每次调用会依据 RuntimeContext 携带的 sessionId 自动恢复会话历史。
         runningAgents.put(sessionId, prototypeAgent);
 
         log.info("创建新代理实例: session={}", sessionId);
@@ -139,7 +150,10 @@ public class WorkflowService {
 
         Msg responseMsg = Msg.builder().role(MsgRole.TOOL).content(result).build();
 
-        Flux<Map<String, Object>> events = agent.stream(responseMsg).flatMap(this::convertEvent);
+        // 2.x：stream(Msg) 已移除，改用 stream(List<Msg>, StreamOptions, RuntimeContext)。
+        Flux<Map<String, Object>> events =
+                agent.stream(List.of(responseMsg), StreamOptions.defaults(), sessionContext(sessionId))
+                        .flatMap(this::convertEvent);
         return wrapWithCompletion(events, sessionId, agent);
     }
 
@@ -227,7 +241,7 @@ public class WorkflowService {
                         log.error("代理执行出错: session={}, error={}", sessionId, error.getMessage()))
                 .doFinally(signal -> {
                     runningAgents.remove(sessionId);
-                    agent.saveTo(session, sessionId);
+                    // 2.x：无需手动 saveTo；每次 call 结束后 stateStore 已按 sessionId 自动持久化。
                     log.info("会话结束: session={}", sessionId);
                 });
     }
@@ -275,7 +289,8 @@ public class WorkflowService {
     public void interrupt(String sessionId) {
         ReActAgent agent = runningAgents.get(sessionId);
         if (agent != null) {
-            agent.interrupt();
+            // 2.x：按 sessionId 精确中断该会话的在途调用。
+            agent.interrupt(sessionContext(sessionId));
             log.info("代理已中断: session={}", sessionId);
         }
     }
@@ -285,7 +300,8 @@ public class WorkflowService {
      */
     public void clearSession(String sessionId) {
         runningAgents.remove(sessionId);
-        session.delete(SimpleSessionKey.of(sessionId));
+        // 2.x：用 AgentStateStore 按 (userId, sessionId) 删除持久化的会话状态（userId=null 表示匿名会话）。
+        stateStore.delete(null, sessionId);
         approvalService.deleteBySessionId(sessionId);
         log.info("会话已清空: session={}", sessionId);
     }

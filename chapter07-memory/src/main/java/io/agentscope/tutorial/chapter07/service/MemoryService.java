@@ -6,6 +6,7 @@ import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.model.ChatResponse;
 import io.agentscope.core.model.Model;
+import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.tutorial.chapter07.config.MemoryConfig;
 import io.agentscope.tutorial.chapter07.entity.MemoryRecord;
 import io.agentscope.tutorial.chapter07.repository.MemoryRepository;
@@ -47,6 +48,14 @@ public class MemoryService {
     private final Model model;
 
     /**
+     * 会话状态存储（2.x 记忆持久化后端）。
+     *
+     * <p>为每个会话的 Agent 提供 {@code AgentState} 的自动 load/save 能力，
+     * 替代 1.x 中已被移除的 {@code Memory} + {@code StatePersistence}。
+     */
+    private final AgentStateStore agentStateStore;
+
+    /**
      * Cache of session agents for quick access.
      * Key: sessionId, Value: Agent with session-specific memory
      */
@@ -60,10 +69,12 @@ public class MemoryService {
 
     public MemoryService(MemoryRepository memoryRepository,
                          MemoryConfig memoryConfig,
-                         Model model) {
+                         Model model,
+                         AgentStateStore agentStateStore) {
         this.memoryRepository = memoryRepository;
         this.memoryConfig = memoryConfig;
         this.model = model;
+        this.agentStateStore = agentStateStore;
     }
 
     // ==================== Session Agent Management ====================
@@ -100,12 +111,17 @@ public class MemoryService {
 
         log.debug("Loaded {} messages from database for session: {}", records.size(), sessionId);
 
+        // 2.x：会话历史由 AgentState 维护。通过 stateStore + defaultSessionId
+        // 让每个会话的 Agent 自动按 sessionId 载入/保存上下文（AgentState），
+        // 取代 1.x 已移除的 .memory(new InMemoryMemory()) 写法。
         return ReActAgent.builder()
                 .name("MemoryAssistant-" + sessionId.substring(0, Math.min(8, sessionId.length())))
                 .sysPrompt(buildSystemPrompt())
                 .model(model)
                 .toolkit(new io.agentscope.core.tool.Toolkit())
                 .maxIters(10)
+                .stateStore(agentStateStore)
+                .defaultSessionId(sessionId)
                 .build();
     }
 
@@ -196,6 +212,23 @@ public class MemoryService {
      */
     public List<Msg> getAllMessages(String sessionId) {
         return getMemoryCache(sessionId);
+    }
+
+    /**
+     * 读取由 AgentState 维护的会话上下文（2.x 记忆读取方式）。
+     *
+     * <p>这是 1.x {@code agent.getMemory().getMessages()} 的等价写法：
+     * {@code agent.getAgentState(userId, sessionId).getContext()}。上下文由 Agent
+     * 在每次 {@code call()} 时自动写入，并通过 {@link AgentStateStore} 持久化。
+     *
+     * <p>注意：2.x 已弃用无参的 {@code getAgentState()}，改用带 {@code (userId, sessionId)}
+     * 的重载以显式指定会话身份（{@code userId} 传 {@code null} 走默认命名空间）。
+     *
+     * @param sessionId The session identifier
+     * @return 该会话 AgentState 中的消息列表
+     */
+    public List<Msg> getAgentStateContext(String sessionId) {
+        return getOrCreateAgent(sessionId).getAgentState(null, sessionId).getContext();
     }
 
     /**
@@ -352,6 +385,9 @@ public class MemoryService {
         memoryRepository.deleteBySessionId(sessionId);
         sessionAgents.remove(sessionId);
         sessionMemoryCache.remove(sessionId);
+        // 2.x：同步清除 AgentStateStore 中该会话持久化的 AgentState
+        // （userId 传 null 表示单租户/默认命名空间）。
+        agentStateStore.delete(null, sessionId);
         log.info("Cleared all memory for session: {}", sessionId);
     }
 

@@ -16,8 +16,9 @@
 
 package io.agentscope.tutorial.chapter09;
 
+import io.a2a.spec.AgentCapabilities;
+import io.a2a.spec.AgentCard;
 import io.agentscope.core.a2a.agent.A2aAgent;
-import io.agentscope.core.a2a.agent.card.AgentCard;
 import io.agentscope.core.a2a.agent.card.FixedAgentCardResolver;
 import io.agentscope.core.a2a.agent.card.WellKnownAgentCardResolver;
 import io.agentscope.core.a2a.server.AgentScopeA2aServer;
@@ -78,7 +79,7 @@ public class A2ATest {
         assertEquals("http://localhost:8888", card.getUrl());
         assertEquals("1.0.0", card.getVersion());
         assertNotNull(card.getProvider());
-        assertEquals("Test Provider", card.getProvider().name());
+        assertEquals("Test Provider", card.getProvider().organization());
         assertNotNull(card.getSkills());
         assertEquals(2, card.getSkills().size());
     }
@@ -91,19 +92,21 @@ public class A2ATest {
      */
     @Test
     public void testFixedAgentCardResolver() {
-        // Create a mock agent card
-        AgentCard mockCard = new AgentCard(
-                "fixed-agent",
-                "An agent with fixed card",
-                "http://localhost:8888",
-                "1.0.0",
-                new AgentProvider("Fixed Provider", "https://fixed.com"),
-                List.of("text"),
-                List.of("text"),
-                List.of(),
-                Map.of(),
-                List.of()
-        );
+        // Create a mock agent card.
+        // In a2a-java-sdk 0.3.x the AgentCard record has 18 components, so we use its
+        // Builder to set only the fields relevant to this test and leave the rest at
+        // their builder defaults.
+        AgentCard mockCard = new AgentCard.Builder()
+                .name("fixed-agent")
+                .description("An agent with fixed card")
+                .url("http://localhost:8888")
+                .provider(new AgentProvider("Fixed Provider", "https://fixed.com"))
+                .version("1.0.0")
+                .capabilities(new AgentCapabilities(false, false, false, List.of()))
+                .defaultInputModes(List.of("text"))
+                .defaultOutputModes(List.of("text"))
+                .skills(List.of())
+                .build();
 
         // Create fixed resolver
         FixedAgentCardResolver resolver = FixedAgentCardResolver.builder()
@@ -129,8 +132,8 @@ public class A2ATest {
         // Create well-known resolver
         WellKnownAgentCardResolver resolver = WellKnownAgentCardResolver.builder()
                 .baseUrl("http://localhost:8888")
-                .path("/.well-known/agent-card.json")
-                .headers(Map.of())
+                .relativeCardPath("/.well-known/agent-card.json")
+                .authHeaders(Map.of())
                 .build();
 
         assertNotNull(resolver);
@@ -147,17 +150,19 @@ public class A2ATest {
      */
     @Test
     public void testMessageCreation() {
-        // Create a user message
+        // Create a user message.
+        // Msg has no dedicated context id field; conversational context is carried
+        // through the message metadata map (Map<String, Object>).
         Msg message = Msg.builder()
                 .role(io.agentscope.core.message.MsgRole.USER)
                 .content(TextBlock.builder().text("Hello, calculate 2 + 2").build())
-                .contextId("test-context-123")
+                .metadata(Map.of("contextId", "test-context-123"))
                 .build();
 
         assertNotNull(message);
         assertEquals(io.agentscope.core.message.MsgRole.USER, message.getRole());
         assertNotNull(message.getContent());
-        assertEquals("test-context-123", message.getContextId());
+        assertEquals("test-context-123", message.getMetadata().get("contextId"));
     }
 
     /**
@@ -173,9 +178,7 @@ public class A2ATest {
                 .host("localhost")
                 .port(8888)
                 .path("/")
-                .metadata(new JsonRpcTransportMetadata.Builder()
-                        .contentType("application/json")
-                        .build())
+                .extra("metadata", new JsonRpcTransportMetadata())
                 .build();
 
         assertEquals("JSONRPC", properties.transportType());
@@ -259,7 +262,7 @@ public class A2ATest {
      */
     @Test
     public void testMessageMetadata() {
-        Map<String, String> metadata = Map.of(
+        Map<String, Object> metadata = Map.of(
                 "userId", "user-123",
                 "sessionId", "session-456",
                 "traceId", "trace-789"
@@ -300,16 +303,20 @@ public class A2ATest {
      * Build test skills for unit tests.
      */
     private List<AgentSkill> buildTestSkills() {
+        // AgentSkill in a2a-java-sdk 0.3.x exposes a nested Builder (constructed via
+        // new AgentSkill.Builder()); there is no static AgentSkill.builder() factory.
         return List.of(
-                AgentSkill.builder()
+                new AgentSkill.Builder()
                         .id("calculation")
                         .name("Calculation")
                         .description("Mathematical calculations")
+                        .tags(List.of("math"))
                         .build(),
-                AgentSkill.builder()
+                new AgentSkill.Builder()
                         .id("text-chat")
                         .name("Text Chat")
                         .description("General text conversation")
+                        .tags(List.of("chat"))
                         .build()
         );
     }

@@ -197,7 +197,6 @@ public class WerewolfGame {
                 .name(name)
                 .sysPrompt(sysPrompt)
                 .model(villagerAgent.getModel())
-                .memory(villagerAgent.getMemory())
                 .toolkit(villagerAgent.getToolkit())
                 .maxIters(5)
                 .build();
@@ -228,7 +227,6 @@ public class WerewolfGame {
                 .name(name)
                 .sysPrompt(sysPrompt)
                 .model(villagerAgent.getModel())
-                .memory(villagerAgent.getMemory())
                 .toolkit(villagerAgent.getToolkit())
                 .maxIters(5)
                 .build();
