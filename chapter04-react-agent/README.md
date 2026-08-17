@@ -16,7 +16,7 @@
 
 - **Java**: 21
 - **Spring Boot**: 3.2.5
-- **AgentScope**: 1.1.0-SNAPSHOT
+- **AgentScope**: 2.0.0
 - **构建工具**: Maven
 
 ## 项目结构

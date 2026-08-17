@@ -30,7 +30,7 @@
         <module>chapter15-harness</module>
         <module>chapter16-springboot</module>
         <module>chapter17-deployment</module>
-        <module>chapter18-other-frameworks</module>
+<!--        <module>chapter18-other-frameworks</module>-->
         <module>chapter19-comprehensive</module>
     </modules>
 
@@ -45,7 +45,7 @@
         <spring-boot.version>3.2.5</spring-boot.version>
 
         <!-- AgentScope 版本 -->
-        <agentscope.version>1.1.0-SNAPSHOT</agentscope.version>
+        <agentscope.version>2.0.0</agentscope.version>
 
         <!-- 第三方依赖版本 -->
         <lombok.version>1.18.32</lombok.version>

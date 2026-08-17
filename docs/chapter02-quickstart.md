@@ -35,7 +35,7 @@ AgentScope Java 通过 Maven 进行依赖管理。核心模块为 `agentscope-co
     </parent>
 
     <properties>
-        <revision>1.1.0-SNAPSHOT</revision>
+        <revision>2.0.0</revision>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -309,7 +309,7 @@ chapter02-quickstart/
 
     <properties>
         <!-- 请确保使用 JDK 21 或更高版本 -->
-        <revision>1.1.0-SNAPSHOT</revision>
+        <revision>2.0.0</revision>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

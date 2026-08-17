@@ -14,7 +14,7 @@
 
 - **Java**: 21
 - **Spring Boot**: 3.2.5
-- **AgentScope**: 1.1.0-SNAPSHOT
+- **AgentScope**: 2.0.0
 - **向量数据库**: Qdrant v1.7.4
 - **Embedding 模型**: Ollama (nomic-embed-text)
 

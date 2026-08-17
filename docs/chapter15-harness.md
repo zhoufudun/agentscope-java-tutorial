@@ -488,7 +488,7 @@ chapter15-harness/
 
     <properties>
         <java.version>21</java.version>
-        <agentscope.version>1.1.0-SNAPSHOT</agentscope.version>
+        <agentscope.version>2.0.0</agentscope.version>
     </properties>
 
     <dependencies>

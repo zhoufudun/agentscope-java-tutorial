@@ -181,6 +181,6 @@ tags:
 
 - **Java**: 21
 - **Spring Boot**: 3.2.5
-- **AgentScope**: 1.1.0-SNAPSHOT
+- **AgentScope**: 2.0.0
 - **数据库**: H2 (开发) / MySQL (生产)
 - **工具库**: Lombok, Commons Lang3

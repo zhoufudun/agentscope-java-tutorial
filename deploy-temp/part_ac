@@ -618,7 +618,7 @@ public class WorkspaceContextHook implements Hook {
 
     &lt;properties&gt;
         &lt;java.version&gt;21&lt;/java.version&gt;
-        &lt;agentscope.version&gt;1.1.0-SNAPSHOT&lt;/agentscope.version&gt;
+        &lt;agentscope.version&gt;2.0.0&lt;/agentscope.version&gt;
     &lt;/properties&gt;
 
     &lt;dependencies&gt;

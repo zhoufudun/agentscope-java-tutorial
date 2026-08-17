@@ -27,7 +27,7 @@
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <spring.boot.version>3.2.5</spring.boot.version>
-        <agentscope.version>1.1.0-SNAPSHOT</agentscope.version>
+        <agentscope.version>2.0.0</agentscope.version>
         <lombok.version>1.18.32</lombok.version>
         <commons-lang3.version>3.14.0</commons-lang3.version>
     </properties>
