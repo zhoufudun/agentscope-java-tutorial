@@ -22,14 +22,34 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 
 /**
- * 知识问答 Agent 服务
+ * 知识问答 Agent 服务 - 企业知识库的封装层
  *
  * <p>负责：
  * <ul>
- *   <li>FAQ 问答</li>
- *   <li>文档检索</li>
- *   <li>知识库查询</li>
+ *   <li>FAQ 问答 - 回答常见问题</li>
+ *   <li>文档检索 - 基于关键词的文档搜索</li>
+ *   <li>知识库查询 - 标签和内容的模糊匹配</li>
  * </ul>
+ *
+ * <h2>知识库设计</h2>
+ * <p>本示例使用内存 Map 模拟知识库，实际生产环境可替换为：
+ * <ul>
+ *   <li>向量数据库（如 Milvus、Pinecone）用于语义检索</li>
+ *   <li>Elasticsearch 用于全文搜索</li>
+ *   <li>图数据库（如 Neo4j）用于知识图谱</li>
+ * </ul>
+ *
+ * <h2>检索策略</h2>
+ * <p>当前实现使用简单的关键词匹配，优先级：
+ * <ol>
+ *   <li>标题匹配 - 最相关</li>
+ *   <li>标签匹配 - 次相关</li>
+ *   <li>内容匹配 - 可能相关</li>
+ * </ol>
+ *
+ * <h2>与 Agent 的集成</h2>
+ * <p>本服务被 EnterpriseAssistantTools 的 @Tool 方法调用，
+ * 作为 ReActAgent 的工具能力之一。
  *
  * @author AgentScope Tutorial
  * @since 1.0
@@ -39,15 +59,29 @@ public class KnowledgeAgent {
 
     private static final Logger logger = LoggerFactory.getLogger(KnowledgeAgent.class);
 
-    // 模拟知识库数据
+    // 模拟知识库数据 - 实际生产中应替换为持久化存储
     private final Map<String, KnowledgeItem> knowledgeBase = new HashMap<>();
 
+    /**
+     * 构造函数 - 初始化知识库
+     */
     public KnowledgeAgent() {
         initializeKnowledgeBase();
     }
 
     /**
      * 初始化知识库
+     *
+     * <p>预置企业常用知识条目，包括：
+     * <ul>
+     *   <li>人力资源：请假、考勤、招聘</li>
+     *   <li>财务：报销流程</li>
+     *   <li>IT 服务：技术支持联系方式</li>
+     *   <li>行政：会议室预约</li>
+     *   <li>法务：合同管理</li>
+     * </ul>
+     *
+     * <p>每个知识条目包含标题、内容、分类和标签，支持多维度检索。
      */
     private void initializeKnowledgeBase() {
         // 公司制度
@@ -119,8 +153,23 @@ public class KnowledgeAgent {
     /**
      * 搜索知识
      *
+     * <p><b>搜索算法：</b>
+     * <ol>
+     *   <li>遍历所有知识条目</li>
+     *   <li>依次检查标题、标签、内容是否包含查询词</li>
+     *   <li>匹配的条目加入结果集</li>
+     *   <li>格式化输出，包含分类和内容</li>
+     * </ol>
+     *
+     * <p><b>优化方向：</b>
+     * <ul>
+     *   <li>使用向量嵌入实现语义搜索</li>
+     *   <li>支持同义词扩展</li>
+     *   <li>添加搜索结果排序和分页</li>
+     * </ul>
+     *
      * @param query 查询关键词
-     * @return 搜索结果
+     * @return 搜索结果，格式化的文本
      */
     public String search(String query) {
         logger.info("搜索知识: {}", query);
@@ -195,7 +244,15 @@ public class KnowledgeAgent {
     }
 
     /**
-     * 知识条目
+     * 知识条目 - 知识库的基本存储单元
+     *
+     * <p>包含四个核心字段：
+     * <ul>
+     *   <li>title - 条目标题，用于快速识别</li>
+     *   <li>content - 详细内容，包含完整信息</li>
+     *   <li>category - 所属分类（如人力资源、财务等）</li>
+     *   <li>tags - 标签列表，支持多关键词检索</li>
+     * </ul>
      */
     private static class KnowledgeItem {
         String title;

@@ -34,20 +34,39 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Service for managing vector storage operations.
+ * 向量存储操作管理服务
  *
- * <p>This service provides an interface to Qdrant vector database for storing
- * document embeddings and performing similarity searches.
+ * <p>本服务提供与 Qdrant 向量数据库交互的接口，用于存储文档嵌入向量和执行相似度搜索。
  *
- * <p>Example usage:
+ * <h2>AgentScope 学习要点</h2>
+ * <ul>
+ *   <li><b>VDBStoreBase</b>：向量数据库存储的抽象基类</li>
+ *   <li><b>QdrantStore</b>：Qdrant 向量数据库的具体实现</li>
+ *   <li><b>SearchDocumentDto</b>：搜索请求的数据传输对象</li>
+ *   <li><b>Document</b>：包含嵌入向量和元数据的文档对象</li>
+ *   <li><b>DocumentMetadata</b>：文档的元数据，包含内容、ID 和 payload</li>
+ * </ul>
+ *
+ * <h2>Qdrant 向量数据库</h2>
+ * <p>Qdrant 是一个高性能的向量相似度搜索引擎，特点：
+ * <ul>
+ *   <li>支持高维向量存储和检索</li>
+ *   <li>支持过滤和条件搜索</li>
+ *   <li>支持分布式部署</li>
+ *   <li>提供 REST 和 gRPC 接口</li>
+ * </ul>
+ *
+ * <h2>使用示例</h2>
  * <pre>{@code
- * // Add document chunks to vector store
+ * // 添加文档块到向量存储
  * List<Document> chunks = createChunks(content, docId);
  * vectorStoreService.addDocuments(chunks).join();
  *
- * // Search for similar documents
- * List<Document> results = vectorStoreService.search("query text", queryEmbedding, 5);
+ * // 搜索相似文档
+ * List<Document> results = vectorStoreService.search("查询文本", queryEmbedding, 5);
  * }</pre>
+ *
+ * @author AgentScope Tutorial
  */
 @Slf4j
 @Service
@@ -56,131 +75,147 @@ public class VectorStoreService {
 
     private final QdrantConfig qdrantConfig;
     private final EmbeddingService embeddingService;
+
+    /** 向量存储实例 */
     private VDBStoreBase vectorStore;
 
     /**
-     * Initialize the vector store after bean construction.
+     * Bean 构造后初始化向量存储
+     *
+     * <p>根据配置创建 Qdrant 向量存储实例。
      */
     @PostConstruct
     public void init() {
-        log.info("Initializing vector store: location={}, collection={}",
+        log.info("初始化向量存储：location={}，collection={}",
                 qdrantConfig.getLocation(), qdrantConfig.getCollectionName());
 
         this.vectorStore = createVectorStore();
-        log.info("Vector store initialized successfully");
+        log.info("向量存储初始化成功");
     }
 
     /**
-     * Creates the vector store based on configuration.
+     * 根据配置创建向量存储
      *
-     * @return configured VDBStoreBase (QdrantStore)
+     * <p>使用 Builder 模式配置 QdrantStore 的各项参数。
+     *
+     * @return 配置好的 VDBStoreBase（QdrantStore）
+     * @throws RuntimeException 如果创建失败
      */
     private VDBStoreBase createVectorStore() {
         try {
             QdrantStore store = QdrantStore.builder()
-                    .location(qdrantConfig.getLocation())
-                    .collectionName(qdrantConfig.getCollectionName())
-                    .dimensions(qdrantConfig.getDimensions())
-                    .apiKey(qdrantConfig.getApiKey())
-                    .useTransportLayerSecurity(qdrantConfig.isUseTls())
-                    .checkCompatibility(qdrantConfig.isCheckCompatibility())
+                    .location(qdrantConfig.getLocation())       // Qdrant 服务地址
+                    .collectionName(qdrantConfig.getCollectionName()) // 集合名称
+                    .dimensions(qdrantConfig.getDimensions())   // 向量维度
+                    .apiKey(qdrantConfig.getApiKey())           // API 密钥（可选）
+                    .useTransportLayerSecurity(qdrantConfig.isUseTls()) // 是否使用 TLS
+                    .checkCompatibility(qdrantConfig.isCheckCompatibility()) // 检查兼容性
                     .build();
-            log.debug("QdrantStore created successfully");
+            log.debug("QdrantStore 创建成功");
             return store;
         } catch (Exception e) {
-            log.error("Failed to create QdrantStore", e);
-            throw new RuntimeException("Failed to initialize vector store", e);
+            log.error("创建 QdrantStore 失败", e);
+            throw new RuntimeException("初始化向量存储失败", e);
         }
     }
 
     /**
-     * Add document chunks to the vector store.
+     * 添加文档块到向量存储
      *
-     * @param documents the documents with embeddings to store
-     * @return CompletableFuture that completes when done
+     * <p>将带有嵌入向量的文档存储到 Qdrant。
+     *
+     * @param documents 要存储的带嵌入向量的文档
+     * @return 完成时的 CompletableFuture
      */
     public CompletableFuture<Void> addDocuments(List<Document> documents) {
         if (documents == null || documents.isEmpty()) {
             return CompletableFuture.completedFuture(null);
         }
 
-        log.info("Adding {} documents to vector store", documents.size());
+        log.info("添加 {} 个文档到向量存储", documents.size());
         return vectorStore.add(documents)
-                .doOnSuccess(v -> log.info("Successfully added {} documents", documents.size()))
-                .doOnError(e -> log.error("Failed to add documents", e))
+                .doOnSuccess(v -> log.info("成功添加 {} 个文档", documents.size()))
+                .doOnError(e -> log.error("添加文档失败", e))
                 .toFuture();
     }
 
     /**
-     * Search for similar documents in the vector store.
+     * 在向量存储中搜索相似文档
      *
-     * @param query the query text
-     * @param queryEmbedding the pre-computed query embedding vector
-     * @param topK the maximum number of results to return
-     * @return list of matching documents with similarity scores
+     * <p>基于查询向量进行余弦相似度搜索。
+     *
+     * @param query 查询文本（用于日志）
+     * @param queryEmbedding 预计算的查询嵌入向量
+     * @param topK 返回的最大结果数
+     * @return 带相似度分数的匹配文档列表
      */
     public CompletableFuture<List<Document>> search(String query, double[] queryEmbedding, int topK) {
-        log.debug("Searching for similar documents: query='{}', topK={}", query, topK);
+        log.debug("搜索相似文档：query='{}'，topK={}", query, topK);
 
+        // 构建搜索请求 DTO
         SearchDocumentDto searchDto = SearchDocumentDto.builder()
-                .queryEmbedding(queryEmbedding)
-                .limit(topK)
+                .queryEmbedding(queryEmbedding)  // 查询向量
+                .limit(topK)                      // 返回数量限制
                 .build();
 
         return vectorStore.search(searchDto)
-                .doOnSuccess(results -> log.debug("Found {} matching documents", results.size()))
-                .doOnError(e -> log.error("Search failed", e))
+                .doOnSuccess(results -> log.debug("找到 {} 个匹配文档", results.size()))
+                .doOnError(e -> log.error("搜索失败", e))
                 .toFuture();
     }
 
     /**
-     * Search for similar documents with a score threshold.
+     * 带分数阈值的相似文档搜索
      *
-     * @param query the query text
-     * @param queryEmbedding the pre-computed query embedding vector
-     * @param topK the maximum number of results to return
-     * @param scoreThreshold minimum similarity score (0-1)
-     * @return list of matching documents with similarity scores above threshold
+     * <p>只返回相似度分数高于阈值的文档，有助于过滤低相关性结果。
+     *
+     * @param query 查询文本（用于日志）
+     * @param queryEmbedding 预计算的查询嵌入向量
+     * @param topK 返回的最大结果数
+     * @param scoreThreshold 最小相似度分数（0-1）
+     * @return 分数高于阈值的匹配文档列表
      */
     public CompletableFuture<List<Document>> searchWithThreshold(
             String query, double[] queryEmbedding, int topK, double scoreThreshold) {
-        log.debug("Searching with threshold: query='{}', topK={}, threshold={}",
+        log.debug("带阈值搜索：query='{}'，topK={}，threshold={}",
                 query, topK, scoreThreshold);
 
         SearchDocumentDto searchDto = SearchDocumentDto.builder()
                 .queryEmbedding(queryEmbedding)
                 .limit(topK)
-                .scoreThreshold(scoreThreshold)
+                .scoreThreshold(scoreThreshold)  // 分数阈值
                 .build();
 
         return vectorStore.search(searchDto)
-                .doOnSuccess(results -> log.debug("Found {} documents above threshold", results.size()))
+                .doOnSuccess(results -> log.debug("找到 {} 个超过阈值的文档", results.size()))
                 .toFuture();
     }
 
     /**
-     * Delete a document from the vector store.
+     * 从向量存储中删除文档
      *
-     * @param documentId the document ID to delete
-     * @return CompletableFuture that completes with true if deletion succeeded
+     * @param documentId 要删除的文档 ID
+     * @return 删除成功返回 true 的 CompletableFuture
      */
     public CompletableFuture<Boolean> deleteDocument(String documentId) {
-        log.info("Deleting document: {}", documentId);
+        log.info("删除文档：{}", documentId);
         return vectorStore.delete(documentId)
-                .doOnSuccess(result -> log.info("Document {} deleted: {}", documentId, result))
-                .doOnError(e -> log.error("Failed to delete document {}", documentId, e))
+                .doOnSuccess(result -> log.info("文档 {} 删除结果：{}", documentId, result))
+                .doOnError(e -> log.error("删除文档 {} 失败", documentId, e))
                 .toFuture();
     }
 
     /**
-     * Create a Document with metadata and embedding.
+     * 创建带元数据和嵌入向量的 Document
      *
-     * @param content the text content
-     * @param docId the document ID
-     * @param chunkId the chunk ID
-     * @param embedding the embedding vector
-     * @param additionalMetadata additional metadata key-value pairs
-     * @return configured Document ready for storage
+     * <p>这是一个工具方法，用于创建符合 AgentScope RAG 规范的 Document 对象。
+     *
+     * @param content 文本内容
+     * @param docId 文档 ID
+     * @param chunkId 块 ID
+     * @param embedding 嵌入向量
+     * @param additionalMetadata 附加元数据键值对
+     * @return 准备好存储的 Document
      */
     public io.agentscope.core.rag.model.Document createDocument(
             String content,
@@ -189,52 +224,57 @@ public class VectorStoreService {
             double[] embedding,
             Map<String, String> additionalMetadata) {
 
+        // 构建 payload 元数据
         Map<String, Object> payload = new HashMap<>();
         if (additionalMetadata != null) {
             payload.putAll(additionalMetadata);
         }
 
+        // 创建 DocumentMetadata
         DocumentMetadata metadata = new DocumentMetadata(
-                io.agentscope.core.message.TextBlock.builder().text(content).build(),
-                docId,
-                chunkId,
-                payload
+                io.agentscope.core.message.TextBlock.builder().text(content).build(),  // 内容块
+                docId,      // 文档 ID
+                chunkId,    // 块 ID
+                payload     // 附加元数据
         );
 
+        // 创建 Document 并设置嵌入向量
         Document doc = new io.agentscope.core.rag.model.Document(metadata);
         doc.setEmbedding(embedding);
         return doc;
     }
 
     /**
-     * Get the underlying vector store.
+     * 获取底层向量存储实例
      *
-     * @return the VDBStoreBase
+     * @return VDBStoreBase 实例
      */
     public VDBStoreBase getVectorStore() {
         return vectorStore;
     }
 
     /**
-     * Get the collection name.
+     * 获取集合名称
      *
-     * @return the collection name
+     * @return 集合名称
      */
     public String getCollectionName() {
         return qdrantConfig.getCollectionName();
     }
 
     /**
-     * Clean up resources on shutdown.
+     * 关闭时清理资源
+     *
+     * <p>确保正确关闭向量存储连接。
      */
     @PreDestroy
     public void destroy() {
-        log.info("Closing vector store connection");
+        log.info("关闭向量存储连接");
         if (vectorStore instanceof AutoCloseable closeable) {
             try {
                 closeable.close();
             } catch (Exception e) {
-                log.warn("Error closing vector store", e);
+                log.warn("关闭向量存储时出错", e);
             }
         }
     }

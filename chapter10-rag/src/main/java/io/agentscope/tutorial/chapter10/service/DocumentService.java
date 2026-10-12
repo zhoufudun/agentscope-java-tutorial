@@ -33,31 +33,40 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 文档处理服务 operations.
+ * 文档处理服务
  *
- * <p>This service handles document upload, text chunking, and preparation
- * of chunks for embedding and storage in the vector database.
+ * <p>本服务处理文档上传、文本分块，以及准备块用于嵌入和存储到向量数据库。
  *
- * <p>Chunking strategies:
+ * <h2>分块策略</h2>
  * <ul>
- *   <li>CHARACTER: Split by fixed character count</li>
- *   <li>PARAGRAPH: Split by paragraph boundaries (recommended for most documents)</li>
- *   <li>TOKEN: Split by approximate token count</li>
- *   <li>SEMANTIC: Split by semantic boundaries (sentence/clause level)</li>
+ *   <li><b>CHARACTER</b>：按固定字符数切分</li>
+ *   <li><b>PARAGRAPH</b>：按段落边界切分（推荐用于大多数文档）</li>
+ *   <li><b>TOKEN</b>：按近似 Token 数切分</li>
+ *   <li><b>SEMANTIC</b>：按语义边界切分（句子/子句级别）</li>
  * </ul>
  *
- * <p>Example usage:
+ * <h2>AgentScope 学习要点</h2>
+ * <ul>
+ *   <li><b>TextChunker</b>：AgentScope 提供的文本分块工具</li>
+ *   <li><b>SplitStrategy</b>：分块策略枚举</li>
+ *   <li><b>Document</b>：RAG 模块中的文档类，包含元数据和嵌入向量</li>
+ *   <li><b>DocumentMetadata</b>：文档元数据，包含内容、ID 和附加信息</li>
+ * </ul>
+ *
+ * <h2>使用示例</h2>
  * <pre>{@code
- * // Upload and process a document
+ * // 上传并处理文档
  * List<DocumentChunk> chunks = documentService.processDocument(
- *     "Document title",
- *     "Full document text content...",
- *     Map.of("author", "John Doe")
+ *     "文档标题",
+ *     "完整的文档文本内容...",
+ *     Map.of("author", "张三")
  * ).join();
  *
- * // Chunk text without full processing
+ * // 仅分块文本（不完整处理）
  * List<String> textChunks = documentService.chunkText(content);
  * }</pre>
+ *
+ * @author AgentScope Tutorial
  */
 @Slf4j
 @Service
@@ -68,12 +77,19 @@ public class DocumentService {
     private final EmbeddingService embeddingService;
 
     /**
-     * Process a document: chunk text and prepare for embedding.
+     * 处理文档：分块文本并准备嵌入
      *
-     * @param title the document title
-     * @param content the full text content
-     * @param metadata additional metadata
-     * @return list of processed chunks ready for embedding
+     * <p>处理流程：
+     * <ol>
+     *   <li>将文本分割成块</li>
+     *   <li>为每个块创建元数据</li>
+     *   <li>过滤太短的块</li>
+     * </ol>
+     *
+     * @param title 文档标题
+     * @param content 完整文本内容
+     * @param metadata 附加元数据
+     * @return 准备好进行嵌入的已处理块列表
      */
     public CompletableFuture<List<ChunkInfo>> processDocument(
             String title,
@@ -81,23 +97,24 @@ public class DocumentService {
             Map<String, String> metadata) {
 
         String docId = UUID.randomUUID().toString();
-        log.info("Processing document: title='{}', contentLength={}", title, content.length());
+        log.info("处理文档：title='{}'，contentLength={}", title, content.length());
 
         return CompletableFuture.supplyAsync(() -> {
-            // Step 1: Split text into chunks
+            // 步骤1：将文本分割成块
             List<String> textChunks = chunkText(content);
-            log.info("Document split into {} chunks", textChunks.size());
+            log.info("文档已分割为 {} 个块", textChunks.size());
 
-            // Step 2: Create chunk info with metadata
+            // 步骤2：创建带元数据的块信息
             List<ChunkInfo> chunks = new ArrayList<>();
             for (int i = 0; i < textChunks.size(); i++) {
                 String chunkContent = textChunks.get(i);
 
-                // Skip empty or too short chunks
+                // 跳过空的或太短的块
                 if (chunkContent.trim().length() < ragConfig.getChunking().getMinChunkLength()) {
                     continue;
                 }
 
+                // 构建块元数据
                 Map<String, Object> chunkMetadata = new HashMap<>();
                 chunkMetadata.put("title", title);
                 chunkMetadata.put("chunkIndex", i);
@@ -114,72 +131,79 @@ public class DocumentService {
                 ));
             }
 
-            log.info("Created {} valid chunks from document", chunks.size());
+            log.info("从文档创建了 {} 个有效块", chunks.size());
             return chunks;
         });
     }
 
     /**
-     * Chunk text based on configured strategy.
+     * 根据配置的策略分块文本
      *
-     * @param content the text to chunk
-     * @return list of text chunks
+     * <p>使用 AgentScope 的 TextChunker 工具进行分块。
+     *
+     * @param content 要分块的文本
+     * @return 文本块列表
      */
     public List<String> chunkText(String content) {
         String strategy = ragConfig.getChunking().getStrategy();
         int chunkSize = ragConfig.getChunking().getChunkSize();
         int overlapSize = ragConfig.getChunking().getOverlapSize();
 
+        // 解析分块策略
         SplitStrategy splitStrategy = parseSplitStrategy(strategy);
 
-        log.debug("Chunking text: strategy={}, chunkSize={}, overlap={}",
+        log.debug("分块文本：strategy={}，chunkSize={}，overlap={}",
                 strategy, chunkSize, overlapSize);
 
+        // 调用 AgentScope 的 TextChunker
         return TextChunker.chunkText(content, chunkSize, splitStrategy, overlapSize);
     }
 
     /**
-     * Parse split strategy from string.
+     * 从字符串解析分块策略
      *
-     * @param strategy the strategy name
-     * @return SplitStrategy enum value
+     * @param strategy 策略名称
+     * @return SplitStrategy 枚举值
      */
     private SplitStrategy parseSplitStrategy(String strategy) {
         try {
             return SplitStrategy.valueOf(strategy.toUpperCase());
         } catch (IllegalArgumentException e) {
-            log.warn("Unknown split strategy '{}', using PARAGRAPH", strategy);
+            log.warn("未知的分块策略 '{}'，使用 PARAGRAPH", strategy);
             return SplitStrategy.PARAGRAPH;
         }
     }
 
     /**
-     * Create document chunks with embeddings.
+     * 创建带嵌入向量的文档块
      *
-     * @param chunks the chunk information
-     * @return list of Documents with embeddings
+     * <p>为每个块调用嵌入服务生成向量，然后创建 Document 对象。
+     *
+     * @param chunks 块信息列表
+     * @return 带嵌入向量的 Document 列表
      */
     public CompletableFuture<List<Document>> createChunksWithEmbeddings(List<ChunkInfo> chunks) {
         if (chunks == null || chunks.isEmpty()) {
             return CompletableFuture.completedFuture(List.of());
         }
 
-        log.info("Creating {} document chunks with embeddings", chunks.size());
+        log.info("创建 {} 个带嵌入向量的文档块", chunks.size());
 
         return CompletableFuture.supplyAsync(() -> {
             List<Document> documents = new ArrayList<>();
 
             for (ChunkInfo chunk : chunks) {
                 try {
-                    // Generate embedding for chunk
+                    // 为块生成嵌入向量
                     double[] embedding = embeddingService.embedText(chunk.content()).join();
 
-                    // Create Document with metadata
+                    // 构建 payload 元数据
                     Map<String, Object> payload = new HashMap<>();
                     payload.put("title", chunk.metadata().get("title"));
                     payload.put("chunkIndex", chunk.metadata().get("chunkIndex"));
                     payload.put("totalChunks", chunk.metadata().get("totalChunks"));
 
+                    // 创建 AgentScope 的 DocumentMetadata
                     io.agentscope.core.rag.model.DocumentMetadata metadata =
                             new io.agentscope.core.rag.model.DocumentMetadata(
                                     TextBlock.builder().text(chunk.content()).build(),
@@ -188,44 +212,45 @@ public class DocumentService {
                                     payload
                             );
 
+                    // 创建 Document 并设置嵌入向量
                     Document doc = new Document(metadata);
                     doc.setEmbedding(embedding);
 
                     documents.add(doc);
                 } catch (Exception e) {
-                    log.error("Failed to create embedding for chunk {}", chunk.chunkId(), e);
+                    log.error("为块 {} 创建嵌入失败", chunk.chunkId(), e);
                 }
             }
 
-            log.info("Created {} documents with embeddings", documents.size());
+            log.info("创建了 {} 个带嵌入向量的文档", documents.size());
             return documents;
         });
     }
 
     /**
-     * Validate document content.
+     * 验证文档内容
      *
-     * @param content the content to validate
-     * @return true if content is valid for processing
+     * @param content 要验证的内容
+     * @return 如果内容有效可处理则返回 true
      */
     public boolean validateContent(String content) {
         if (content == null || content.isBlank()) {
             return false;
         }
 
-        int maxLength = ragConfig.getChunking().getMaxChunkLength() * 100; // Rough estimate
+        int maxLength = ragConfig.getChunking().getMaxChunkLength() * 100; // 粗略估计
         if (content.length() > maxLength) {
-            log.warn("Content length {} exceeds maximum recommended {}", content.length(), maxLength);
+            log.warn("内容长度 {} 超过建议的最大值 {}", content.length(), maxLength);
         }
 
         return true;
     }
 
     /**
-     * Get statistics about a document.
+     * 获取文档统计信息
      *
-     * @param content the document content
-     * @return statistics map
+     * @param content 文档内容
+     * @return 统计信息 Map
      */
     public Map<String, Object> getDocumentStats(String content) {
         Map<String, Object> stats = new HashMap<>();
@@ -242,12 +267,12 @@ public class DocumentService {
     }
 
     /**
-     * Information about a document chunk.
+     * 文档块信息记录
      *
-     * @param content the chunk text content
-     * @param docId the parent document ID
-     * @param chunkId the chunk unique identifier
-     * @param metadata additional chunk metadata
+     * @param content 块文本内容
+     * @param docId 父文档 ID
+     * @param chunkId 块唯一标识符
+     * @param metadata 附加块元数据
      */
     public record ChunkInfo(
             String content,
@@ -257,12 +282,16 @@ public class DocumentService {
     ) {}
 
     /**
-     * Document processing status enum.
+     * 文档处理状态枚举（本地定义，与 model 包中的保持一致）
      */
     public enum DocumentStatus {
+        /** 等待处理 */
         PENDING,
+        /** 处理中 */
         PROCESSING,
+        /** 处理完成 */
         COMPLETED,
+        /** 处理失败 */
         FAILED
     }
 }

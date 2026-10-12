@@ -40,42 +40,53 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit tests for A2A Protocol functionality.
+ * A2A 协议功能的单元测试
  *
- * <p>These tests demonstrate and verify the core concepts of the A2A protocol:
+ * <p>这些测试演示并验证 A2A 协议的核心概念：
  * <ul>
- *   <li>AgentCard creation and configuration</li>
- *   <li>AgentCardResolver usage (Fixed and WellKnown)</li>
- *   <li>A2A message format and conversion</li>
- *   <li>Service discovery mechanism</li>
+ *   <li>AgentCard 创建和配置</li>
+ *   <li>AgentCardResolver 使用（Fixed 和 WellKnown）</li>
+ *   <li>A2A 消息格式和转换</li>
+ *   <li>服务发现机制</li>
  * </ul>
+ *
+ * <h2>AgentScope 学习要点</h2>
+ * <ul>
+ *   <li>如何创建和配置 AgentCard</li>
+ *   <li>如何使用不同的 AgentCardResolver</li>
+ *   <li>如何构建 A2A 消息</li>
+ *   <li>如何配置传输属性</li>
+ * </ul>
+ *
+ * @author AgentScope Tutorial
  */
 public class A2ATest {
 
     /**
-     * Test AgentCard creation and configuration.
+     * 测试 AgentCard 的创建和配置
      *
-     * <p>The AgentCard is the core metadata document for A2A service discovery.
+     * <p>AgentCard 是 A2A 服务发现的核心元数据文档。
+     * 本测试演示如何使用 Builder 模式创建一个完整配置的 AgentCard。
      */
     @Test
     public void testAgentCardCreation() {
-        // Create a configurable agent card
+        // 使用 Builder 模式创建可配置的 AgentCard
         ConfigurableAgentCard card = new ConfigurableAgentCard.Builder()
-                .name("test-agent")
-                .description("A test agent for A2A protocol")
-                .url("http://localhost:8888")
-                .version("1.0.0")
-                .provider(new AgentProvider("Test Provider", "https://test.com"))
-                .defaultInputModes(List.of("text"))
-                .defaultOutputModes(List.of("text", "streaming"))
-                .skills(buildTestSkills())
-                .iconUrl("https://test.com/icon.png")
-                .preferredTransport(TransportProtocol.JSONRPC.asString())
+                .name("test-agent")                          // Agent 名称
+                .description("用于 A2A 协议测试的 Agent")      // 描述
+                .url("http://localhost:8888")                // 服务 URL
+                .version("1.0.0")                            // 版本号
+                .provider(new AgentProvider("Test Provider", "https://test.com"))  // 提供者信息
+                .defaultInputModes(List.of("text"))          // 支持的输入模式
+                .defaultOutputModes(List.of("text", "streaming"))  // 支持的输出模式
+                .skills(buildTestSkills())                   // 技能列表
+                .iconUrl("https://test.com/icon.png")        // 图标 URL
+                .preferredTransport(TransportProtocol.JSONRPC.asString())  // 首选传输协议
                 .build();
 
-        // Verify card properties
+        // 验证 AgentCard 属性
         assertEquals("test-agent", card.getName());
-        assertEquals("A test agent for A2A protocol", card.getDescription());
+        assertEquals("用于 A2A 协议测试的 Agent", card.getDescription());
         assertEquals("http://localhost:8888", card.getUrl());
         assertEquals("1.0.0", card.getVersion());
         assertNotNull(card.getProvider());
@@ -85,20 +96,19 @@ public class A2ATest {
     }
 
     /**
-     * Test FixedAgentCardResolver usage.
+     * 测试 FixedAgentCardResolver 的使用
      *
-     * <p>The FixedAgentCardResolver is used when you have a pre-configured
-     * AgentCard that doesn't need dynamic discovery.
+     * <p>FixedAgentCardResolver 用于已有预配置的 AgentCard，
+     * 不需要动态发现的场景。适用于测试或已知配置的情况。
      */
     @Test
     public void testFixedAgentCardResolver() {
-        // Create a mock agent card.
-        // In a2a-java-sdk 0.3.x the AgentCard record has 18 components, so we use its
-        // Builder to set only the fields relevant to this test and leave the rest at
-        // their builder defaults.
+        // 创建一个模拟的 AgentCard
+        // 在 a2a-java-sdk 0.3.x 中，AgentCard record 有 18 个组件，
+        // 所以我们使用 Builder 只设置本测试相关的字段
         AgentCard mockCard = new AgentCard.Builder()
                 .name("fixed-agent")
-                .description("An agent with fixed card")
+                .description("带有固定 Card 的 Agent")
                 .url("http://localhost:8888")
                 .provider(new AgentProvider("Fixed Provider", "https://fixed.com"))
                 .version("1.0.0")
@@ -108,55 +118,56 @@ public class A2ATest {
                 .skills(List.of())
                 .build();
 
-        // Create fixed resolver
+        // 创建 Fixed 解析器
+        // FixedAgentCardResolver 直接返回预设的 AgentCard
         FixedAgentCardResolver resolver = FixedAgentCardResolver.builder()
                 .agentCard(mockCard)
                 .build();
 
-        // Get agent card from resolver
+        // 从解析器获取 AgentCard
         AgentCard resolvedCard = resolver.getAgentCard("fixed-agent");
 
         assertNotNull(resolvedCard);
         assertEquals("fixed-agent", resolvedCard.name());
-        assertEquals("An agent with fixed card", resolvedCard.description());
+        assertEquals("带有固定 Card 的 Agent", resolvedCard.description());
     }
 
     /**
-     * Test WellKnownAgentCardResolver configuration.
+     * 测试 WellKnownAgentCardResolver 的配置
      *
-     * <p>The WellKnownAgentCardResolver discovers the AgentCard from a
-     * well-known URI using HTTP.
+     * <p>WellKnownAgentCardResolver 通过 HTTP 从 well-known URI 发现 AgentCard。
+     * 这是 A2A 协议的标准服务发现方式。
      */
     @Test
     public void testWellKnownAgentCardResolver() {
-        // Create well-known resolver
+        // 创建 well-known 解析器
+        // well-known URI 模式：{baseUrl}/.well-known/agent-card.json
         WellKnownAgentCardResolver resolver = WellKnownAgentCardResolver.builder()
                 .baseUrl("http://localhost:8888")
                 .relativeCardPath("/.well-known/agent-card.json")
-                .authHeaders(Map.of())
+                .authHeaders(Map.of())  // 认证头（如需要）
                 .build();
 
         assertNotNull(resolver);
 
-        // Note: This test doesn't actually connect to the server
-        // In real tests, you would mock the HTTP response or use a test server
+        // 注意：此测试不会实际连接服务器
+        // 在真实测试中，你需要 mock HTTP 响应或使用测试服务器
     }
 
     /**
-     * Test message creation and formatting.
+     * 测试消息的创建和格式化
      *
-     * <p>A2A messages have a specific format with roles, content blocks,
-     * and metadata.
+     * <p>A2A 消息有特定的格式，包括角色、内容块和元数据。
+     * 本测试演示如何构建符合 A2A 协议的消息。
      */
     @Test
     public void testMessageCreation() {
-        // Create a user message.
-        // Msg has no dedicated context id field; conversational context is carried
-        // through the message metadata map (Map<String, Object>).
+        // 创建一个用户消息
+        // Msg 没有专门的 context id 字段；会话上下文通过 metadata map 传递
         Msg message = Msg.builder()
-                .role(io.agentscope.core.message.MsgRole.USER)
-                .content(TextBlock.builder().text("Hello, calculate 2 + 2").build())
-                .metadata(Map.of("contextId", "test-context-123"))
+                .role(io.agentscope.core.message.MsgRole.USER)  // 设置消息角色
+                .content(TextBlock.builder().text("你好，计算 2 + 2").build())  // 设置内容
+                .metadata(Map.of("contextId", "test-context-123"))  // 设置元数据
                 .build();
 
         assertNotNull(message);
@@ -166,19 +177,20 @@ public class A2ATest {
     }
 
     /**
-     * Test transport properties configuration.
+     * 测试传输属性的配置
      *
-     * <p>Transport properties define how the A2A server exposes its
-     * endpoints. JSON-RPC is the default transport.
+     * <p>传输属性定义了 A2A 服务器如何暴露其端点。
+     * JSON-RPC 是默认的传输协议。
      */
     @Test
     public void testTransportProperties() {
+        // 构建 JSON-RPC 传输属性
         TransportProperties properties = TransportProperties.builder(
                         TransportProtocol.JSONRPC.asString())
                 .host("localhost")
                 .port(8888)
                 .path("/")
-                .extra("metadata", new JsonRpcTransportMetadata())
+                .extra("metadata", new JsonRpcTransportMetadata())  // 额外元数据
                 .build();
 
         assertEquals("JSONRPC", properties.transportType());
@@ -188,17 +200,17 @@ public class A2ATest {
     }
 
     /**
-     * Test deployment properties configuration.
+     * 测试部署属性的配置
      *
-     * <p>Deployment properties are used to generate the default transport
-     * interface information in the AgentCard.
+     * <p>部署属性用于在 AgentCard 中生成默认的传输接口信息。
      */
     @Test
     public void testDeploymentProperties() {
+        // 构建部署属性
         DeploymentProperties properties = new DeploymentProperties.Builder()
-                .host("0.0.0.0")
-                .port(8888)
-                .path("/a2a")
+                .host("0.0.0.0")    // 监听所有网络接口
+                .port(8888)         // 端口号
+                .path("/a2a")       // 路径前缀
                 .build();
 
         assertEquals("0.0.0.0", properties.host());
@@ -207,10 +219,10 @@ public class A2ATest {
     }
 
     /**
-     * Test AgentCard skills configuration.
+     * 测试 AgentCard 技能配置
      *
-     * <p>Skills define the capabilities of the agent in a standardized way,
-     * allowing other agents to discover and utilize these capabilities.
+     * <p>技能以标准化方式定义 Agent 的能力，
+     * 允许其他 Agent 发现并利用这些能力。
      */
     @Test
     public void testAgentSkills() {
@@ -219,27 +231,26 @@ public class A2ATest {
         assertNotNull(skills);
         assertEquals(2, skills.size());
 
-        // Verify skill properties
+        // 验证技能属性
         AgentSkill firstSkill = skills.get(0);
         assertEquals("calculation", firstSkill.id());
-        assertEquals("Calculation", firstSkill.name());
+        assertEquals("计算", firstSkill.name());
         assertNotNull(firstSkill.description());
     }
 
     /**
-     * Test AgentScopeA2aServer builder configuration.
+     * 测试 AgentScopeA2aServer Builder 配置
      *
-     * <p>The server builder demonstrates how to configure an A2A server
-     * with custom transport and agent card settings.
+     * <p>服务器 Builder 演示如何配置具有自定义传输和 AgentCard 设置的 A2A 服务器。
      */
     @Test
     public void testServerBuilder() {
-        // Build a simple server configuration (without actual agent)
-        // This test verifies the builder pattern works correctly
+        // 构建简单的服务器配置（不含实际 Agent）
+        // 此测试验证 Builder 模式是否正常工作
 
         ConfigurableAgentCard agentCard = new ConfigurableAgentCard.Builder()
                 .name("builder-test-agent")
-                .description("Testing server builder pattern")
+                .description("测试 Server Builder 模式")
                 .url("http://localhost:8888")
                 .version("1.0.0")
                 .build();
@@ -248,20 +259,20 @@ public class A2ATest {
                 .port(8888)
                 .build();
 
-        // Verify configurations are correct
+        // 验证配置正确
         assertNotNull(agentCard);
         assertEquals("builder-test-agent", agentCard.getName());
         assertNotNull(deploymentProperties);
     }
 
     /**
-     * Test A2A message metadata handling.
+     * 测试 A2A 消息元数据处理
      *
-     * <p>Messages can include metadata for tracking, authentication,
-     * and other purposes.
+     * <p>消息可以包含用于跟踪、认证等目的的元数据。
      */
     @Test
     public void testMessageMetadata() {
+        // 创建包含多个元数据字段的消息
         Map<String, Object> metadata = Map.of(
                 "userId", "user-123",
                 "sessionId", "session-456",
@@ -270,7 +281,7 @@ public class A2ATest {
 
         Msg message = Msg.builder()
                 .role(io.agentscope.core.message.MsgRole.USER)
-                .content(TextBlock.builder().text("Test message").build())
+                .content(TextBlock.builder().text("测试消息").build())
                 .metadata(metadata)
                 .build();
 
@@ -280,42 +291,44 @@ public class A2ATest {
     }
 
     /**
-     * Test streaming response handling.
+     * 测试流式响应处理
      *
-     * <p>The A2A protocol supports streaming responses using Flux
-     * from Project Reactor.
+     * <p>A2A 协议支持使用 Project Reactor 的 Flux 进行流式响应。
+     * 适用于需要实时显示响应的场景。
      */
     @Test
     public void testStreamingResponse() {
-        // Create a mock Flux stream (simulating streaming response)
-        Flux<String> mockStream = Flux.just("Part 1", "Part 2", "Part 3", "[DONE]");
+        // 创建模拟的 Flux 流（模拟流式响应）
+        Flux<String> mockStream = Flux.just("第一部分", "第二部分", "第三部分", "[DONE]");
 
-        // Collect all parts
+        // 收集所有部分
         StringBuilder collected = new StringBuilder();
         mockStream.subscribe(
                 collected::append,
-                error -> fail("Stream error: " + error.getMessage()),
+                error -> fail("流错误：" + error.getMessage()),
                 () -> assertTrue(collected.toString().contains("[DONE]"))
         );
     }
 
     /**
-     * Build test skills for unit tests.
+     * 构建用于单元测试的测试技能
+     *
+     * @return 技能列表
      */
     private List<AgentSkill> buildTestSkills() {
-        // AgentSkill in a2a-java-sdk 0.3.x exposes a nested Builder (constructed via
-        // new AgentSkill.Builder()); there is no static AgentSkill.builder() factory.
+        // 在 a2a-java-sdk 0.3.x 中，AgentSkill 通过嵌套 Builder 构造
+        // （通过 new AgentSkill.Builder()）；没有静态的 AgentSkill.builder() 工厂方法
         return List.of(
                 new AgentSkill.Builder()
                         .id("calculation")
-                        .name("Calculation")
-                        .description("Mathematical calculations")
+                        .name("计算")
+                        .description("数学计算")
                         .tags(List.of("math"))
                         .build(),
                 new AgentSkill.Builder()
                         .id("text-chat")
-                        .name("Text Chat")
-                        .description("General text conversation")
+                        .name("文本对话")
+                        .description("通用文本对话")
                         .tags(List.of("chat"))
                         .build()
         );

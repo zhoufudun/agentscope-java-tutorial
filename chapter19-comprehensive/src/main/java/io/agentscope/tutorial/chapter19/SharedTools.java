@@ -24,14 +24,36 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * 共享工具类
+ * 共享工具类 - 跨案例共用的通用工具集合
  *
  * <p>提供多个场景共用的工具，包括：
  * <ul>
- *   <li>时间查询</li>
- *   <li>计算器</li>
- *   <li>文本处理</li>
- *   <li>随机选择</li>
+ *   <li>时间查询 - 获取当前日期和时间</li>
+ *   <li>计算器 - 数学表达式求值</li>
+ *   <li>文本处理 - 大小写转换、首字母大写等</li>
+ *   <li>随机选择 - 从列表中随机选择一个元素</li>
+ * </ul>
+ *
+ * <h2>Tool 注解使用指南</h2>
+ * <p>每个工具方法使用 @Tool 注解标记，包含：
+ * <ul>
+ *   <li><b>name</b> - 工具的唯一标识符，Agent 通过此名称调用工具</li>
+ *   <li><b>description</b> - 工具的功能描述，帮助 Agent 理解何时使用此工具</li>
+ * </ul>
+ *
+ * <h2>ToolParam 注解使用指南</h2>
+ * <p>每个参数使用 @ToolParam 注解标记，包含：
+ * <ul>
+ *   <li><b>name</b> - 参数名称</li>
+ *   <li><b>description</b> - 参数的说明，包括格式、取值范围等</li>
+ *   <li><b>required</b> - 是否必填（默认 true）</li>
+ * </ul>
+ *
+ * <h2>ToolResultBlock 返回值</h2>
+ * <p>工具方法返回 ToolResultBlock，支持：
+ * <ul>
+ *   <li>{@code ToolResultBlock.text()} - 返回成功结果</li>
+ *   <li>{@code ToolResultBlock.error()} - 返回错误信息</li>
  * </ul>
  *
  * @author AgentScope Tutorial
@@ -41,7 +63,16 @@ import java.util.List;
 public class SharedTools {
 
     /**
-     * 获取当前时间
+     * 获取当前时间工具
+     *
+     * <p><b>使用场景：</b>
+     * <ul>
+     *   <li>用户询问当前时间、日期、星期几</li>
+     *   <li>需要时间戳的业务逻辑</li>
+     *   <li>日程安排的时间参考</li>
+     * </ul>
+     *
+     * @return 包含当前日期时间、星期的格式化文本
      */
     @Tool(name = "get_current_time", description = "获取当前日期和时间")
     public ToolResultBlock getCurrentTime() {
@@ -62,7 +93,28 @@ public class SharedTools {
     }
 
     /**
-     * 数学计算
+     * 数学计算工具
+     *
+     * <p><b>使用场景：</b>
+     * <ul>
+     *   <li>用户要求计算数学表达式</li>
+     *   <li>订单金额计算</li>
+     *   <li>数据分析中的简单计算</li>
+     * </ul>
+     *
+     * <p><b>支持的运算：</b>
+     * <ul>
+     *   <li>四则运算：+ - * /</li>
+     *   <li>取模：%</li>
+     *   <li>幂运算：^</li>
+     *   <li>括号：()</li>
+     * </ul>
+     *
+     * <p><b>安全性：</b>使用自实现的表达式解析器，
+     * 而非 JavaScript 引擎，避免代码注入风险。
+     *
+     * @param expression 数学表达式，如 "2+3*4"
+     * @return 计算结果
      */
     @Tool(name = "calculate", description = "执行数学计算")
     public ToolResultBlock calculate(

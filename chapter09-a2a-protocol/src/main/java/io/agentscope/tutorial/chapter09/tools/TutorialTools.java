@@ -25,99 +25,117 @@ import java.time.format.DateTimeFormatter;
 import java.util.Random;
 
 /**
- * Tutorial Tools for the A2A demonstration.
+ * A2A 演示的教程工具类
  *
- * <p>These tools demonstrate how to create tool functions that can be called
- * by the agent during conversation via the A2A protocol.
+ * <p>这些工具演示如何创建可以通过 A2A 协议被 Agent 调用的工具函数。
  *
- * <p><b>Available Tools:</b>
+ * <h2>可用工具</h2>
  * <ul>
- *   <li>{@link #getWeather(String)} - Get weather information for a city</li>
- *   <li>{@link #calculate(String)} - Perform arithmetic calculations</li>
- *   <li>{@link #getCurrentTime()} - Get current date and time</li>
+ *   <li>{@link #getWeather(String)} - 获取城市天气信息</li>
+ *   <li>{@link #calculate(String)} - 执行算术计算</li>
+ *   <li>{@link #getCurrentTime()} - 获取当前日期和时间</li>
  * </ul>
+ *
+ * <h2>AgentScope 学习要点</h2>
+ * <ul>
+ *   <li><b>@Tool 注解</b>：标记一个方法为可被 Agent 调用的工具</li>
+ *   <li><b>@ToolParam 注解</b>：定义工具参数的名称和描述</li>
+ *   <li><b>ToolResultBlock</b>：工具返回结果的标准格式，
+ *       支持文本结果和错误结果</li>
+ *   <li><b>description</b>：工具描述帮助 LLM 判断何时使用该工具</li>
+ * </ul>
+ *
+ * @author AgentScope Tutorial
  */
 public class TutorialTools {
 
+    /** 用于生成模拟数据的随机数生成器 */
     private final Random random = new Random();
 
     /**
-     * Get weather information for a city.
+     * 获取城市的天气信息
      *
-     * <p>This tool demonstrates tool calling via A2A protocol.
+     * <p>此工具演示如何通过 A2A 协议进行工具调用。
+     * 在实际应用中，这里会调用真实的天气 API。
      *
-     * @param city The city name to get weather for (e.g., "Beijing", "New York")
-     * @return Weather information including condition, temperature, and humidity
+     * @param city 要查询天气的城市名称（如"北京"、"上海"）
+     * @return 包含天气状况、温度和湿度的天气信息
      */
-    @Tool(name = "get_weather", description = "Get current weather information for a city")
+    @Tool(name = "get_weather", description = "获取指定城市的当前天气信息")
     public ToolResultBlock getWeather(
-            @ToolParam(name = "city", description = "The city name (e.g., 'Beijing', 'New York')")
+            @ToolParam(name = "city", description = "城市名称（如'北京'、'上海'）")
                     String city) {
-        // Mock weather data for demonstration
-        String[] conditions = {"Sunny", "Cloudy", "Partly Cloudy", "Rainy", "Overcast"};
+        // 模拟天气数据用于演示
+        String[] conditions = {"晴朗", "多云", "局部多云", "小雨", "阴天"};
         String condition = conditions[random.nextInt(conditions.length)];
-        int temperature = random.nextInt(35) + 5; // 5-40 degrees Celsius
+        int temperature = random.nextInt(35) + 5; // 5-40 摄氏度
         int humidity = random.nextInt(60) + 30; // 30-90%
 
         String result = String.format(
-                "Weather in %s:\n" +
-                "- Condition: %s\n" +
-                "- Temperature: %d°C\n" +
-                "- Humidity: %d%%",
+                "%s 的天气：\n" +
+                "- 天气状况：%s\n" +
+                "- 温度：%d°C\n" +
+                "- 湿度：%d%%",
                 city, condition, temperature, humidity);
 
+        // 返回文本类型的工具结果
         return ToolResultBlock.text(result);
     }
 
     /**
-     * Perform a simple arithmetic calculation.
+     * 执行简单的算术计算
      *
-     * <p>This tool demonstrates arithmetic tool calling via A2A protocol.
+     * <p>此工具演示如何通过 A2A 协议进行算术工具调用。
+     * 支持基本的四则运算和括号。
      *
-     * @param expression The math expression to evaluate (e.g., "2 + 3 * 4", "(10 + 5) / 3")
-     * @return The calculation result
+     * @param expression 要计算的数学表达式（如 "2 + 3 * 4"、"(10 + 5) / 3"）
+     * @return 计算结果
      */
-    @Tool(name = "calculate", description = "Perform a simple arithmetic calculation (supports +, -, *, /)")
+    @Tool(name = "calculate", description = "执行简单的算术计算（支持 +、-、*、/）")
     public ToolResultBlock calculate(
             @ToolParam(
                     name = "expression",
-                    description = "The arithmetic expression to calculate (e.g., '2 + 3 * 4')"
+                    description = "要计算的算术表达式（如 '2 + 3 * 4'）"
             )
                     String expression) {
         try {
             double result = evaluateExpression(expression);
-            return ToolResultBlock.text("Result: " + formatNumber(result));
+            return ToolResultBlock.text("计算结果：" + formatNumber(result));
         } catch (Exception e) {
-            return ToolResultBlock.error("Failed to calculate: " + e.getMessage());
+            // 返回错误类型的工具结果
+            return ToolResultBlock.error("计算失败：" + e.getMessage());
         }
     }
 
     /**
-     * Get the current date and time.
+     * 获取当前日期和时间
      *
-     * <p>This tool demonstrates time-related tool calling via A2A protocol.
+     * <p>此工具演示如何实现一个无参数的工具。
      *
-     * @return Current date and time formatted as "yyyy-MM-dd HH:mm:ss"
+     * @return 格式化的当前日期和时间（"yyyy-MM-dd HH:mm:ss" 格式）
      */
-    @Tool(name = "get_current_time", description = "Get the current date and time")
+    @Tool(name = "get_current_time", description = "获取当前日期和时间")
     public ToolResultBlock getCurrentTime() {
         LocalDateTime now = LocalDateTime.now();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-        return ToolResultBlock.text("Current time: " + now.format(formatter));
+        return ToolResultBlock.text("当前时间：" + now.format(formatter));
     }
 
     /**
-     * Simple expression evaluator.
-     * Supports basic arithmetic: +, -, *, /
+     * 简单的表达式求值器
      *
-     * @param expression The arithmetic expression to evaluate
-     * @return The calculated result
-     * @throws IllegalArgumentException if the expression contains invalid values
+     * <p>支持基本算术运算：+、-、*、/
+     * 遵循运算符优先级，支持括号。
+     *
+     * @param expression 要计算的算术表达式
+     * @return 计算结果
+     * @throws IllegalArgumentException 如果表达式包含无效值
      */
     private double evaluateExpression(String expression) {
+        // 移除所有空白字符
         expression = expression.replaceAll("\\s+", "");
 
-        // Handle addition and subtraction
+        // 处理加法和减法（优先级较低，从右向左查找）
         int lastPlusOrMinus = -1;
         int parenDepth = 0;
         for (int i = expression.length() - 1; i >= 0; i--) {
@@ -141,7 +159,7 @@ public class TutorialTools {
             }
         }
 
-        // Handle multiplication and division
+        // 处理乘法和除法
         int lastMultOrDiv = -1;
         parenDepth = 0;
         for (int i = expression.length() - 1; i >= 0; i--) {
@@ -165,7 +183,7 @@ public class TutorialTools {
             }
         }
 
-        // Handle parentheses
+        // 处理括号
         if (expression.startsWith("(") && expression.endsWith(")")) {
             return evaluateExpression(expression.substring(1, expression.length() - 1));
         }
@@ -173,15 +191,30 @@ public class TutorialTools {
         return parseNumber(expression);
     }
 
+    /**
+     * 解析数字字符串
+     *
+     * @param expression 数字字符串
+     * @return 解析后的数值
+     * @throws IllegalArgumentException 如果字符串不是有效数字
+     */
     private double parseNumber(String expression) {
         try {
             return Double.parseDouble(expression);
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException(
-                    "Invalid numeric value: '" + expression + "'", e);
+                    "无效的数值：'" + expression + "'", e);
         }
     }
 
+    /**
+     * 格式化数字输出
+     *
+     * <p>如果是整数则不显示小数点，否则保留 4 位小数。
+     *
+     * @param value 要格式化的数值
+     * @return 格式化后的字符串
+     */
     private String formatNumber(double value) {
         if (value == (long) value) {
             return String.valueOf((long) value);

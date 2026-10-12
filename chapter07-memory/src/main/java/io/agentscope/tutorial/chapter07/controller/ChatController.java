@@ -15,20 +15,28 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Chat Controller
+ * 聊天控制器
  *
- * <p>REST API endpoints for chat interactions with the AI agent.
- * Integrates with the memory system to provide persistent conversations.
+ * <p>提供与 AI Agent 对话的 REST API 接口，集成记忆系统实现持久化对话。
  *
- * <p>Available endpoints:
+ * <p><b>核心特性</b>：
  * <ul>
- *   <li>POST /api/chat/send - Send a message and get a response</li>
- *   <li>POST /api/chat/send-with-context - Send message with additional context</li>
- *   <li>GET /api/chat/history - Get conversation history</li>
- *   <li>GET /api/chat/stats - Get memory statistics</li>
+ *   <li>自动保存对话到记忆系统</li>
+ *   <li>支持多会话隔离</li>
+ *   <li>提供会话历史查询</li>
+ *   <li>返回记忆统计信息</li>
+ * </ul>
+ *
+ * <p><b>API 端点</b>：
+ * <ul>
+ *   <li>POST /api/chat/send - 发送消息获取回复</li>
+ *   <li>POST /api/chat/send-with-context - 带额外上下文发送消息</li>
+ *   <li>GET /api/chat/history - 获取对话历史</li>
+ *   <li>GET /api/chat/stats - 获取记忆统计</li>
  * </ul>
  *
  * @author AgentScope Tutorial
+ * @since 1.0
  */
 @RestController
 @RequestMapping("/api/chat")
@@ -36,35 +44,53 @@ public class ChatController {
 
     private static final Logger log = LoggerFactory.getLogger(ChatController.class);
 
+    /** 聊天服务 */
     private final ChatService chatService;
+
+    /** 记忆服务 */
     private final MemoryService memoryService;
 
+    /**
+     * 构造函数
+     *
+     * @param chatService 聊天服务
+     * @param memoryService 记忆服务
+     */
     public ChatController(ChatService chatService, MemoryService memoryService) {
         this.chatService = chatService;
         this.memoryService = memoryService;
     }
 
     /**
-     * Sends a message and returns the agent's response.
+     * 发送消息并获取 Agent 回复
      *
-     * <p>Request body should contain:
+     * <p>处理流程：
+     * <ol>
+     *   <li>创建或获取会话 Agent</li>
+     *   <li>将用户消息添加到记忆</li>
+     *   <li>调用 Agent 生成回复</li>
+     *   <li>将回复保存到记忆</li>
+     *   <li>返回回复和元数据</li>
+     * </ol>
+     *
+     * <p><b>请求体格式</b>：
      * <pre>{@code
      * {
-     *   "message": "Hello, how are you?"
+     *   "message": "你好，请介绍一下自己"
      * }
      * }</pre>
      *
-     * <p>Response includes:
+     * <p><b>响应内容</b>：
      * <ul>
-     *   <li>sessionId - The session this conversation belongs to</li>
-     *   <li>response - The agent's response text</li>
-     *   <li>memoryStats - Current memory usage statistics</li>
-     *   <li>usage - Token usage information (if available)</li>
+     *   <li>sessionId - 会话标识</li>
+     *   <li>response - Agent 回复文本</li>
+     *   <li>memoryStats - 记忆使用统计</li>
+     *   <li>usage - Token 使用信息</li>
      * </ul>
      *
-     * @param sessionId Session identifier (query param)
-     * @param request Request body with the message
-     * @return Chat response with agent reply and metadata
+     * @param sessionId 会话标识符（查询参数，默认 "default"）
+     * @param request 请求体，包含消息内容
+     * @return 包含 Agent 回复和元数据的响应
      */
     @PostMapping("/send")
     public ResponseEntity<Map<String, Object>> sendMessage(
@@ -73,21 +99,25 @@ public class ChatController {
 
         String userMessage = request.get("message");
 
+        // 参数校验
         if (userMessage == null || userMessage.isBlank()) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", "Message cannot be empty"));
+                    .body(Map.of("error", "消息内容不能为空"));
         }
 
-        log.info("Received message for session: {}, length: {}", sessionId, userMessage.length());
+        log.info("收到会话 {} 的消息，长度: {}", sessionId, userMessage.length());
 
         try {
+            // 处理消息
             ChatService.ChatResponse response = chatService.processMessage(sessionId, userMessage);
 
+            // 构建响应
             Map<String, Object> result = new HashMap<>();
             result.put("sessionId", response.sessionId());
             result.put("userMessage", response.userMessage());
             result.put("response", response.response());
 
+            // 添加记忆统计
             if (response.memoryStats() != null) {
                 result.put("memoryStats", Map.of(
                         "totalMessages", response.memoryStats().totalMessages(),
@@ -97,6 +127,7 @@ public class ChatController {
                 ));
             }
 
+            // 添加 Token 使用统计
             if (response.usage() != null) {
                 result.put("usage", Map.of(
                         "inputTokens", response.usage().getInputTokens(),
@@ -108,10 +139,10 @@ public class ChatController {
             return ResponseEntity.ok(result);
 
         } catch (Exception e) {
-            log.error("Error processing message for session {}: {}", sessionId, e.getMessage(), e);
+            log.error("处理会话 {} 的消息失败: {}", sessionId, e.getMessage(), e);
             return ResponseEntity.internalServerError()
                     .body(Map.of(
-                            "error", "Failed to process message",
+                            "error", "消息处理失败",
                             "sessionId", sessionId,
                             "details", e.getMessage()
                     ));
@@ -119,14 +150,13 @@ public class ChatController {
     }
 
     /**
-     * Sends a message with additional system context.
+     * 带额外上下文发送消息
      *
-     * <p>This endpoint allows prepending additional context to the user's message,
-     * useful for scenarios where you want to inject external information.
+     * <p>允许在用户消息前注入额外的系统上下文，适用于需要动态添加背景信息的场景。
      *
-     * @param sessionId Session identifier
-     * @param request Request body with message and optional context
-     * @return Chat response
+     * @param sessionId 会话标识符
+     * @param request 请求体，包含 message 和可选的 context
+     * @return 聊天响应
      */
     @PostMapping("/send-with-context")
     public ResponseEntity<Map<String, Object>> sendMessageWithContext(
@@ -138,10 +168,10 @@ public class ChatController {
 
         if (userMessage == null || userMessage.isBlank()) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", "Message cannot be empty"));
+                    .body(Map.of("error", "消息内容不能为空"));
         }
 
-        log.info("Received message with context for session: {}", sessionId);
+        log.info("收到会话 {} 的带上下文消息", sessionId);
 
         ChatService.ChatResponse response = chatService.processMessageWithContext(
                 sessionId, userMessage, systemContext);
@@ -163,11 +193,11 @@ public class ChatController {
     }
 
     /**
-     * Gets the conversation history for a session.
+     * 获取会话的对话历史
      *
-     * @param sessionId Session identifier
-     * @param limit Maximum number of messages (optional)
-     * @return List of messages
+     * @param sessionId 会话标识符
+     * @param limit 返回的最大消息数（可选）
+     * @return 消息列表
      */
     @GetMapping("/history")
     public ResponseEntity<Map<String, Object>> getHistory(
@@ -176,7 +206,7 @@ public class ChatController {
 
         List<MemoryRecord> records = memoryService.getAllRecords(sessionId);
 
-        // Apply limit if specified
+        // 应用数量限制
         if (limit != null && limit > 0 && limit < records.size()) {
             records = records.subList(records.size() - limit, records.size());
         }
@@ -193,10 +223,10 @@ public class ChatController {
     }
 
     /**
-     * Gets memory statistics for a session.
+     * 获取会话的记忆统计信息
      *
-     * @param sessionId Session identifier
-     * @return Memory statistics
+     * @param sessionId 会话标识符
+     * @return 记忆统计数据
      */
     @GetMapping("/stats")
     public ResponseEntity<Map<String, Object>> getStats(
@@ -214,22 +244,27 @@ public class ChatController {
     }
 
     /**
-     * Root endpoint - returns service information.
+     * 根端点 - 返回服务信息
+     *
+     * @return 服务描述
      */
     @GetMapping
     public ResponseEntity<Map<String, String>> index() {
         return ResponseEntity.ok(Map.of(
-                "service", "AgentScope Java - Chat API",
+                "service", "AgentScope Java - 聊天 API",
                 "version", "1.0.0",
                 "endpoints", "POST /api/chat/send, POST /api/chat/send-with-context, " +
                         "GET /api/chat/history, GET /api/chat/stats"
         ));
     }
 
-    // ==================== Helper Methods ====================
+    // ==================== 辅助方法 ====================
 
     /**
-     * Converts a MemoryRecord to a Map for JSON serialization.
+     * 将 MemoryRecord 转换为 Map 以便 JSON 序列化
+     *
+     * @param record 记忆记录
+     * @return Map 表示
      */
     private Map<String, Object> recordToMap(MemoryRecord record) {
         Map<String, Object> map = new HashMap<>();

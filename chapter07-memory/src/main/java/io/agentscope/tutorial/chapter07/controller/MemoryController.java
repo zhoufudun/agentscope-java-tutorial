@@ -11,39 +11,55 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Memory Controller
+ * 记忆管理控制器
  *
- * <p>REST API endpoints for memory management operations.
- * Provides endpoints for querying, searching, and managing conversation memory.
+ * <p>提供记忆管理操作的 REST API 端点，用于查询、搜索和管理对话记忆。
  *
- * <p>Available endpoints:
+ * <p><b>核心功能</b>：
  * <ul>
- *   <li>GET /api/memory/history - Get conversation history</li>
- *   <li>GET /api/memory/stats - Get memory statistics</li>
- *   <li>GET /api/memory/search - Search memory by keyword</li>
- *   <li>GET /api/memory/recent - Get recent messages</li>
- *   <li>DELETE /api/memory/clear - Clear session memory</li>
- *   <li>GET /api/memory/sessions - Get all session IDs</li>
+ *   <li>查询对话历史</li>
+ *   <li>全文搜索记忆内容</li>
+ *   <li>获取最近消息</li>
+ *   <li>清除会话记忆</li>
+ *   <li>手动触发记忆压缩</li>
+ * </ul>
+ *
+ * <p><b>API 端点</b>：
+ * <ul>
+ *   <li>GET /api/memory/history - 获取对话历史</li>
+ *   <li>GET /api/memory/stats - 获取记忆统计</li>
+ *   <li>GET /api/memory/search - 搜索记忆内容</li>
+ *   <li>GET /api/memory/recent - 获取最近消息</li>
+ *   <li>DELETE /api/memory/clear - 清除会话记忆</li>
+ *   <li>GET /api/memory/sessions - 获取所有会话 ID</li>
+ *   <li>POST /api/memory/compress - 触发记忆压缩</li>
  * </ul>
  *
  * @author AgentScope Tutorial
+ * @since 1.0
  */
 @RestController
 @RequestMapping("/api/memory")
 public class MemoryController {
 
+    /** 记忆服务 */
     private final MemoryService memoryService;
 
+    /**
+     * 构造函数
+     *
+     * @param memoryService 记忆服务
+     */
     public MemoryController(MemoryService memoryService) {
         this.memoryService = memoryService;
     }
 
     /**
-     * Gets the conversation history for a session.
+     * 获取会话的对话历史
      *
-     * @param sessionId Session identifier
-     * @param limit Maximum number of messages to return (optional)
-     * @return List of memory records
+     * @param sessionId 会话标识符
+     * @param limit 返回的最大消息数（可选）
+     * @return 记忆记录列表
      */
     @GetMapping("/history")
     public ResponseEntity<Map<String, Object>> getHistory(
@@ -52,7 +68,7 @@ public class MemoryController {
 
         List<MemoryRecord> records = memoryService.getAllRecords(sessionId);
 
-        // Apply limit if specified
+        // 应用数量限制
         if (limit != null && limit > 0 && limit < records.size()) {
             records = records.subList(records.size() - limit, records.size());
         }
@@ -69,10 +85,10 @@ public class MemoryController {
     }
 
     /**
-     * Gets memory statistics for a session.
+     * 获取会话的记忆统计信息
      *
-     * @param sessionId Session identifier
-     * @return Memory statistics
+     * @param sessionId 会话标识符
+     * @return 记忆统计数据
      */
     @GetMapping("/stats")
     public ResponseEntity<Map<String, Object>> getStats(
@@ -90,12 +106,14 @@ public class MemoryController {
     }
 
     /**
-     * Searches memory for messages containing a keyword.
+     * 搜索包含关键词的记忆
      *
-     * @param sessionId Session identifier
-     * @param keyword Search keyword
-     * @param acrossSessions Search across all sessions (default: false)
-     * @return Search results
+     * <p>支持在单个会话内搜索，也支持跨会话搜索。
+     *
+     * @param sessionId 会话标识符
+     * @param keyword 搜索关键词
+     * @param acrossSessions 是否跨所有会话搜索（默认 false）
+     * @return 搜索结果
      */
     @GetMapping("/search")
     public ResponseEntity<Map<String, Object>> search(
@@ -105,8 +123,10 @@ public class MemoryController {
 
         List<MemoryRecord> results;
         if (acrossSessions) {
+            // 跨会话搜索
             results = memoryService.searchAcrossSessions(keyword);
         } else {
+            // 仅搜索指定会话
             results = memoryService.searchAcrossSessions(keyword).stream()
                     .filter(r -> r.getSessionId().equals(sessionId))
                     .collect(Collectors.toList());
@@ -126,11 +146,11 @@ public class MemoryController {
     }
 
     /**
-     * Gets recent messages for a session.
+     * 获取会话的最近消息
      *
-     * @param sessionId Session identifier
-     * @param limit Number of recent messages to retrieve (default: 10)
-     * @return Recent memory records
+     * @param sessionId 会话标识符
+     * @param limit 获取的消息数量（默认 10）
+     * @return 最近的记忆记录
      */
     @GetMapping("/recent")
     public ResponseEntity<Map<String, Object>> getRecent(
@@ -154,10 +174,12 @@ public class MemoryController {
     }
 
     /**
-     * Clears all memory for a session.
+     * 清除会话的所有记忆
      *
-     * @param sessionId Session identifier
-     * @return Confirmation message
+     * <p>删除指定会话的所有记忆记录，用于重新开始对话。
+     *
+     * @param sessionId 会话标识符
+     * @return 确认消息
      */
     @DeleteMapping("/clear")
     public ResponseEntity<Map<String, String>> clearMemory(
@@ -167,14 +189,14 @@ public class MemoryController {
 
         return ResponseEntity.ok(Map.of(
                 "sessionId", sessionId,
-                "message", "Memory cleared successfully"
+                "message", "记忆已成功清除"
         ));
     }
 
     /**
-     * Gets all active session IDs.
+     * 获取所有活跃的会话 ID
      *
-     * @return List of all session IDs
+     * @return 会话 ID 列表
      */
     @GetMapping("/sessions")
     public ResponseEntity<Map<String, Object>> getAllSessions() {
@@ -187,24 +209,29 @@ public class MemoryController {
     }
 
     /**
-     * Triggers manual memory compression for a session.
+     * 触发手动记忆压缩
      *
-     * @param sessionId Session identifier
-     * @return Confirmation message
+     * <p>对指定会话执行记忆压缩，将旧消息摘要化以节省上下文空间。
+     *
+     * @param sessionId 会话标识符
+     * @return 压缩结果统计
      */
     @PostMapping("/compress")
     public ResponseEntity<Map<String, Object>> compressMemory(
             @RequestParam(defaultValue = "default") String sessionId) {
 
+        // 记录压缩前的消息数
         long beforeCount = memoryService.getMemoryStats(sessionId).totalMessages();
 
+        // 执行压缩
         memoryService.compressMemory(sessionId);
 
+        // 记录压缩后的消息数
         long afterCount = memoryService.getMemoryStats(sessionId).totalMessages();
 
         return ResponseEntity.ok(Map.of(
                 "sessionId", sessionId,
-                "message", "Memory compression completed",
+                "message", "记忆压缩完成",
                 "messagesBefore", beforeCount,
                 "messagesAfter", afterCount,
                 "compressed", beforeCount - afterCount
@@ -212,12 +239,14 @@ public class MemoryController {
     }
 
     /**
-     * Root endpoint - returns service information.
+     * 根端点 - 返回服务信息
+     *
+     * @return 服务描述
      */
     @GetMapping
     public ResponseEntity<Map<String, String>> index() {
         return ResponseEntity.ok(Map.of(
-                "service", "AgentScope Java - Memory System API",
+                "service", "AgentScope Java - 记忆系统 API",
                 "version", "1.0.0",
                 "endpoints", "GET /api/memory/history, /api/memory/stats, /api/memory/search, " +
                         "/api/memory/recent, DELETE /api/memory/clear, GET /api/memory/sessions, " +
@@ -225,10 +254,13 @@ public class MemoryController {
         ));
     }
 
-    // ==================== Helper Methods ====================
+    // ==================== 辅助方法 ====================
 
     /**
-     * Converts a MemoryRecord to a Map for JSON serialization.
+     * 将 MemoryRecord 转换为 Map 以便 JSON 序列化
+     *
+     * @param record 记忆记录
+     * @return Map 表示
      */
     private Map<String, Object> recordToMap(MemoryRecord record) {
         Map<String, Object> map = new HashMap<>();

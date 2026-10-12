@@ -30,34 +30,43 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
- * Core RAG (Retrieval-Augmented Generation) service.
+ * 核心 RAG（检索增强生成）服务
  *
- * <p>This service implements the RAG workflow:
+ * <p>本服务实现完整的 RAG 工作流：
  * <ol>
- *   <li>Receive user query</li>
- *   <li>Convert query to embedding vector</li>
- *   <li>检索相关文档 from vector store</li>
- *   <li>Build context from retrieved documents</li>
- *   <li>Generate response with retrieved context</li>
+ *   <li>接收用户查询</li>
+ *   <li>将查询转换为嵌入向量</li>
+ *   <li>从向量存储中检索相关文档</li>
+ *   <li>从检索到的文档构建上下文</li>
+ *   <li>基于上下文生成响应</li>
  * </ol>
  *
- * <p>This is a demonstration service. In production, you would integrate
- * with an LLM API for actual text generation.
+ * <h2>AgentScope 学习要点</h2>
+ * <ul>
+ *   <li><b>RAG 流程</b>：Query -> Embed -> Retrieve -> Context -> Generate</li>
+ *   <li><b>向量检索</b>：基于嵌入向量的相似度搜索</li>
+ *   <li><b>混合搜索</b>：结合向量搜索和关键词搜索</li>
+ *   <li><b>分数阈值</b>：过滤低相关性文档</li>
+ * </ul>
  *
- * <p>Example usage:
+ * <p>注意：这是一个演示服务。在生产环境中，需要集成 LLM API 进行实际的文本生成。
+ *
+ * <h2>使用示例</h2>
  * <pre>{@code
- * // Perform RAG query
+ * // 执行 RAG 查询
  * RAGResult result = ragService.query(
- *     "What is the main topic of the documents?",
+ *     "文档的主要内容是什么？",
  *     RAGConfig.builder()
  *         .topK(5)
  *         .scoreThreshold(0.6)
  *         .build()
  * ).join();
  *
- * System.out.println("Answer: " + result.getAnswer());
- * System.out.println("Sources: " + result.getSources());
+ * System.out.println("答案: " + result.getAnswer());
+ * System.out.println("来源: " + result.getSources());
  * }</pre>
+ *
+ * @author AgentScope Tutorial
  */
 @Slf4j
 @Service
@@ -69,32 +78,43 @@ public class RAGService {
     private final VectorStoreService vectorStoreService;
 
     /**
-     * Perform a RAG query and return results.
+     * 执行 RAG 查询并返回结果
      *
-     * @param query the user query
-     * @return CompletableFuture containing the RAG result
+     * <p>使用默认的检索配置。
+     *
+     * @param query 用户查询
+     * @return 包含 RAG 结果的 CompletableFuture
      */
     public CompletableFuture<RAGResult> query(String query) {
         return query(query, new RAGConfig.RetrievalConfig());
     }
 
     /**
-     * Perform a RAG query with custom retrieval configuration.
+     * 执行带自定义检索配置的 RAG 查询
      *
-     * @param query the user query
-     * @param retrievalConfig the retrieval configuration
-     * @return CompletableFuture containing the RAG result
+     * <p>RAG 流程：
+     * <ol>
+     *   <li>查询向量化</li>
+     *   <li>相似度检索</li>
+     *   <li>构建上下文</li>
+     *   <li>生成答案</li>
+     *   <li>返回结果</li>
+     * </ol>
+     *
+     * @param query 用户查询
+     * @param retrievalConfig 检索配置
+     * @return 包含 RAG 结果的 CompletableFuture
      */
     public CompletableFuture<RAGResult> query(String query, RAGConfig.RetrievalConfig retrievalConfig) {
-        log.info("Processing RAG query: '{}'", query);
+        log.info("处理 RAG 查询：'{}'", query);
 
         return CompletableFuture.supplyAsync(() -> {
             try {
-                // Step 1: Convert query to embedding
+                // 步骤1：将查询转换为嵌入向量
                 double[] queryEmbedding = embeddingService.embedText(query).join();
-                log.debug("Query embedding generated: {} dimensions", queryEmbedding.length);
+                log.debug("查询嵌入向量已生成：{} 维", queryEmbedding.length);
 
-                // Step 2: 检索相关文档
+                // 步骤2：检索相关文档
                 int topK = retrievalConfig.getTopK() > 0
                         ? retrievalConfig.getTopK()
                         : ragConfig.getRetrieval().getTopK();
@@ -106,112 +126,120 @@ public class RAGService {
                         .searchWithThreshold(query, queryEmbedding, topK, threshold)
                         .join();
 
-                log.info("Retrieved {} documents above threshold", retrievedDocs.size());
+                log.info("检索到 {} 个超过阈值的文档", retrievedDocs.size());
 
-                // Step 3: Build context from retrieved documents
+                // 步骤3：从检索到的文档构建上下文
                 String context = buildContext(retrievedDocs);
-                log.debug("Context built: {} characters", context.length());
+                log.debug("上下文已构建：{} 字符", context.length());
 
-                // Step 4: Generate answer (placeholder - in production, call LLM API)
+                // 步骤4：生成答案（占位符 - 生产环境需调用 LLM API）
                 String answer = generateAnswer(query, context, retrievedDocs);
-                log.info("Answer generated");
+                log.info("答案已生成");
 
-                // Step 5: Build and return result
+                // 步骤5：构建并返回结果
                 List<RAGSource> sources = retrievedDocs.stream()
                         .map(this::convertToSource)
                         .collect(Collectors.toList());
 
                 return new RAGResult(query, answer, context, sources);
             } catch (Exception e) {
-                log.error("RAG query failed", e);
-                throw new RuntimeException("RAG query failed: " + e.getMessage(), e);
+                log.error("RAG 查询失败", e);
+                throw new RuntimeException("RAG 查询失败：" + e.getMessage(), e);
             }
         });
     }
 
     /**
-     * Perform pure retrieval without generation.
+     * 执行纯检索操作（不生成）
      *
-     * @param query the search query
-     * @return list of retrieved documents
+     * <p>仅返回检索到的文档，不进行答案生成。
+     *
+     * @param query 搜索查询
+     * @return 检索到的文档列表
      */
     public CompletableFuture<List<Document>> retrieve(String query) {
         return retrieve(query, ragConfig.getRetrieval().getTopK());
     }
 
     /**
-     * Perform pure retrieval with custom topK.
+     * 执行带自定义 topK 的纯检索
      *
-     * @param query the search query
-     * @param topK the number of documents to retrieve
-     * @return list of retrieved documents
+     * @param query 搜索查询
+     * @param topK 要检索的文档数量
+     * @return 检索到的文档列表
      */
     public CompletableFuture<List<Document>> retrieve(String query, int topK) {
-        log.info("Retrieving documents: query='{}', topK={}", query, topK);
+        log.info("检索文档：query='{}'，topK={}", query, topK);
 
         return CompletableFuture.supplyAsync(() -> {
             try {
                 double[] queryEmbedding = embeddingService.embedText(query).join();
                 return vectorStoreService.search(query, queryEmbedding, topK).join();
             } catch (Exception e) {
-                log.error("Retrieval failed", e);
-                throw new RuntimeException("Retrieval failed: " + e.getMessage(), e);
+                log.error("检索失败", e);
+                throw new RuntimeException("检索失败：" + e.getMessage(), e);
             }
         });
     }
 
     /**
-     * Perform hybrid search combining vector and keyword search.
+     * 执行混合搜索，结合向量搜索和关键词搜索
      *
-     * @param query the search query
-     * @param topK the number of documents to retrieve
-     * @return list of retrieved documents with combined scores
+     * <p>混合搜索通过加权组合向量搜索和关键词搜索的结果，
+     * 可以提高检索的准确性和召回率。
+     *
+     * @param query 搜索查询
+     * @param topK 要检索的文档数量
+     * @return 带组合分数的检索文档列表
      */
     public CompletableFuture<List<Document>> hybridSearch(String query, int topK) {
-        log.info("Performing hybrid search: query='{}', topK={}", query, topK);
+        log.info("执行混合搜索：query='{}'，topK={}", query, topK);
 
         return CompletableFuture.supplyAsync(() -> {
             try {
-                // Get vector search results
+                // 获取向量搜索结果
                 double[] queryEmbedding = embeddingService.embedText(query).join();
                 List<Document> vectorResults = vectorStoreService
-                        .search(query, queryEmbedding, topK * 2)
+                        .search(query, queryEmbedding, topK * 2)  // 多检索一些以便合并
                         .join();
 
-                // Keyword search (simple implementation - in production use BM25 or similar)
+                // 关键词搜索（简单实现 - 生产环境使用 BM25 或类似算法）
                 List<Document> keywordResults = keywordSearch(query, topK * 2);
 
-                // Combine results with weights
+                // 按权重组合结果
                 return combineResults(vectorResults, keywordResults, topK);
             } catch (Exception e) {
-                log.error("Hybrid search failed", e);
-                throw new RuntimeException("Hybrid search failed: " + e.getMessage(), e);
+                log.error("混合搜索失败", e);
+                throw new RuntimeException("混合搜索失败：" + e.getMessage(), e);
             }
         });
     }
 
     /**
-     * Simple keyword search implementation.
-     * In production, use BM25 or Elasticsearch for proper keyword search.
+     * 简单的关键词搜索实现
      *
-     * @param query the search query
-     * @param limit maximum results
-     * @return list of matching documents (placeholder)
+     * <p>这是一个简化实现。生产环境中应使用 BM25 或 Elasticsearch 进行适当的关键词搜索。
+     *
+     * @param query 搜索查询
+     * @param limit 最大结果数
+     * @return 匹配的文档列表（占位符）
      */
     private List<Document> keywordSearch(String query, int limit) {
-        // This is a simplified implementation
-        // In production, you would use a proper keyword search engine
-        log.debug("Performing keyword search for: {}", query);
+        // 简化实现
+        // 生产环境中应使用专门的关键词搜索引擎
+        log.debug("执行关键词搜索：{}", query);
         return new ArrayList<>();
     }
 
     /**
-     * Combine vector and keyword search results.
+     * 合并向量搜索和关键词搜索结果
      *
-     * @param vectorResults results from vector search
-     * @param keywordResults results from keyword search
-     * @param topK final number of results
-     * @return combined and ranked results
+     * <p>使用配置的权重对两种搜索结果进行加权合并。
+     *
+     * @param vectorResults 向量搜索结果
+     * @param keywordResults 关键词搜索结果
+     * @param topK 最终返回的结果数
+     * @return 合并并排序后的结果
      */
     private List<Document> combineResults(
             List<Document> vectorResults,
@@ -219,18 +247,20 @@ public class RAGService {
             int topK) {
 
         Map<String, Document> combinedMap = new HashMap<>();
+        // 计算向量搜索权重（1 - 关键词权重）
         double vectorWeight = 1.0 - ragConfig.getRetrieval().getKeywordWeight();
 
-        // Add vector results with vector weight
+        // 添加向量搜索结果，应用向量权重
         for (Document doc : vectorResults) {
             doc.setScore(doc.getScore() * vectorWeight);
             combinedMap.put(doc.getId(), doc);
         }
 
-        // Add keyword results with keyword weight
+        // 添加关键词搜索结果，应用关键词权重
         for (Document doc : keywordResults) {
             Document existing = combinedMap.get(doc.getId());
             if (existing != null) {
+                // 文档已存在，累加分数
                 existing.setScore(existing.getScore() + doc.getScore() * ragConfig.getRetrieval().getKeywordWeight());
             } else {
                 doc.setScore(doc.getScore() * ragConfig.getRetrieval().getKeywordWeight());
@@ -238,7 +268,7 @@ public class RAGService {
             }
         }
 
-        // Sort by combined score and return topK
+        // 按组合分数排序并返回 topK
         return combinedMap.values().stream()
                 .sorted((a, b) -> Double.compare(b.getScore(), a.getScore()))
                 .limit(topK)
@@ -246,25 +276,27 @@ public class RAGService {
     }
 
     /**
-     * Build context string from retrieved documents.
+     * 从检索到的文档构建上下文字符串
      *
-     * @param documents the retrieved documents
-     * @return formatted context string
+     * <p>将多个文档的内容格式化为 LLM 可以理解的上下文格式。
+     *
+     * @param documents 检索到的文档
+     * @return 格式化的上下文字符串
      */
     private String buildContext(List<Document> documents) {
         if (documents == null || documents.isEmpty()) {
-            return "No relevant documents found.";
+            return "未找到相关文档。";
         }
 
         StringBuilder context = new StringBuilder();
-        context.append("=== Relevant Documents ===\n\n");
+        context.append("=== 相关文档 ===\n\n");
 
         for (int i = 0; i < documents.size(); i++) {
             Document doc = documents.get(i);
             String content = doc.getMetadata().getContentText();
             Double score = doc.getScore();
 
-            context.append(String.format("[Document %d] (relevance: %.2f)\n", i + 1, score != null ? score : 0.0));
+            context.append(String.format("[文档 %d]（相关度：%.2f）\n", i + 1, score != null ? score : 0.0));
             context.append(content).append("\n\n");
         }
 
@@ -272,49 +304,47 @@ public class RAGService {
     }
 
     /**
-     * Generate answer from query and context.
+     * 根据查询和上下文生成答案
      *
-     * <p>This is a placeholder implementation. In production, you would
-     * integrate with an LLM API (e.g., OpenAI, DashScope) to generate
-     * the actual answer.
+     * <p>这是一个占位符实现。生产环境中需要集成 LLM API
+     * （如 OpenAI、DashScope）来生成实际的答案。
      *
-     * @param query the user query
-     * @param context the retrieved context
-     * @param documents the source documents
-     * @return generated answer
+     * @param query 用户查询
+     * @param context 检索到的上下文
+     * @param documents 源文档
+     * @return 生成的答案
      */
     private String generateAnswer(String query, String context, List<Document> documents) {
-        // Placeholder implementation
-        // In production, this would call an LLM API
+        // 占位符实现
+        // 生产环境中需要调用 LLM API
 
         if (documents.isEmpty()) {
-            return "I couldn't find any relevant information to answer your question. " +
-                   "Please try rephrasing your query or provide more context.";
+            return "未找到相关信息来回答您的问题。请尝试重新表述查询或提供更多上下文。";
         }
 
         StringBuilder answer = new StringBuilder();
-        answer.append("Based on the retrieved documents, here is my answer:\n\n");
+        answer.append("根据检索到的文档，以下是我的回答：\n\n");
 
-        // Extract key information from top documents
+        // 从前几个文档中提取关键信息
         for (int i = 0; i < Math.min(3, documents.size()); i++) {
             Document doc = documents.get(i);
             String content = doc.getMetadata().getContentText();
-            // Take first 200 chars as summary
+            // 取前200字符作为摘要
             String summary = content.length() > 200 ? content.substring(0, 200) + "..." : content;
-            answer.append(String.format("According to document %d: %s\n\n", i + 1, summary));
+            answer.append(String.format("根据文档 %d：%s\n\n", i + 1, summary));
         }
 
-        answer.append("\nNote: This is a demonstration RAG response. ");
-        answer.append("In production, you would integrate with an LLM API for proper text generation.");
+        answer.append("\n注意：这是一个 RAG 演示响应。");
+        answer.append("生产环境中需要集成 LLM API 进行适当的文本生成。");
 
         return answer.toString();
     }
 
     /**
-     * Convert a Document to a RAGSource.
+     * 将 Document 转换为 RAGSource
      *
-     * @param document the source document
-     * @return RAGSource with formatted metadata
+     * @param document 源文档
+     * @return 带格式化元数据的 RAGSource
      */
     private RAGSource convertToSource(Document document) {
         String content = document.getMetadata().getContentText();
@@ -322,7 +352,7 @@ public class RAGService {
 
         String title = metadata != null && metadata.containsKey("title")
                 ? metadata.get("title").toString()
-                : "Unknown";
+                : "未知";
 
         Integer chunkIndex = metadata != null && metadata.containsKey("chunkIndex")
                 ? (Integer) metadata.get("chunkIndex")
@@ -338,12 +368,12 @@ public class RAGService {
     }
 
     /**
-     * Result of a RAG query.
+     * RAG 查询结果
      *
-     * @param query the original user query
-     * @param answer the generated answer
-     * @param context the retrieved context
-     * @param sources the source documents used
+     * @param query 原始用户查询
+     * @param answer 生成的答案
+     * @param context 检索到的上下文
+     * @param sources 使用的源文档
      */
     public record RAGResult(
             String query,
@@ -352,19 +382,19 @@ public class RAGService {
             List<RAGSource> sources
     ) {
         /**
-         * Get formatted sources as string.
+         * 获取格式化的来源引用
          *
-         * @return formatted source references
+         * @return 格式化的来源字符串
          */
         public String getFormattedSources() {
             if (sources == null || sources.isEmpty()) {
-                return "No sources available.";
+                return "无可用来源。";
             }
 
             StringBuilder sb = new StringBuilder();
             for (int i = 0; i < sources.size(); i++) {
                 RAGSource source = sources.get(i);
-                sb.append(String.format("[%d] %s (score: %.2f)\n",
+                sb.append(String.format("[%d] %s（分数：%.2f）\n",
                         i + 1, source.title(), source.score()));
             }
             return sb.toString();
@@ -372,13 +402,13 @@ public class RAGService {
     }
 
     /**
-     * Source document reference.
+     * 源文档引用
      *
-     * @param id the document ID
-     * @param title the document title
-     * @param content the document content excerpt
-     * @param score the relevance score
-     * @param chunkIndex the chunk index within the document
+     * @param id 文档 ID
+     * @param title 文档标题
+     * @param content 文档内容摘录
+     * @param score 相关性分数
+     * @param chunkIndex 文档内的块索引
      */
     public record RAGSource(
             String id,

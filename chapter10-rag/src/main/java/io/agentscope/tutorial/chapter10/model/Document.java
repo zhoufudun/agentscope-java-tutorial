@@ -24,10 +24,25 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 /**
- * Document entity for storing document metadata in H2 database.
+ * 文档实体类，用于在 H2 数据库中存储文档元数据
  *
- * <p>该类 represents a document in the RAG system, including its metadata
- * and current processing status.
+ * <p>本类表示 RAG 系统中的一个文档，包括其元数据和当前处理状态。
+ *
+ * <h2>文档生命周期</h2>
+ * <pre>
+ * 上传 -> PENDING -> PROCESSING -> COMPLETED
+ *                       ↓
+ *                    FAILED
+ * </pre>
+ *
+ * <h2>AgentScope 学习要点</h2>
+ * <ul>
+ *   <li>此类与 AgentScope 的 Document 类不同，是应用层的元数据模型</li>
+ *   <li>AgentScope 的 Document 用于向量存储，包含嵌入向量</li>
+ *   <li>本类用于追踪文档的处理状态和管理信息</li>
+ * </ul>
+ *
+ * @author AgentScope Tutorial
  */
 @Data
 @Builder
@@ -36,62 +51,64 @@ import java.util.Map;
 public class Document {
 
     /**
-     * Document unique identifier (UUID).
+     * 文档唯一标识符（UUID 格式）
      */
     private String id;
 
     /**
-     * Original file name.
+     * 原始文件名
      */
     private String fileName;
 
     /**
-     * File type (e.g., txt, pdf, docx).
+     * 文件类型（如 txt、pdf、docx）
      */
     private String fileType;
 
     /**
-     * File size in bytes.
+     * 文件大小（字节）
      */
     private Long fileSize;
 
     /**
-     * Document title.
+     * 文档标题
      */
     private String title;
 
     /**
-     * Document content summary.
+     * 文档内容摘要
      */
     private String summary;
 
     /**
-     * Number of chunks after processing.
+     * 处理后的块数量
      */
     private Integer chunkCount;
 
     /**
-     * Document status: PENDING, PROCESSING, COMPLETED, FAILED.
+     * 文档状态：PENDING、PROCESSING、COMPLETED、FAILED
+     *
+     * @see DocumentStatus
      */
     private String status;
 
     /**
-     * Additional metadata as key-value pairs.
+     * 附加元数据（键值对）
      */
     private Map<String, String> metadata;
 
     /**
-     * Error message if processing failed.
+     * 处理失败时的错误信息
      */
     private String errorMessage;
 
     /**
-     * Creation timestamp.
+     * 创建时间戳
      */
     private LocalDateTime createdAt;
 
     /**
-     * Last update timestamp.
+     * 最后更新时间戳
      */
     private LocalDateTime updatedAt;
 }
