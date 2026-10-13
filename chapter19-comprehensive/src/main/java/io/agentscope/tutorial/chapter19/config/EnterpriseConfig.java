@@ -24,9 +24,32 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * 企业级配置类
+ * 企业级配置类 - 三大综合案例的 Agent 配置中心
  *
- * <p>配置多个 Agent 实例，支持奶茶店系统、狼人杀游戏、企业助手等场景。
+ * <p>本配置类是第十九章综合实战案例的核心配置，演示了如何在 Spring Boot 环境中
+ * 配置和管理多个专业化 Agent。
+ *
+ * <h2>核心设计模式</h2>
+ * <ul>
+ *   <li><b>Supervisor 模式</b>：监督者 Agent 协调多个专业子 Agent（奶茶店案例）</li>
+ *   <li><b>多角色协作模式</b>：不同角色 Agent 各司其职（狼人杀案例）</li>
+ *   <li><b>能力分解模式</b>：将复杂任务分解为专业子能力（企业助手案例）</li>
+ * </ul>
+ *
+ * <h2>配置的 Agent 清单</h2>
+ * <ul>
+ *   <li><b>奶茶店</b>：bobaSupervisorAgent（监督者）、bobaCashierAgent（收银员）、bobaBaristaAgent（制茶师）</li>
+ *   <li><b>狼人杀</b>：werewolfModeratorAgent（主持人）、villagerReActAgent（村民）、werewolfReActAgent（狼人）</li>
+ *   <li><b>企业助手</b>：enterpriseAssistantReActAgent（主助手）、knowledgeReActAgent、scheduleReActAgent、reportReActAgent</li>
+ * </ul>
+ *
+ * <h2>关键配置点</h2>
+ * <ul>
+ *   <li>每个 Agent 都有独立的系统提示词（sysPrompt），定义其角色和行为</li>
+ *   <li>通过 Toolkit 注入工具能力，实现 Agent 与外部系统的交互</li>
+ *   <li>使用 @Qualifier 区分同类型的不同 Agent Bean</li>
+ *   <li>maxIters 参数控制 ReAct 循环的最大迭代次数，防止无限循环</li>
+ * </ul>
  *
  * @author AgentScope Tutorial
  * @since 1.0
@@ -43,12 +66,33 @@ public class EnterpriseConfig {
     @Value("${agentscope.model.base-url:}")
     private String baseUrl;
 
-    // ==================== Boba Tea Shop Agents ====================
+    // ==================== 案例一：奶茶店多代理系统 ====================
+    //
+    // 奶茶店案例演示了 Supervisor（监督者）模式：
+    // - 监督者 Agent 作为中央协调节点，接收用户请求
+    // - 根据任务类型，将子任务分发给专业 Agent（收银员、制茶师）
+    // - 聚合各 Agent 的结果，返回给用户
+    //
+    // 这种模式适用于需要多角色协作的业务场景，如客服系统、订单处理等
 
     /**
-     * 奶茶店监督者 Agent
+     * 奶茶店监督者 Agent（Supervisor）
      *
-     * <p>核心调度节点，负责接收用户订单请求并协调各子Agent完成任务。
+     * <p>核心调度节点，负责接收用户订单请求并协调各子 Agent 完成任务。
+     *
+     * <p><b>Supervisor 模式要点：</b>
+     * <ul>
+     *   <li>理解用户意图，拆解任务</li>
+     *   <li>选择合适的子 Agent 执行任务</li>
+     *   <li>聚合结果，形成最终响应</li>
+     * </ul>
+     *
+     * <p><b>系统提示词设计：</b>
+     * <ul>
+     *   <li>明确定义团队成员及其职责</li>
+     *   <li>规定标准工作流程</li>
+     *   <li>列出可用工具</li>
+     * </ul>
      */
     @Bean
     public ReActAgent bobaSupervisorAgent() {
@@ -83,9 +127,16 @@ public class EnterpriseConfig {
     }
 
     /**
-     * 奶茶店收银员 Agent
+     * 奶茶店收银员 Agent（专业子 Agent）
      *
      * <p>负责接收订单、确认价格、处理付款。
+     *
+     * <p><b>专业 Agent 设计要点：</b>
+     * <ul>
+     *   <li>系统提示词聚焦于具体职责</li>
+     *   <li>包含业务知识（菜单、价格、规格选项）</li>
+     *   <li>maxIters 较小，因为任务相对简单</li>
+     * </ul>
      */
     @Bean
     public ReActAgent bobaCashierAgent() {
@@ -125,9 +176,16 @@ public class EnterpriseConfig {
     }
 
     /**
-     * 奶茶店制茶师 Agent
+     * 奶茶店制茶师 Agent（专业子 Agent）
      *
      * <p>负责根据订单制作饮品。
+     *
+     * <p><b>流程化任务的 Agent 设计：</b>
+     * <ul>
+     *   <li>系统提示词包含标准操作流程（SOP）</li>
+     *   <li>强调质量和安全要求</li>
+     *   <li>任务边界清晰，减少与其他 Agent 的职责重叠</li>
+     * </ul>
      */
     @Bean
     public ReActAgent bobaBaristaAgent() {
@@ -161,12 +219,26 @@ public class EnterpriseConfig {
                 .build();
     }
 
-    // ==================== Werewolf Game Agents ====================
+    // ==================== 案例二：狼人杀多 Agent 博弈游戏 ====================
+    //
+    // 狼人杀案例演示了多 Agent 博弈场景：
+    // - 不同阵营的 Agent 有不同的目标（狼人 vs 村民）
+    // - Agent 需要推理、欺骗、合作等复杂行为
+    // - 主持人 Agent 控制游戏流程，确保规则执行
+    //
+    // 这种模式适用于游戏 AI、模拟仿真、策略推演等场景
 
     /**
      * 狼人杀游戏主持人 Agent
      *
      * <p>负责控制游戏流程，引导各角色进行游戏。
+     *
+     * <p><b>游戏主持 Agent 设计要点：</b>
+     * <ul>
+     *   <li>完整掌握游戏规则和流程</li>
+     *   <li>公正中立，不偏向任何阵营</li>
+     *   <li>maxIters 较大（30），因为游戏回合数较多</li>
+     * </ul>
      */
     @Bean
     public ReActAgent werewolfModeratorAgent() {
@@ -210,6 +282,13 @@ public class EnterpriseConfig {
      *
      * <p>Bean 名使用 {@code villagerReActAgent}，以避免与 {@code @Component} 标注的
      * {@link io.agentscope.tutorial.chapter19.werewolf.role.VillagerAgent}（默认 bean 名 villagerAgent）冲突。
+     *
+     * <p><b>好人阵营 Agent 设计要点：</b>
+     * <ul>
+     *   <li>目标明确：找出并放逐狼人</li>
+     *   <li>强调逻辑推理和观察能力</li>
+     *   <li>通过讨论和投票行为完成目标</li>
+     * </ul>
      */
     @Bean
     public ReActAgent villagerReActAgent() {
@@ -241,6 +320,20 @@ public class EnterpriseConfig {
      *
      * <p>Bean 名使用 {@code werewolfReActAgent}，以避免与 {@code @Component} 标注的
      * {@link io.agentscope.tutorial.chapter19.werewolf.role.WerewolfAgent}（默认 bean 名 werewolfAgent）冲突。
+     *
+     * <p><b>对抗阵营 Agent 设计要点：</b>
+     * <ul>
+     *   <li>需要伪装能力：在讨论中假扮村民</li>
+     *   <li>需要合作能力：与其他狼人配合行动</li>
+     *   <li>需要策略能力：选择最优击杀目标</li>
+     * </ul>
+     *
+     * <p><b>博弈 Agent 的挑战：</b>
+     * <ul>
+     *   <li>如何让 Agent 理解"欺骗"的概念</li>
+     *   <li>如何平衡个人利益和团队利益</li>
+     *   <li>如何应对不确定信息做出决策</li>
+     * </ul>
      */
     @Bean
     public ReActAgent werewolfReActAgent() {
@@ -269,12 +362,27 @@ public class EnterpriseConfig {
                 .build();
     }
 
-    // ==================== Enterprise Assistant Agents ====================
+    // ==================== 案例三：企业智能助手 ====================
+    //
+    // 企业助手案例演示了能力分解与专业化协作：
+    // - 主助手负责意图理解和任务路由
+    // - 专业子 Agent 各自负责一个垂直领域（知识、日程、报表）
+    // - 通过工具调用实现 Agent 之间的协作
+    //
+    // 这种模式适用于企业级智能助手、客服机器人、智能办公等场景
 
     /**
-     * 企业助手主 Agent
+     * 企业助手主 Agent（意图路由中心）
      *
      * <p>负责接收用户请求并协调各专业 Agent 处理任务。
+     *
+     * <p><b>意图路由 Agent 设计要点：</b>
+     * <ul>
+     *   <li>具备强大的意图理解能力</li>
+     *   <li>了解各子 Agent 的能力边界</li>
+     *   <li>能够将复杂请求分解为子任务</li>
+     *   <li>聚合多个子 Agent 的结果</li>
+     * </ul>
      */
     @Bean
     public ReActAgent enterpriseAssistantReActAgent() {
@@ -307,9 +415,16 @@ public class EnterpriseConfig {
     }
 
     /**
-     * 知识问答 Agent
+     * 知识问答 Agent（垂直领域专家）
      *
      * <p>负责回答用户关于企业知识库的问题。
+     *
+     * <p><b>知识型 Agent 设计要点：</b>
+     * <ul>
+     *   <li>强调基于事实回答，避免幻觉</li>
+     *   <li>明确知识边界，不确定时诚实告知</li>
+     *   <li>支持引用来源，增强可信度</li>
+     * </ul>
      */
     @Bean
     public ReActAgent knowledgeReActAgent() {
@@ -335,9 +450,16 @@ public class EnterpriseConfig {
     }
 
     /**
-     * 日程管理 Agent
+     * 日程管理 Agent（任务执行型专家）
      *
      * <p>负责创建、查询、管理用户的日程安排。
+     *
+     * <p><b>任务执行型 Agent 设计要点：</b>
+     * <ul>
+     *   <li>支持 CRUD 操作（创建、查询、修改、删除）</li>
+     *   <li>参数验证和错误处理</li>
+     *   <li>与外部系统（日历 API）集成</li>
+     * </ul>
      */
     @Bean
     public ReActAgent scheduleReActAgent() {
@@ -363,9 +485,16 @@ public class EnterpriseConfig {
     }
 
     /**
-     * 报表生成 Agent
+     * 报表生成 Agent（数据分析型专家）
      *
      * <p>负责生成各类数据报表和图表。
+     *
+     * <p><b>数据分析型 Agent 设计要点：</b>
+     * <ul>
+     *   <li>支持多种报表类型和图表格式</li>
+     *   <li>数据聚合和可视化能力</li>
+     *   <li>定时任务和历史查询支持</li>
+     * </ul>
      */
     @Bean
     public ReActAgent reportReActAgent() {
@@ -390,10 +519,23 @@ public class EnterpriseConfig {
                 .build();
     }
 
-    // ==================== Helper Methods ====================
+    // ==================== 辅助方法 ====================
 
     /**
      * 构建模型客户端
+     *
+     * <p>使用 DashScope（阿里云通义千问）作为底层模型服务。
+     *
+     * <p><b>模型配置说明：</b>
+     * <ul>
+     *   <li>apiKey：模型服务的 API 密钥</li>
+     *   <li>modelName：使用的模型名称（如 qwen-plus）</li>
+     *   <li>formatter：消息格式化器，将 AgentScope 消息转换为模型 API 格式</li>
+     *   <li>stream：启用流式输出，提升响应体验</li>
+     *   <li>enableThinking：是否启用思考链（Chain-of-Thought）</li>
+     * </ul>
+     *
+     * @return 配置好的 DashScope 模型客户端
      */
     private DashScopeChatModel buildModel() {
         return DashScopeChatModel.builder()

@@ -1,3 +1,18 @@
+/*
+ * Copyright 2024-2026 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package io.agentscope.tutorial.chapter03.service;
 
 import io.agentscope.core.message.Msg;
@@ -22,34 +37,74 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * 会话服务 - 管理会话的创建、加载和持久化
+ * 会话服务 - 管理会话的创建、加载和持久化.
  *
- * 核心功能：
- * - 会话 CRUD 操作
- * - 消息持久化（JPA/H2）
- * - 与 AgentScope 2.x 会话状态存储（AgentStateStore）集成
+ * <p>本服务是第三章的核心服务类，演示了如何在实际应用中管理 AgentScope 的会话。
+ * 同时使用两种持久化方式进行教学演示：
+ * <ul>
+ *   <li><b>JPA/H2</b>：存储会话元数据和消息明细（关系型数据库方式）</li>
+ *   <li><b>AgentStateStore</b>：存储 AgentScope 原生的会话上下文（框架原生方式）</li>
+ * </ul>
  *
- * <p>迁移说明（1.1.0 → 2.0.3）：
- * 原来注入的 io.agentscope.core.session.Session（已删除）替换为
- * io.agentscope.core.state.AgentStateStore。会话状态以 AgentState 形式持久化，
- * 定位不再用 SessionKey/SimpleSessionKey，而是用 (userId, sessionId) 字符串对。
- * 该状态存储与 JPA/H2 并行运行：JPA 负责会话元数据 + 消息明细，AgentStateStore
- * 负责保存 AgentScope 原生的会话上下文（List&lt;Msg&gt;），用于教学演示两种持久化方式。
+ * <h2>核心功能</h2>
+ * <ul>
+ *   <li>会话 CRUD 操作（创建、读取、更新、删除）</li>
+ *   <li>消息持久化到 H2 数据库</li>
+ *   <li>与 AgentScope 2.x {@link AgentStateStore} 集成</li>
+ *   <li>会话状态的双向同步</li>
+ * </ul>
+ *
+ * <h2>版本迁移说明（1.1.0 → 2.0.3）</h2>
+ * <ul>
+ *   <li>原来注入的 {@code io.agentscope.core.session.Session}（已删除）替换为
+ *       {@link AgentStateStore}</li>
+ *   <li>会话状态以 {@link AgentState} 形式持久化</li>
+ *   <li>定位方式从 {@code SessionKey/SimpleSessionKey} 改为 {@code (userId, sessionId)} 字符串对</li>
+ *   <li>该状态存储与 JPA/H2 并行运行：JPA 负责会话元数据 + 消息明细，
+ *       AgentStateStore 负责保存 AgentScope 原生的会话上下文（{@code List<Msg>}）</li>
+ * </ul>
  *
  * @author AgentScope Tutorial
+ * @since 1.0
+ * @see AgentStateStore
+ * @see AgentState
+ * @see ChatSession
+ * @see ChatMessage
  */
 @Service
 public class SessionService {
 
     private static final Logger log = LoggerFactory.getLogger(SessionService.class);
 
-    /** AgentStateStore 中保存会话状态所用的键（对应磁盘上的 agent_state.json）。 */
+    /**
+     * AgentStateStore 中保存会话状态所用的键.
+     *
+     * <p>对应磁盘上的 {@code agent_state.json} 文件。
+     */
     private static final String AGENT_STATE_KEY = "agent_state";
 
+    /**
+     * 会话仓库，管理会话元数据.
+     */
     private final SessionRepository sessionRepository;
+
+    /**
+     * 消息仓库，管理聊天消息.
+     */
     private final MessageRepository messageRepository;
+
+    /**
+     * AgentScope 会话状态存储.
+     */
     private final AgentStateStore agentStateStore;
 
+    /**
+     * 构造函数，通过依赖注入获取所需组件.
+     *
+     * @param sessionRepository 会话仓库
+     * @param messageRepository 消息仓库
+     * @param agentStateStore AgentScope 状态存储
+     */
     public SessionService(SessionRepository sessionRepository,
                           MessageRepository messageRepository,
                           AgentStateStore agentStateStore) {
@@ -58,6 +113,11 @@ public class SessionService {
         this.agentStateStore = agentStateStore;
     }
 
+    /**
+     * 初始化方法 - 确保数据目录存在.
+     *
+     * <p>在 Spring 容器启动后自动执行。
+     */
     @PostConstruct
     public void init() {
         try {

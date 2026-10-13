@@ -16,35 +16,44 @@
 package io.agentscope.tutorial.chapter10.model;
 
 /**
- * Document processing status enumeration.
+ * 文档处理状态枚举
  *
- * <p>Represents the lifecycle states of a document in the RAG system:
+ * <p>表示 RAG 系统中文档的生命周期状态：
  * <ul>
- *   <li>PENDING - Document uploaded, waiting to be processed</li>
- *   <li>PROCESSING - Document is being chunked and embedded</li>
- *   <li>COMPLETED - Document successfully processed and stored</li>
- *   <li>FAILED - Processing failed, check errorMessage for details</li>
+ *   <li><b>PENDING</b> - 文档已上传，等待处理</li>
+ *   <li><b>PROCESSING</b> - 文档正在被分块和嵌入</li>
+ *   <li><b>COMPLETED</b> - 文档已成功处理并存储</li>
+ *   <li><b>FAILED</b> - 处理失败，查看 errorMessage 获取详情</li>
  * </ul>
+ *
+ * <h2>状态转换</h2>
+ * <pre>
+ * PENDING -> PROCESSING -> COMPLETED
+ *               ↓
+ *            FAILED
+ * </pre>
+ *
+ * @author AgentScope Tutorial
  */
 public enum DocumentStatus {
 
     /**
-     * Document uploaded, waiting to be processed.
+     * 文档已上传，等待处理
      */
     PENDING,
 
     /**
-     * Document is being chunked and embedded.
+     * 文档正在被分块和嵌入
      */
     PROCESSING,
 
     /**
-     * Document successfully processed and stored in vector database.
+     * 文档已成功处理并存储到向量数据库
      */
     COMPLETED,
 
     /**
-     * Processing failed, check errorMessage for details.
+     * 处理失败，查看 errorMessage 获取详细信息
      */
     FAILED
 }

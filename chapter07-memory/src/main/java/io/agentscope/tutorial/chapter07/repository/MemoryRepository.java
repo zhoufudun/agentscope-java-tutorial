@@ -12,76 +12,106 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Memory Record Repository
+ * 记忆记录仓库接口
  *
- * <p>Provides data access operations for memory records stored in the database.
- * Supports querying, searching, and managing conversation history.
+ * <p>为记忆系统提供数据访问操作，支持对话历史的查询、搜索和管理。
+ * 继承 {@link JpaRepository} 获得标准 CRUD 操作，并定义了记忆系统特有的查询方法。
+ *
+ * <p><b>功能分类</b>：
+ * <ul>
+ *   <li><b>基础查询</b> - 按会话/角色获取记录</li>
+ *   <li><b>最近消息</b> - 获取最近 N 条消息、时间范围查询</li>
+ *   <li><b>搜索操作</b> - 关键词搜索、全文搜索</li>
+ *   <li><b>记忆压缩</b> - 标记和删除已压缩消息</li>
+ *   <li><b>会话统计</b> - 消息计数和统计信息</li>
+ * </ul>
+ *
+ * <p><b>数据库兼容性</b>：
+ * <ul>
+ *   <li>JPQL 查询 - 跨数据库兼容（H2、MySQL、PostgreSQL）</li>
+ *   <li>原生 SQL 查询 - 需注意 MySQL/H2 语法差异</li>
+ * </ul>
  *
  * @author AgentScope Tutorial
+ * @since 1.0
  */
 @Repository
 public interface MemoryRepository extends JpaRepository<MemoryRecord, Long> {
 
-    // ==================== Basic Query Methods ====================
+    // ==================== 基础查询方法 ====================
 
     /**
-     * Finds all records for a session, ordered by message index.
+     * 按消息索引顺序获取会话的所有记录
      *
-     * @param sessionId The session identifier
-     * @return List of memory records in order
+     * <p>这是最常用的查询方法，用于加载完整的对话历史。
+     * 返回结果按 messageIndex 升序排列，保证消息的时间顺序。
+     *
+     * @param sessionId 会话标识符
+     * @return 按消息索引排序的记录列表
      */
     List<MemoryRecord> findBySessionIdOrderByMessageIndex(String sessionId);
 
     /**
-     * Finds all records for a session and role, ordered by message index.
+     * 按会话和角色获取记录
      *
-     * @param sessionId The session identifier
-     * @param role The message role (user, assistant, system, tool)
-     * @return List of memory records
+     * <p>用于获取特定角色的消息，例如只获取用户消息或助手消息。
+     *
+     * @param sessionId 会话标识符
+     * @param role 消息角色（user/assistant/system/tool）
+     * @return 符合条件的记录列表
      */
     List<MemoryRecord> findBySessionIdAndRoleOrderByMessageIndex(String sessionId, String role);
 
     /**
-     * Counts the total number of records in a session.
+     * 统计会话的总消息数
      *
-     * @param sessionId The session identifier
-     * @return The number of records
+     * @param sessionId 会话标识符
+     * @return 消息总数
      */
     long countBySessionId(String sessionId);
 
     /**
-     * Counts records by session and role.
+     * 统计会话中特定角色的消息数
      *
-     * @param sessionId The session identifier
-     * @param role The message role
-     * @return The number of records
+     * @param sessionId 会话标识符
+     * @param role 消息角色
+     * @return 该角色的消息数
      */
     long countBySessionIdAndRole(String sessionId, String role);
 
     /**
-     * Deletes all records for a session.
+     * 删除会话的所有记录
      *
-     * @param sessionId The session identifier
+     * <p>用于清除整个会话的记忆。需要配合 {@code @Transactional} 使用。
+     *
+     * @param sessionId 会话标识符
      */
     @Modifying
     void deleteBySessionId(String sessionId);
 
     /**
-     * Finds the latest record in a session.
+     * 获取会话的最新一条记录
      *
-     * @param sessionId The session identifier
-     * @return Optional containing the latest record, or empty if none
+     * <p>用于获取对话的最后一条消息，例如检查最后一次交互。
+     *
+     * @param sessionId 会话标识符
+     * @return 最新记录（如存在）
      */
     Optional<MemoryRecord> findFirstBySessionIdOrderByMessageIndexDesc(String sessionId);
 
-    // ==================== Recent Messages ====================
+    // ==================== 最近消息查询 ====================
 
     /**
-     * Finds the most recent N messages for a session.
+     * 获取会话最近的 N 条消息
      *
-     * @param sessionId The session identifier
-     * @param limit Maximum number of records to return
-     * @return List of recent memory records
+     * <p>使用原生 SQL 的 LIMIT 子句。返回按 messageIndex 降序排列的记录，
+     * 即最新的消息在前。
+     *
+     * <p><b>注意</b>：原生查询使用 MySQL/H2 的 LIMIT 语法，其他数据库可能需要调整。
+     *
+     * @param sessionId 会话标识符
+     * @param limit 最大返回记录数
+     * @return 最近的记录列表（最新在前）
      */
     @Query(value = "SELECT * FROM memory_records " +
                    "WHERE session_id = :sessionId " +
@@ -93,12 +123,14 @@ public interface MemoryRepository extends JpaRepository<MemoryRecord, Long> {
             @Param("limit") int limit);
 
     /**
-     * Finds messages within a time range.
+     * 获取时间范围内的消息
      *
-     * @param sessionId The session identifier
-     * @param startTime Start of the time range
-     * @param endTime End of the time range
-     * @return List of memory records within the range
+     * <p>用于按时间段检索对话历史，例如"今天的对话"或"过去一周的对话"。
+     *
+     * @param sessionId 会话标识符
+     * @param startTime 开始时间（包含）
+     * @param endTime 结束时间（包含）
+     * @return 时间范围内的记录列表
      */
     @Query("SELECT m FROM MemoryRecord m " +
            "WHERE m.sessionId = :sessionId " +
@@ -111,11 +143,13 @@ public interface MemoryRepository extends JpaRepository<MemoryRecord, Long> {
             @Param("endTime") LocalDateTime endTime);
 
     /**
-     * Finds messages before a specific index (older messages).
+     * 获取指定索引之前的消息
      *
-     * @param sessionId The session identifier
-     * @param beforeIndex The message index threshold
-     * @return List of older memory records
+     * <p>用于获取更早的历史消息，支持分页加载更多历史。
+     *
+     * @param sessionId 会话标识符
+     * @param beforeIndex 索引阈值（不包含）
+     * @return 较早的记录列表（按索引降序）
      */
     @Query("SELECT m FROM MemoryRecord m " +
            "WHERE m.sessionId = :sessionId " +
@@ -125,14 +159,17 @@ public interface MemoryRepository extends JpaRepository<MemoryRecord, Long> {
             @Param("sessionId") String sessionId,
             @Param("beforeIndex") int beforeIndex);
 
-    // ==================== Search Operations ====================
+    // ==================== 搜索操作 ====================
 
     /**
-     * Searches for messages containing a keyword (case-insensitive).
+     * 在会话内搜索包含关键词的消息
      *
-     * @param sessionId The session identifier
-     * @param keyword The search keyword
-     * @return List of matching memory records
+     * <p>使用 LIKE 进行模糊匹配，不区分大小写。
+     * 适用于简单的关键词搜索场景。
+     *
+     * @param sessionId 会话标识符
+     * @param keyword 搜索关键词
+     * @return 匹配的记录列表
      */
     @Query("SELECT m FROM MemoryRecord m " +
            "WHERE m.sessionId = :sessionId " +
@@ -143,10 +180,13 @@ public interface MemoryRepository extends JpaRepository<MemoryRecord, Long> {
             @Param("keyword") String keyword);
 
     /**
-     * Searches across all sessions for a keyword.
+     * 跨所有会话搜索关键词
      *
-     * @param keyword The search keyword
-     * @return List of matching memory records from all sessions
+     * <p>在所有会话中搜索包含关键词的消息，返回按时间倒序排列的结果。
+     * 适用于全局搜索场景。
+     *
+     * @param keyword 搜索关键词
+     * @return 所有会话中匹配的记录列表
      */
     @Query("SELECT m FROM MemoryRecord m " +
            "WHERE LOWER(m.content) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
@@ -154,11 +194,18 @@ public interface MemoryRepository extends JpaRepository<MemoryRecord, Long> {
     List<MemoryRecord> searchAcrossSessions(@Param("keyword") String keyword);
 
     /**
-     * Full-text search using MySQL MATCH AGAINST (for production with MySQL).
+     * MySQL 全文搜索（仅生产环境 MySQL 可用）
      *
-     * @param sessionId The session identifier
-     * @param searchTerms Space-separated search terms
-     * @return List of matching memory records
+     * <p>使用 MySQL 的 MATCH AGAINST 语法进行全文搜索，
+     * 支持自然语言模式，比 LIKE 更高效且支持相关性排序。
+     *
+     * <p><b>前提条件</b>：content 字段需要创建 FULLTEXT 索引。
+     *
+     * <p><b>注意</b>：此查询仅在 MySQL 环境下可用，H2 不支持。
+     *
+     * @param sessionId 会话标识符
+     * @param searchTerms 空格分隔的搜索词
+     * @return 匹配的记录列表（按相关性排序）
      */
     @Query(value = "SELECT * FROM memory_records " +
                    "WHERE session_id = :sessionId " +
@@ -169,14 +216,17 @@ public interface MemoryRepository extends JpaRepository<MemoryRecord, Long> {
             @Param("sessionId") String sessionId,
             @Param("searchTerms") String searchTerms);
 
-    // ==================== Memory Compression ====================
+    // ==================== 记忆压缩 ====================
 
     /**
-     * Finds all non-summarized records for compression processing.
+     * 获取未压缩的消息用于压缩处理
      *
-     * @param sessionId The session identifier
-     * @param limit Maximum number of records to compress
-     * @return List of records to be compressed
+     * <p>返回会话中尚未被摘要的消息，按消息索引升序排列。
+     * 用于记忆压缩功能，将旧消息生成摘要。
+     *
+     * @param sessionId 会话标识符
+     * @param limit 最大返回记录数（实际由调用方控制使用数量）
+     * @return 待压缩的记录列表
      */
     @Query("SELECT m FROM MemoryRecord m " +
            "WHERE m.sessionId = :sessionId " +
@@ -187,11 +237,14 @@ public interface MemoryRepository extends JpaRepository<MemoryRecord, Long> {
             @Param("limit") int limit);
 
     /**
-     * Marks records as summarized.
+     * 将指定范围的消息标记为已摘要
      *
-     * @param sessionId The session identifier
-     * @param fromIndex Start index (inclusive)
-     * @param toIndex End index (inclusive)
+     * <p>在生成摘要后，将原始消息标记为已处理，
+     * 后续可以选择删除这些消息以节省存储空间。
+     *
+     * @param sessionId 会话标识符
+     * @param fromIndex 起始索引（包含）
+     * @param toIndex 结束索引（包含）
      */
     @Modifying
     @Query("UPDATE MemoryRecord m SET m.isSummarized = true " +
@@ -204,10 +257,13 @@ public interface MemoryRepository extends JpaRepository<MemoryRecord, Long> {
             @Param("toIndex") int toIndex);
 
     /**
-     * Deletes summarized records older than a specific index.
+     * 删除指定索引之前的已摘要消息
      *
-     * @param sessionId The session identifier
-     * @param beforeIndex Records with index less than this will be deleted
+     * <p>清理已被摘要压缩的旧消息，释放存储空间。
+     * 只删除 isSummarized 为 true 的记录，保护未处理的消息。
+     *
+     * @param sessionId 会话标识符
+     * @param beforeIndex 索引阈值（删除小于此值的记录）
      */
     @Modifying
     @Query("DELETE FROM MemoryRecord m " +
@@ -218,13 +274,20 @@ public interface MemoryRepository extends JpaRepository<MemoryRecord, Long> {
             @Param("sessionId") String sessionId,
             @Param("beforeIndex") int beforeIndex);
 
-    // ==================== Session Statistics ====================
+    // ==================== 会话统计 ====================
 
     /**
-     * Gets statistics for a session.
+     * 获取会话的统计信息
      *
-     * @param sessionId The session identifier
-     * @return Object array containing [totalCount, userCount, assistantCount]
+     * <p>返回单次查询获取的聚合统计数据：
+     * <ul>
+     *   <li>[0] - 总消息数</li>
+     *   <li>[1] - 用户消息数</li>
+     *   <li>[2] - 助手消息数</li>
+     * </ul>
+     *
+     * @param sessionId 会话标识符
+     * @return 包含统计数据的对象数组 [总数, 用户数, 助手数]
      */
     @Query("SELECT COUNT(m), " +
            "SUM(CASE WHEN m.role = 'user' THEN 1 ELSE 0 END), " +
@@ -233,9 +296,12 @@ public interface MemoryRepository extends JpaRepository<MemoryRecord, Long> {
     Object[] getSessionStats(@Param("sessionId") String sessionId);
 
     /**
-     * Gets all distinct session IDs.
+     * 获取所有会话 ID
      *
-     * @return List of unique session identifiers
+     * <p>返回系统中所有存在记忆记录的会话 ID 列表。
+     * 用于会话管理和跨会话操作。
+     *
+     * @return 去重排序后的会话 ID 列表
      */
     @Query("SELECT DISTINCT m.sessionId FROM MemoryRecord m ORDER BY m.sessionId")
     List<String> findAllSessionIds();

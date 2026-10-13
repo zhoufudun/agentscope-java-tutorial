@@ -71,11 +71,65 @@ import org.springframework.scheduling.annotation.EnableAsync;
  * helm status agentscope -n agentscope
  * }</pre>
  */
+/**
+ * {@code @SpringBootApplication} 组合注解，包含：
+ * <ul>
+ *   <li>{@code @Configuration} - 标记为配置类</li>
+ *   <li>{@code @EnableAutoConfiguration} - 启用 Spring Boot 自动配置</li>
+ *   <li>{@code @ComponentScan} - 扫描当前包及子包下的组件</li>
+ * </ul>
+ *
+ * <p><b>生产环境部署要点：</b>
+ * <ul>
+ *   <li>使用 {@code spring.profiles.active=prod} 激活生产配置</li>
+ *   <li>通过环境变量注入敏感配置（API 密钥、数据库密码等）</li>
+ *   <li>配置合适的 JVM 参数（堆大小、GC 策略等）</li>
+ * </ul>
+ */
 @SpringBootApplication
+/**
+ * {@code @EnableAsync} 启用 Spring 异步任务支持.
+ *
+ * <p>启用后可以使用 {@code @Async} 注解标记异步方法，
+ * 配合自定义线程池实现非阻塞的 AI 推理调用。
+ *
+ * <p><b>生产环境注意事项：</b>
+ * <ul>
+ *   <li>必须配置自定义线程池，避免使用默认的 SimpleAsyncTaskExecutor</li>
+ *   <li>合理设置线程池大小，通常为 CPU 核心数 * 2 到 4</li>
+ *   <li>设置队列容量和拒绝策略，防止内存溢出</li>
+ * </ul>
+ */
 @EnableAsync
 public class Chapter17Application {
 
+    /**
+     * 应用程序入口方法.
+     *
+     * <p>Spring Boot 应用启动流程：
+     * <ol>
+     *   <li>加载 Spring 上下文和自动配置</li>
+     *   <li>初始化嵌入式 Web 服务器（Tomcat/Netty）</li>
+     *   <li>执行 CommandLineRunner 和 ApplicationRunner</li>
+     *   <li>发布 ApplicationReadyEvent 事件</li>
+     * </ol>
+     *
+     * <p><b>生产环境启动命令示例：</b>
+     * <pre>{@code
+     * # 直接启动（推荐使用环境变量注入配置）
+     * java -jar app.jar --spring.profiles.active=prod
+     *
+     * # Docker 容器启动
+     * docker run -e SPRING_PROFILES_ACTIVE=prod \
+     *            -e DASHSCOPE_API_KEY=sk-xxx \
+     *            -p 8080:8080 agentscope/chapter17:latest
+     * }</pre>
+     *
+     * @param args 命令行参数，可传递 Spring 配置覆盖
+     */
     public static void main(String[] args) {
+        // SpringApplication.run() 是 Spring Boot 应用的核心启动方法
+        // 它会创建并配置 ApplicationContext，启动嵌入式服务器
         SpringApplication.run(Chapter17Application.class, args);
     }
 }

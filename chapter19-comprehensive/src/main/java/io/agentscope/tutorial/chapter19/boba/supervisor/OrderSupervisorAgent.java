@@ -30,7 +30,7 @@ import reactor.core.publisher.Flux;
 import java.util.UUID;
 
 /**
- * 奶茶店订单监督者 Agent
+ * 奶茶店订单监督者 Agent - Supervisor 模式的典型实现
  *
  * <p>核心调度节点，负责：
  * <ul>
@@ -40,8 +40,45 @@ import java.util.UUID;
  *   <li>将最终结果返回给用户</li>
  * </ul>
  *
- * <p>这是一个 Supervisor Agent 模式的应用示例，
- * 通过监督者协调多个专业子 Agent 完成复杂任务。
+ * <h2>Supervisor 模式详解</h2>
+ * <p>Supervisor（监督者）模式是多 Agent 系统的常见架构模式：
+ * <pre>
+ *                    ┌─────────────────┐
+ *                    │   用户请求      │
+ *                    └────────┬────────┘
+ *                             ▼
+ *                    ┌─────────────────┐
+ *                    │  Supervisor     │  ← 理解意图，分发任务
+ *                    │  (监督者 Agent) │
+ *                    └────────┬────────┘
+ *                             │
+ *           ┌─────────────────┼─────────────────┐
+ *           ▼                 ▼                 ▼
+ *   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+ *   │ 收银员 Agent │  │ 制茶师 Agent │  │ 其他 Agent   │
+ *   └──────────────┘  └──────────────┘  └──────────────┘
+ *           │                 │                 │
+ *           └─────────────────┼─────────────────┘
+ *                             ▼
+ *                    ┌─────────────────┐
+ *                    │  聚合结果       │
+ *                    │  返回给用户     │
+ *                    └─────────────────┘
+ * </pre>
+ *
+ * <h2>与其他模式的对比</h2>
+ * <ul>
+ *   <li><b>Supervisor vs Pipeline</b>：Pipeline 是串行执行，Supervisor 可以并行或动态调度</li>
+ *   <li><b>Supervisor vs Peer-to-Peer</b>：Supervisor 有中央节点，P2P 是去中心化</li>
+ *   <li><b>Supervisor vs Hierarchical</b>：Hierarchical 有多层级，Supervisor 通常是两层</li>
+ * </ul>
+ *
+ * <h2>适用场景</h2>
+ * <ul>
+ *   <li>客服系统：分发到不同业务线</li>
+ *   <li>订单处理：协调支付、物流、库存</li>
+ *   <li>智能办公：日程、邮件、报表多能力协作</li>
+ * </ul>
  *
  * @author AgentScope Tutorial
  * @since 1.0
@@ -70,7 +107,22 @@ public class OrderSupervisorAgent {
     }
 
     /**
-     * 处理奶茶订单
+     * 处理奶茶订单 - Supervisor 模式的核心方法
+     *
+     * <p><b>执行流程：</b>
+     * <ol>
+     *   <li>接收用户自然语言订单（如"我要一杯珍珠奶茶，少糖少冰"）</li>
+     *   <li>Supervisor Agent 理解意图，调用收银员确认订单</li>
+     *   <li>确认后调用制茶师制作饮品</li>
+     *   <li>聚合结果，返回完整的订单处理信息</li>
+     * </ol>
+     *
+     * <p><b>关键技术点：</b>
+     * <ul>
+     *   <li>使用 {@code block()} 实现同步调用（适合简单场景）</li>
+     *   <li>UUID 用于会话追踪和日志关联</li>
+     *   <li>异常处理保证用户体验</li>
+     * </ul>
      *
      * @param userMessage 用户的消息（如"我要一杯珍珠奶茶，少糖少冰"）
      * @return 订单处理结果
@@ -103,10 +155,24 @@ public class OrderSupervisorAgent {
     }
 
     /**
-     * 流式处理订单
+     * 流式处理订单 - 支持实时响应的处理方式
+     *
+     * <p><b>流式处理的优势：</b>
+     * <ul>
+     *   <li>用户可以实时看到处理进度</li>
+     *   <li>支持长时间任务的中间反馈</li>
+     *   <li>更好的用户体验</li>
+     * </ul>
+     *
+     * <p><b>技术实现：</b>
+     * <ul>
+     *   <li>返回 {@code Flux<Event>} 响应式流</li>
+     *   <li>可以与 SSE（Server-Sent Events）配合使用</li>
+     *   <li>支持背压（backpressure）控制</li>
+     * </ul>
      *
      * @param userMessage 用户的消息
-     * @return 事件流
+     * @return 事件流，包含处理过程中的各种事件
      */
     public Flux<Event> processOrderStream(String userMessage) {
         logger.info("流式处理订单请求: {}", userMessage);

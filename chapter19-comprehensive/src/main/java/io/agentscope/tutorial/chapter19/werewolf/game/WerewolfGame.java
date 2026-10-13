@@ -25,7 +25,7 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 
 /**
- * 狼人杀游戏主类
+ * 狼人杀游戏主类 - 多 Agent 博弈的核心控制器
  *
  * <p>负责控制游戏流程，包括：
  * <ul>
@@ -35,7 +35,32 @@ import java.util.*;
  *   <li>检查胜负条件</li>
  * </ul>
  *
+ * <h2>多 Agent 博弈设计</h2>
  * <p>这是一个多 Agent 协作的典型应用，每个玩家角色都由一个独立的 ReActAgent 控制。
+ * 与奶茶店案例的协作模式不同，狼人杀展示了<b>对抗性多 Agent 系统</b>：
+ * <ul>
+ *   <li><b>信息不对称</b>：狼人知道彼此身份，村民不知道</li>
+ *   <li><b>目标对立</b>：狼人阵营 vs 村民阵营</li>
+ *   <li><b>策略博弈</b>：欺骗、推理、投票策略</li>
+ *   <li><b>动态淘汰</b>：玩家死亡后退出游戏</li>
+ * </ul>
+ *
+ * <h2>游戏流程控制</h2>
+ * <pre>
+ * 初始化 -> 夜晚阶段 -> 检查胜负 -> 白天阶段 -> 检查胜负 -> 循环...
+ *              |                        |
+ *         狼人击杀                   公布死讯
+ *         女巫行动                   自由讨论
+ *         预言家查验                 投票放逐
+ * </pre>
+ *
+ * <h2>事件驱动架构</h2>
+ * <p>通过 GameEventListener 支持实时游戏事件推送，便于：
+ * <ul>
+ *   <li>前端 SSE 实时更新</li>
+ *   <li>游戏日志记录</li>
+ *   <li>状态监控和调试</li>
+ * </ul>
  *
  * @author AgentScope Tutorial
  * @since 1.0
@@ -44,29 +69,31 @@ public class WerewolfGame {
 
     private static final Logger logger = LoggerFactory.getLogger(WerewolfGame.class);
 
-    /** 最大回合数 */
+    /** 最大回合数 - 防止游戏无限循环 */
     private static final int MAX_ROUNDS = 15;
 
-    /** 讨论轮数 */
+    /** 讨论轮数 - 白天讨论阶段的轮数 */
     private static final int DISCUSSION_ROUNDS = 3;
 
-    /** 玩家名称列表 */
+    /** 玩家名称列表 - 用于初始化玩家 */
     private static final List<String> PLAYER_NAMES = List.of(
             "小红", "小明", "小华", "小丽", "小强",
             "小芳", "小刚", "小美", "小亮"
     );
 
-    /** 游戏状态 */
+    /** 游戏状态 - 维护玩家、回合、死亡等信息 */
     private GameState gameState;
 
-    /** 主持人 Agent */
+    /** 主持人 Agent - 控制游戏流程，不参与博弈 */
     private final ReActAgent moderatorAgent;
 
-    /** 玩家 Agent 工厂 */
+    /** 村民 Agent 模板 - 用于创建好人阵营的 Agent */
     private final ReActAgent villagerAgent;
+
+    /** 狼人 Agent 模板 - 用于创建狼人阵营的 Agent */
     private final ReActAgent werewolfAgent;
 
-    /** 事件监听器 */
+    /** 事件监听器列表 - 支持多个监听器订阅游戏事件 */
     private final List<GameEventListener> eventListeners;
 
     /**
@@ -136,6 +163,17 @@ public class WerewolfGame {
 
     /**
      * 初始化游戏
+     *
+     * <p>游戏初始化过程：
+     * <ol>
+     *   <li>创建角色池（3村民 + 3狼人 + 预言家 + 女巫 + 猎人）</li>
+     *   <li>随机打乱角色顺序，实现随机分配</li>
+     *   <li>为每个玩家创建对应的 Agent（根据角色选择不同的提示词模板）</li>
+     *   <li>初始化游戏状态</li>
+     * </ol>
+     *
+     * <p><b>Agent 动态创建：</b>每个玩家都有独立的 Agent，
+     * 系统提示词包含该玩家的角色信息和行为策略指导。
      */
     private void initializeGame() {
         // 创建角色列表
@@ -177,6 +215,17 @@ public class WerewolfGame {
 
     /**
      * 创建狼人 Agent
+     *
+     * <p><b>狼人 Agent 的系统提示词设计要点：</b>
+     * <ul>
+     *   <li>明确告知其狼人身份和目标</li>
+     *   <li>强调伪装和欺骗策略</li>
+     *   <li>指导夜间配合击杀和白天发言技巧</li>
+     * </ul>
+     *
+     * @param name 玩家名称
+     * @param role 角色类型
+     * @return 配置好的狼人 Agent
      */
     private ReActAgent createWerewolfAgent(String name, Role role) {
         String sysPrompt = String.format("""
@@ -203,7 +252,21 @@ public class WerewolfGame {
     }
 
     /**
-     * 创建村民 Agent
+     * 创建村民阵营 Agent
+     *
+     * <p><b>村民阵营 Agent 的系统提示词设计要点：</b>
+     * <ul>
+     *   <li>明确告知角色身份和特殊技能（如有）</li>
+     *   <li>强调推理和观察的重要性</li>
+     *   <li>指导如何在讨论中分享观点</li>
+     * </ul>
+     *
+     * <p>村民阵营包括：普通村民、预言家、女巫、猎人，
+     * 每个角色有不同的技能描述，但共享相同的阵营目标。
+     *
+     * @param name 玩家名称
+     * @param role 角色类型
+     * @return 配置好的村民阵营 Agent
      */
     private ReActAgent createVillagerAgent(String name, Role role) {
         String sysPrompt = String.format("""
@@ -233,7 +296,23 @@ public class WerewolfGame {
     }
 
     /**
-     * 夜晚阶段
+     * 夜晚阶段 - 狼人杀游戏的核心阶段之一
+     *
+     * <p><b>夜晚阶段流程：</b>
+     * <ol>
+     *   <li><b>狼人击杀</b>：狼人选择击杀目标（多个狼人需要达成共识）</li>
+     *   <li><b>女巫行动</b>：女巫决定是否使用解药救人或毒药毒人</li>
+     *   <li><b>预言家查验</b>：预言家选择一名玩家查看其身份</li>
+     * </ol>
+     *
+     * <p><b>多 Agent 协调：</b>
+     * <ul>
+     *   <li>狼人之间需要信息同步和决策协调</li>
+     *   <li>女巫需要知道被击杀者才能决定是否救人</li>
+     *   <li>预言家独立行动，获取信息用于白天讨论</li>
+     * </ul>
+     *
+     * @return 夜晚阶段的执行结果描述
      */
     private String nightPhase() {
         StringBuilder result = new StringBuilder();
@@ -346,7 +425,25 @@ public class WerewolfGame {
     }
 
     /**
-     * 白天阶段
+     * 白天阶段 - 狼人杀游戏的核心阶段之一
+     *
+     * <p><b>白天阶段流程：</b>
+     * <ol>
+     *   <li><b>死讯公布</b>：主持人宣布昨夜死亡玩家（被击杀或被毒）</li>
+     *   <li><b>猎人技能</b>：如果猎人死亡，可选择带走一名玩家</li>
+     *   <li><b>遗言</b>：死亡玩家发表遗言</li>
+     *   <li><b>自由讨论</b>：存活玩家发言，分析和推理</li>
+     *   <li><b>投票放逐</b>：投票选出最可疑的玩家</li>
+     * </ol>
+     *
+     * <p><b>博弈要点：</b>
+     * <ul>
+     *   <li>村民通过发言内容判断狼人</li>
+     *   <li>狼人需要伪装，引导投票方向</li>
+     *   <li>特殊角色（如预言家）需要决定是否暴露信息</li>
+     * </ul>
+     *
+     * @return 白天阶段的执行结果描述
      */
     private String dayPhase() {
         StringBuilder result = new StringBuilder();
@@ -416,7 +513,23 @@ public class WerewolfGame {
     }
 
     /**
-     * 投票阶段
+     * 投票阶段 - 民主决策机制
+     *
+     * <p><b>投票机制：</b>
+     * <ul>
+     *   <li>每个存活玩家投一票给其他玩家</li>
+     *   <li>票数最多的玩家被放逐出局</li>
+     *   <li>平票时无人出局</li>
+     * </ul>
+     *
+     * <p><b>策略考量：</b>
+     * <ul>
+     *   <li>狼人会尽量分散票数或集中投给好人</li>
+     *   <li>预言家的信息在此阶段发挥关键作用</li>
+     *   <li>观察投票行为可以推断玩家身份</li>
+     * </ul>
+     *
+     * @return 被投票出局的玩家，如果平票则返回 null
      */
     private Player votingPhase() {
         List<Player> alivePlayers = gameState.getAlivePlayers();
@@ -506,12 +619,31 @@ public class WerewolfGame {
         }
     }
 
-    // ==================== Inner Classes ====================
+    // ==================== 内部类定义 ====================
 
     /**
-     * 游戏事件类
+     * 游戏事件类 - 用于游戏过程中的状态变化通知
+     *
+     * <p>事件驱动设计使得游戏引擎与 UI/日志等组件解耦。
+     * 支持的事件类型包括游戏开始、夜间击杀、女巫救人、投票出局等。
      */
     public static class GameEvent {
+        /**
+         * 事件类型枚举
+         *
+         * <p>定义了狼人杀游戏中所有关键事件：
+         * <ul>
+         *   <li>GAME_STARTED - 游戏开始</li>
+         *   <li>NIGHT_KILL - 狼人夜间击杀</li>
+         *   <li>WITCH_HEAL - 女巫使用解药</li>
+         *   <li>SEER_CHECK - 预言家查验身份</li>
+         *   <li>DAY_DISCUSSION - 白天讨论开始</li>
+         *   <li>PLAYER_KILLED - 玩家被杀死</li>
+         *   <li>PLAYER_VOTED_OUT - 玩家被投票出局</li>
+         *   <li>HUNTER_SHOOT - 猎人发动技能</li>
+         *   <li>GAME_ENDED - 游戏结束</li>
+         * </ul>
+         */
         public enum Type {
             GAME_STARTED,
             NIGHT_KILL,
@@ -543,8 +675,20 @@ public class WerewolfGame {
 
     /**
      * 游戏事件监听器接口
+     *
+     * <p>实现此接口以订阅游戏事件，典型用途：
+     * <ul>
+     *   <li>SSE 推送：将事件实时推送到前端</li>
+     *   <li>日志记录：记录游戏详细过程</li>
+     *   <li>AI 分析：收集数据用于策略分析</li>
+     * </ul>
      */
     public interface GameEventListener {
+        /**
+         * 处理游戏事件
+         *
+         * @param event 游戏事件对象，包含事件类型和描述消息
+         */
         void onGameEvent(GameEvent event);
     }
 }

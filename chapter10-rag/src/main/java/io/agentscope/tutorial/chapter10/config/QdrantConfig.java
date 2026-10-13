@@ -20,10 +20,28 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Qdrant vector database configuration.
+ * Qdrant 向量数据库配置类
  *
- * <p>Configures connection to Qdrant vector database for storing
- * and retrieving document embeddings.
+ * <p>配置与 Qdrant 向量数据库的连接，用于存储和检索文档嵌入向量。
+ *
+ * <h2>Qdrant 简介</h2>
+ * <p>Qdrant 是一个高性能的向量相似度搜索引擎，专为 AI 应用设计。
+ * 它支持：
+ * <ul>
+ *   <li>高维向量的存储和检索</li>
+ *   <li>基于距离度量的相似度搜索</li>
+ *   <li>元数据过滤</li>
+ *   <li>分布式部署</li>
+ * </ul>
+ *
+ * <h2>AgentScope 学习要点</h2>
+ * <ul>
+ *   <li>使用 @ConfigurationProperties 绑定配置</li>
+ *   <li>向量维度必须与嵌入模型输出匹配</li>
+ *   <li>支持多种连接模式：HTTP、gRPC、内存</li>
+ * </ul>
+ *
+ * @author AgentScope Tutorial
  */
 @Data
 @Configuration
@@ -31,47 +49,66 @@ import org.springframework.context.annotation.Configuration;
 public class QdrantConfig {
 
     /**
-     * Qdrant server location (URL or host:port).
-     * Examples:
-     * - "http://localhost:6333" (HTTP with default gRPC port 6334)
-     * - "localhost:6334" (direct gRPC)
-     * - "file:///path/to/qdrant" (local storage)
-     * - ":memory:" (in-memory, for testing only)
+     * Qdrant 服务器位置（URL 或 host:port）
+     *
+     * <p>支持的格式：
+     * <ul>
+     *   <li>"http://localhost:6333" - HTTP 连接（默认 gRPC 端口为 6334）</li>
+     *   <li>"localhost:6334" - 直接 gRPC 连接</li>
+     *   <li>"file:///path/to/qdrant" - 本地存储</li>
+     *   <li>":memory:" - 内存模式（仅用于测试）</li>
+     * </ul>
      */
     private String location = "http://localhost:6333";
 
     /**
-     * Collection name for storing document embeddings.
+     * 存储文档嵌入的集合名称
+     *
+     * <p>集合是 Qdrant 中组织向量数据的基本单位，
+     * 类似于关系数据库中的表。
      */
     private String collectionName = "tutorial_rag";
 
     /**
-     * API key for Qdrant authentication (optional).
+     * Qdrant 认证 API Key（可选）
+     *
+     * <p>如果 Qdrant 启用了认证，需要配置此项。
      */
     private String apiKey;
 
     /**
-     * 是否 use TLS for gRPC connections.
+     * 是否为 gRPC 连接使用 TLS
+     *
+     * <p>生产环境建议启用 TLS 加密。
      */
     private boolean useTls = false;
 
     /**
-     * 是否 check client-server version compatibility.
+     * 是否检查客户端-服务器版本兼容性
+     *
+     * <p>建议在生产环境中启用，确保客户端和服务器版本兼容。
      */
     private boolean checkCompatibility = true;
 
     /**
-     * Vector dimensions (must match embedding model output).
+     * 向量维度（必须与嵌入模型输出匹配）
+     *
+     * <p>常见的维度：
+     * <ul>
+     *   <li>768 - nomic-embed-text, all-mpnet-base-v2</li>
+     *   <li>1536 - OpenAI text-embedding-ada-002</li>
+     *   <li>3072 - OpenAI text-embedding-3-large</li>
+     * </ul>
      */
     private int dimensions = 768;
 
     /**
-     * Connection timeout in milliseconds.
+     * 连接超时时间（毫秒）
      */
     private int timeout = 30000;
 
     /**
-     * Maximum connections in the pool.
+     * 连接池最大连接数
      */
     private int maxConnections = 10;
 }

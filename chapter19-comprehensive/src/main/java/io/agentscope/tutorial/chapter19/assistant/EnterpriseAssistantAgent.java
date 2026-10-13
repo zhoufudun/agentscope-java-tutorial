@@ -33,7 +33,7 @@ import reactor.core.publisher.Flux;
 import java.util.UUID;
 
 /**
- * 企业智能助手 Agent
+ * 企业智能助手 Agent - 能力分解与专业化协作的典型实现
  *
  * <p>负责：
  * <ul>
@@ -42,7 +42,41 @@ import java.util.UUID;
  *   <li>聚合结果返回给用户</li>
  * </ul>
  *
- * <p>这是企业智能助手的核心入口，类似于奶茶店的监督者 Agent。
+ * <h2>能力分解模式详解</h2>
+ * <p>企业助手将复杂的"万能助手"能力分解为多个专业化子能力：
+ * <pre>
+ *                    ┌─────────────────────────────────────┐
+ *                    │      企业智能助手（主 Agent）       │
+ *                    │  - 意图理解                         │
+ *                    │  - 任务路由                         │
+ *                    │  - 结果聚合                         │
+ *                    └───────────────┬─────────────────────┘
+ *                                    │
+ *        ┌───────────────────────────┼───────────────────────────┐
+ *        ▼                           ▼                           ▼
+ *   ┌──────────────┐          ┌──────────────┐          ┌──────────────┐
+ *   │ 知识问答     │          │ 日程管理     │          │ 报表生成     │
+ *   │ Agent        │          │ Agent        │          │ Agent        │
+ *   │              │          │              │          │              │
+ *   │ - FAQ 查询   │          │ - 创建日程   │          │ - 销售报表   │
+ *   │ - 制度查询   │          │ - 查询日程   │          │ - 用户报表   │
+ *   │ - 文档检索   │          │ - 修改日程   │          │ - 图表生成   │
+ *   └──────────────┘          └──────────────┘          └──────────────┘
+ * </pre>
+ *
+ * <h2>设计优势</h2>
+ * <ul>
+ *   <li><b>职责单一</b>：每个子 Agent 专注于一个领域，易于维护</li>
+ *   <li><b>可扩展性</b>：新增能力只需添加新的子 Agent</li>
+ *   <li><b>专业性</b>：每个子 Agent 可以有专门优化的提示词和工具</li>
+ *   <li><b>可测试性</b>：各子 Agent 可独立测试</li>
+ * </ul>
+ *
+ * <h2>与奶茶店案例的差异</h2>
+ * <ul>
+ *   <li><b>奶茶店</b>：流程固定（收银→制作），Supervisor 主要做流程编排</li>
+ *   <li><b>企业助手</b>：按能力分类，主 Agent 做意图路由</li>
+ * </ul>
  *
  * @author AgentScope Tutorial
  * @since 1.0
@@ -52,17 +86,39 @@ public class EnterpriseAssistantAgent {
 
     private static final Logger logger = LoggerFactory.getLogger(EnterpriseAssistantAgent.class);
 
+    /** 主助手的 ReActAgent 实例 - 负责意图理解和任务路由 */
     private final ReActAgent mainAgent;
+
+    /** 知识问答 ReActAgent - 负责 FAQ、制度、文档检索 */
     private final ReActAgent knowledgeAgent;
+
+    /** 日程管理 ReActAgent - 负责日程 CRUD */
     private final ReActAgent scheduleAgent;
+
+    /** 报表生成 ReActAgent - 负责数据分析和可视化 */
     private final ReActAgent reportAgent;
 
+    /** 知识问答服务 - 封装知识库访问逻辑 */
     private final KnowledgeAgent knowledgeAgentService;
+
+    /** 日程管理服务 - 封装日程数据访问逻辑 */
     private final ScheduleAgent scheduleAgentService;
+
+    /** 报表生成服务 - 封装报表生成逻辑 */
     private final ReportAgent reportAgentService;
 
     /**
      * 构造函数注入所有 Agent
+     *
+     * <p>使用 @Qualifier 区分同类型的不同 Bean：
+     * <ul>
+     *   <li>enterpriseAssistantReActAgent - 主助手</li>
+     *   <li>knowledgeReActAgent - 知识问答</li>
+     *   <li>scheduleReActAgent - 日程管理</li>
+     *   <li>reportReActAgent - 报表生成</li>
+     * </ul>
+     *
+     * <p>同时注入 Service 层组件，用于直接调用业务逻辑（非 Agent 方式）。
      */
     @Autowired
     public EnterpriseAssistantAgent(
@@ -84,7 +140,23 @@ public class EnterpriseAssistantAgent {
     }
 
     /**
-     * 处理用户请求
+     * 处理用户请求 - 企业助手的核心入口
+     *
+     * <p><b>处理流程：</b>
+     * <ol>
+     *   <li>接收用户自然语言请求</li>
+     *   <li>主 Agent 理解意图，决定调用哪个工具</li>
+     *   <li>工具内部可能调用专业子 Agent</li>
+     *   <li>聚合结果返回给用户</li>
+     * </ol>
+     *
+     * <p><b>支持的请求类型：</b>
+     * <ul>
+     *   <li>"请假怎么申请？" → 知识问答</li>
+     *   <li>"帮我创建一个会议" → 日程管理</li>
+     *   <li>"生成上月销售报表" → 报表生成</li>
+     *   <li>复合请求 → 可能涉及多个子能力</li>
+     * </ul>
      *
      * @param userMessage 用户的消息
      * @return 处理结果

@@ -45,14 +45,33 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 综合测试类
+ * 综合测试类 - 第十九章三大实战案例的集成测试
  *
  * <p>测试三个实战案例的核心功能：
  * <ul>
- *   <li>案例1：奶茶店多代理系统</li>
- *   <li>案例2：狼人杀游戏</li>
- *   <li>案例3：企业智能助手</li>
+ *   <li>案例1：奶茶店多代理系统 - Supervisor 模式</li>
+ *   <li>案例2：狼人杀游戏 - 多 Agent 博弈</li>
+ *   <li>案例3：企业智能助手 - 能力分解协作</li>
  * </ul>
+ *
+ * <h2>测试策略</h2>
+ * <ul>
+ *   <li><b>单元测试</b>：测试各组件的独立功能（如价格计算、状态管理）</li>
+ *   <li><b>集成测试</b>：测试 Agent 之间的协作（需要 Spring 容器）</li>
+ *   <li><b>模拟测试</b>：使用 mock 对象避免真实 API 调用</li>
+ * </ul>
+ *
+ * <h2>测试分类</h2>
+ * <ul>
+ *   <li><b>奶茶店测试</b>：菜单、价格、库存、订单号</li>
+ *   <li><b>狼人杀测试</b>：游戏状态、胜负判定、玩家行为</li>
+ *   <li><b>企业助手测试</b>：知识检索、日程管理、报表生成</li>
+ *   <li><b>共享工具测试</b>：时间、计算、文本处理</li>
+ * </ul>
+ *
+ * <h2>注意事项</h2>
+ * <p>部分测试需要真实的 LLM API 调用，在 CI 环境中可能需要 mock 或跳过。
+ * 建议将需要 API 调用的测试标记为 @Tag("integration")。
  *
  * @author AgentScope Tutorial
  * @since 1.0
@@ -61,6 +80,8 @@ import static org.junit.jupiter.api.Assertions.*;
 class ComprehensiveTest {
 
     // ==================== 案例1：奶茶店测试 ====================
+    // 测试 Supervisor 模式下各组件的独立功能
+    // 注：真实的 Agent 调用测试需要 LLM API，这里主要测试业务逻辑
 
     @Autowired
     private OrderSupervisorAgent orderSupervisorAgent;
@@ -75,11 +96,14 @@ class ComprehensiveTest {
     private BobaOrderService bobaOrderService;
 
     // ==================== 案例2：狼人杀测试 ====================
+    // 测试游戏状态管理和胜负判定逻辑
+    // 使用 mock Player（agent 为 null）避免真实 Agent 调用
 
     @Autowired
     private ModeratorAgent moderatorAgent;
 
     // ==================== 案例3：企业助手测试 ====================
+    // 测试各专业服务的独立功能
 
     @Autowired
     private KnowledgeAgent knowledgeAgent;
@@ -91,6 +115,7 @@ class ComprehensiveTest {
     private ReportAgent reportAgent;
 
     // ==================== 共享工具测试 ====================
+    // 测试跨案例共享的工具方法
 
     @Autowired
     private SharedTools sharedTools;
@@ -105,9 +130,10 @@ class ComprehensiveTest {
     }
 
     // ==================== 奶茶店测试 ====================
+    // 这些测试验证奶茶店案例的核心业务逻辑，不依赖 LLM API
 
     @Test
-    @DisplayName("测试奶茶店菜单获取")
+    @DisplayName("测试奶茶店菜单获取 - 验证菜单数据完整性")
     void testBobaGetMenu() {
         String menu = bobaOrderService.getMenu();
         assertNotNull(menu);
@@ -117,14 +143,16 @@ class ComprehensiveTest {
     }
 
     @Test
-    @DisplayName("测试奶茶店价格计算")
+    @DisplayName("测试奶茶店价格计算 - 验证饮品和加料的价格计算逻辑")
     void testBobaPriceCalculation() {
+        // 测试基础饮品 + 单个加料
         double price1 = bobaOrderService.calculatePrice("珍珠奶茶", List.of("珍珠"));
-        assertEquals(21.0, price1, 0.01);
+        assertEquals(21.0, price1, 0.01); // 18 + 3 = 21
         System.out.println("珍珠奶茶(加珍珠)价格：21元 - 正确");
 
+        // 测试高价饮品 + 多个加料
         double price2 = bobaOrderService.calculatePrice("芋泥波波", List.of("波霸", "珍珠"));
-        assertEquals(28.0, price2, 0.01);
+        assertEquals(28.0, price2, 0.01); // 22 + 3 + 3 = 28
         System.out.println("芋泥波波(加波霸+珍珠)价格：28元 - 正确");
     }
 
@@ -147,15 +175,21 @@ class ComprehensiveTest {
     }
 
     // ==================== 狼人杀测试 ====================
+    // 这些测试验证狼人杀游戏的状态管理和胜负判定逻辑
+    // 使用 mock 玩家（Agent 为 null）避免真实 LLM 调用
 
     @Test
-    @DisplayName("测试游戏状态初始化")
+    @DisplayName("测试游戏状态初始化 - 验证角色分配的正确性")
     void testGameStateInitialization() {
+        // 创建 9 名模拟玩家（3村民 + 3狼人 + 3神职）
         List<Player> players = createMockPlayers();
         GameState gameState = new GameState(players);
 
+        // 验证玩家总数
         assertEquals(9, gameState.getAlivePlayers().size());
+        // 验证狼人数量
         assertEquals(3, gameState.getAliveWerewolves().size());
+        // 验证特殊角色存在
         assertNotNull(gameState.getSeer());
         assertNotNull(gameState.getWitch());
         assertNotNull(gameState.getHunter());
@@ -164,8 +198,10 @@ class ComprehensiveTest {
     }
 
     @Test
-    @DisplayName("测试狼人杀胜负判断")
+    @DisplayName("测试狼人杀胜负判断 - 验证两种胜利条件")
     void testWerewolfWinCondition() {
+        // ===== 测试狼人胜利条件 =====
+        // 条件：狼人数量 >= 好人数量
         List<Player> players = createMockPlayers();
         GameState gameState = new GameState(players);
 
@@ -177,7 +213,8 @@ class ComprehensiveTest {
         assertTrue(gameState.checkWerewolvesWin());
         System.out.println("狼人胜利条件判断正确");
 
-        // 重置测试
+        // ===== 测试好人胜利条件 =====
+        // 条件：所有狼人死亡
         players = createMockPlayers();
         gameState = new GameState(players);
 
@@ -217,9 +254,10 @@ class ComprehensiveTest {
     }
 
     // ==================== 企业助手测试 ====================
+    // 这些测试验证企业助手各子能力的独立功能
 
     @Test
-    @DisplayName("测试知识库搜索 - 请假")
+    @DisplayName("测试知识库搜索 - 请假相关问题")
     void testKnowledgeSearch请假() {
         String result = knowledgeAgent.search("请假");
         assertNotNull(result);
@@ -313,9 +351,10 @@ class ComprehensiveTest {
     }
 
     // ==================== 共享工具测试 ====================
+    // 测试跨案例共享的工具方法，验证 Tool 注解和 ToolResultBlock 的使用
 
     @Test
-    @DisplayName("测试获取当前时间")
+    @DisplayName("测试获取当前时间 - 验证时间工具的正确性")
     void testGetCurrentTime() {
         var result = sharedTools.getCurrentTime();
         assertTrue(isSuccess(result));
@@ -324,11 +363,12 @@ class ComprehensiveTest {
     }
 
     @Test
-    @DisplayName("测试数学计算")
+    @DisplayName("测试数学计算 - 验证表达式解析器的运算符优先级")
     void testCalculate() {
+        // 测试运算符优先级：乘法优先于加法
         var result = sharedTools.calculate("2+3*4");
         assertTrue(isSuccess(result));
-        assertTrue(content(result).contains("14"));
+        assertTrue(content(result).contains("14")); // 2 + (3*4) = 14，而非 (2+3)*4 = 20
         System.out.println("数学计算 2+3*4 = 14 - 正确");
     }
 
@@ -352,10 +392,15 @@ class ComprehensiveTest {
         System.out.println("随机选择成功");
     }
 
-    // ==================== Helper Methods ====================
+    // ==================== 辅助方法 ====================
 
     /**
      * 创建模拟玩家列表
+     *
+     * <p>用于测试游戏逻辑，不涉及真实 Agent 调用。
+     * 玩家 Agent 设置为 null，因为我们只测试 GameState 的状态管理逻辑。
+     *
+     * @return 包含 9 名玩家的列表（3村民 + 3狼人 + 3神职）
      */
     private List<Player> createMockPlayers() {
         List<Player> players = new ArrayList<>();

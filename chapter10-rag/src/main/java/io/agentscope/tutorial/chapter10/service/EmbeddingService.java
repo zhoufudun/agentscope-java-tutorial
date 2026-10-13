@@ -26,19 +26,37 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 /**
- * Service for generating text embeddings using various embedding models.
+ * 文本嵌入服务，使用各种嵌入模型生成向量
  *
- * <p>This service provides a unified interface for text vectorization, supporting
- * multiple embedding providers (Ollama, OpenAI, DashScope).
+ * <p>本服务提供文本向量化的统一接口，支持多种嵌入模型提供商
+ * （Ollama、OpenAI、DashScope）。
  *
- * <p>Example usage:
+ * <h2>支持的嵌入模型</h2>
+ * <ul>
+ *   <li><b>Ollama</b>：本地运行，免费，适合开发测试</li>
+ *   <li><b>OpenAI</b>：高质量，需要 API Key</li>
+ *   <li><b>DashScope</b>：阿里云服务，支持中文</li>
+ * </ul>
+ *
+ * <h2>AgentScope 学习要点</h2>
+ * <ul>
+ *   <li><b>EmbeddingModel</b>：嵌入模型的抽象接口</li>
+ *   <li><b>OllamaTextEmbedding</b>：Ollama 嵌入模型实现</li>
+ *   <li><b>OpenAITextEmbedding</b>：OpenAI 嵌入模型实现</li>
+ *   <li><b>DashScopeTextEmbedding</b>：DashScope 嵌入模型实现</li>
+ *   <li><b>TextBlock</b>：文本内容块，是嵌入的输入格式</li>
+ * </ul>
+ *
+ * <h2>使用示例</h2>
  * <pre>{@code
- * // Generate embedding for a single text
- * double[] embedding = embeddingService.embedText("Hello, world!");
+ * // 为单个文本生成嵌入向量
+ * double[] embedding = embeddingService.embedText("你好，世界！");
  *
- * // Generate embeddings for multiple texts
- * List<double[]> embeddings = embeddingService.embedTexts(List.of("Text 1", "Text 2"));
+ * // 为多个文本生成嵌入向量
+ * List<double[]> embeddings = embeddingService.embedTexts(List.of("文本1", "文本2"));
  * }</pre>
+ *
+ * @author AgentScope Tutorial
  */
 @Slf4j
 @Service
@@ -46,56 +64,67 @@ import java.util.List;
 public class EmbeddingService {
 
     private final RAGConfig ragConfig;
+
+    /** 嵌入模型实例 */
     private EmbeddingModel embeddingModel;
 
     /**
-     * Initialize the embedding model after bean construction.
+     * Bean 构造后初始化嵌入模型
+     *
+     * <p>根据配置的模型类型创建相应的嵌入模型实例。
      */
     @PostConstruct
     public void init() {
         String modelType = ragConfig.getEmbedding().getModelType();
-        log.info("Initializing embedding model: type={}, model={}",
+        log.info("初始化嵌入模型：type={}，model={}",
                 modelType, ragConfig.getEmbedding().getModelName());
 
         this.embeddingModel = createEmbeddingModel(modelType);
-        log.info("Embedding model initialized: dimensions={}", embeddingModel.getDimensions());
+        log.info("嵌入模型已初始化：dimensions={}", embeddingModel.getDimensions());
     }
 
     /**
-     * Creates an embedding model based on the specified type.
+     * 根据指定类型创建嵌入模型
      *
-     * @param modelType the model type (OLLAMA, OPENAI, DASHSCOPE)
-     * @return the configured EmbeddingModel
+     * @param modelType 模型类型（OLLAMA、OPENAI、DASHSCOPE）
+     * @return 配置好的 EmbeddingModel
+     * @throws IllegalArgumentException 如果模型类型不支持
      */
     private EmbeddingModel createEmbeddingModel(String modelType) {
         return switch (modelType.toUpperCase()) {
             case "OLLAMA" -> createOllamaEmbedding();
             case "OPENAI" -> createOpenAIEmbedding();
             case "DASHSCOPE" -> createDashScopeEmbedding();
-            default -> throw new IllegalArgumentException("Unsupported embedding model type: " + modelType);
+            default -> throw new IllegalArgumentException("不支持的嵌入模型类型：" + modelType);
         };
     }
 
     /**
-     * Creates an Ollama text embedding model.
+     * 创建 Ollama 文本嵌入模型
      *
-     * @return configured OllamaTextEmbedding
+     * <p>Ollama 是一个本地运行的 LLM 服务，支持多种开源模型。
+     * 适合开发和测试环境，无需 API Key。
+     *
+     * @return 配置好的 OllamaTextEmbedding
      */
     private OllamaTextEmbedding createOllamaEmbedding() {
         return OllamaTextEmbedding.builder()
-                .baseUrl(ragConfig.getEmbedding().getBaseUrl())
-                .modelName(ragConfig.getEmbedding().getModelName())
-                .dimensions(ragConfig.getEmbedding().getDimensions())
+                .baseUrl(ragConfig.getEmbedding().getBaseUrl())   // Ollama 服务地址
+                .modelName(ragConfig.getEmbedding().getModelName()) // 模型名称
+                .dimensions(ragConfig.getEmbedding().getDimensions()) // 向量维度
                 .build();
     }
 
     /**
-     * Creates an OpenAI text embedding model.
+     * 创建 OpenAI 文本嵌入模型
      *
-     * @return configured OpenAITextEmbedding (placeholder for demonstration)
+     * <p>OpenAI 提供高质量的嵌入模型，但需要 API Key。
+     * 生产环境中应从安全存储获取 API Key。
+     *
+     * @return 配置好的 OpenAITextEmbedding
      */
     private io.agentscope.core.embedding.openai.OpenAITextEmbedding createOpenAIEmbedding() {
-        // Note: In production, you would configure API key from secure storage
+        // 注意：生产环境应从安全存储获取 API Key
         return io.agentscope.core.embedding.openai.OpenAITextEmbedding.builder()
                 .apiKey(ragConfig.getEmbedding().getApiKey())
                 .modelName(ragConfig.getEmbedding().getModelName())
@@ -104,9 +133,11 @@ public class EmbeddingService {
     }
 
     /**
-     * Creates a DashScope text embedding model.
+     * 创建 DashScope 文本嵌入模型
      *
-     * @return configured DashScopeTextEmbedding (placeholder for demonstration)
+     * <p>DashScope 是阿里云提供的 AI 服务，对中文支持较好。
+     *
+     * @return 配置好的 DashScopeTextEmbedding
      */
     private io.agentscope.core.embedding.dashscope.DashScopeTextEmbedding createDashScopeEmbedding() {
         return io.agentscope.core.embedding.dashscope.DashScopeTextEmbedding.builder()
@@ -117,31 +148,38 @@ public class EmbeddingService {
     }
 
     /**
-     * Generate embedding vector for a single text.
+     * 为单个文本生成嵌入向量
      *
-     * @param text the text to embed
-     * @return Mono that emits the embedding vector as double array
+     * <p>将文本转换为 TextBlock 后调用嵌入模型。
+     *
+     * @param text 要嵌入的文本
+     * @return 返回嵌入向量（double 数组）的 CompletableFuture
      */
     public java.util.concurrent.CompletableFuture<double[]> embedText(String text) {
-        log.debug("Generating embedding for text: {} chars", text.length());
+        log.debug("为文本生成嵌入向量：{} 字符", text.length());
         return embeddingModel.embed(
                 io.agentscope.core.message.TextBlock.builder().text(text).build()
         ).toFuture();
     }
 
     /**
-     * Generate embedding vectors for multiple texts.
+     * 为多个文本生成嵌入向量
      *
-     * @param texts the list of texts to embed
-     * @return list of embedding vectors
+     * <p>使用 Reactor 的 Flux 并行处理多个文本。
+     *
+     * @param texts 要嵌入的文本列表
+     * @return 嵌入向量列表
      */
     public java.util.concurrent.CompletableFuture<List<double[]>> embedTexts(List<String> texts) {
-        log.debug("Generating embeddings for {} texts", texts.size());
+        log.debug("为 {} 个文本生成嵌入向量", texts.size());
+
+        // 将文本转换为 ContentBlock 列表
         List<io.agentscope.core.message.ContentBlock> blocks = new java.util.ArrayList<>();
         for (String t : texts) {
             blocks.add(io.agentscope.core.message.TextBlock.builder().text(t).build());
         }
 
+        // 使用 Flux 并行处理
         return reactor.core.publisher.Flux.fromIterable(blocks)
                 .flatMap(embeddingModel::embed)
                 .collectList()
@@ -149,27 +187,27 @@ public class EmbeddingService {
     }
 
     /**
-     * Get the embedding model instance.
+     * 获取嵌入模型实例
      *
-     * @return the EmbeddingModel
+     * @return EmbeddingModel 实例
      */
     public EmbeddingModel getEmbeddingModel() {
         return embeddingModel;
     }
 
     /**
-     * Get the embedding dimensions.
+     * 获取嵌入向量维度
      *
-     * @return the number of dimensions
+     * @return 维度数
      */
     public int getDimensions() {
         return embeddingModel.getDimensions();
     }
 
     /**
-     * Get the model name.
+     * 获取模型名称
      *
-     * @return the model name
+     * @return 模型名称
      */
     public String getModelName() {
         return embeddingModel.getModelName();

@@ -22,14 +22,34 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * 游戏状态管理类
+ * 游戏状态管理类 - 狼人杀游戏的核心数据模型
  *
  * <p>负责：
  * <ul>
- *   <li>维护所有玩家状态</li>
- *   <li>管理夜晚行动结果</li>
- *   <li>判断游戏胜负</li>
+ *   <li>维护所有玩家状态（存活、死亡、技能使用情况）</li>
+ *   <li>管理夜晚行动结果（击杀、救人、毒人）</li>
+ *   <li>判断游戏胜负条件</li>
+ *   <li>记录游戏日志</li>
  * </ul>
+ *
+ * <h2>状态管理设计</h2>
+ * <p>GameState 采用集中式状态管理，所有游戏状态都在此类中维护：
+ * <ul>
+ *   <li><b>玩家列表</b>：allPlayers 包含所有玩家，通过 isAlive 判断存活</li>
+ *   <li><b>回合管理</b>：currentRound 记录当前回合数</li>
+ *   <li><b>夜间行动</b>：lastNightVictim 等字段记录夜间行动结果</li>
+ *   <li><b>游戏结束</b>：gameEnded 和 winner 记录游戏结果</li>
+ * </ul>
+ *
+ * <h2>胜负条件</h2>
+ * <ul>
+ *   <li><b>狼人胜利</b>：存活狼人数量 >= 存活好人数量</li>
+ *   <li><b>村民胜利</b>：所有狼人被消灭</li>
+ * </ul>
+ *
+ * <h2>与 WerewolfGame 的关系</h2>
+ * <p>WerewolfGame 负责游戏流程控制，GameState 负责状态数据管理。
+ * 这种分离使得状态可以独立测试，也便于实现游戏回放等功能。
  *
  * @author AgentScope Tutorial
  * @since 1.0
@@ -136,7 +156,13 @@ public class GameState {
 
     /**
      * 检查狼人是否胜利
-     * 条件：狼人数量 >= 村民数量
+     *
+     * <p><b>狼人胜利条件：</b>狼人数量 >= 村民数量
+     *
+     * <p>这个条件意味着狼人在夜晚可以击杀最后的好人，
+     * 游戏没有继续下去的必要。
+     *
+     * @return 如果狼人胜利返回 true
      */
     public boolean checkWerewolvesWin() {
         int aliveWerewolves = getAliveWerewolves().size();
@@ -146,7 +172,13 @@ public class GameState {
 
     /**
      * 检查村民是否胜利
-     * 条件：狼人全部死亡
+     *
+     * <p><b>村民胜利条件：</b>所有狼人死亡
+     *
+     * <p>当最后一个狼人被投票出局或被猎人带走时，
+     * 村民阵营（包括所有好人角色）获胜。
+     *
+     * @return 如果村民胜利返回 true
      */
     public boolean checkVillagersWin() {
         return getAliveWerewolves().isEmpty();
@@ -187,6 +219,14 @@ public class GameState {
 
     /**
      * 进入下一回合
+     *
+     * <p>每个新回合开始时：
+     * <ul>
+     *   <li>回合计数器加一</li>
+     *   <li>清除上一晚的临时状态（被杀者、被毒者、复活标记）</li>
+     *   <li>清除猎人开枪目标</li>
+     *   <li>记录回合日志</li>
+     * </ul>
      */
     public void nextRound() {
         currentRound++;

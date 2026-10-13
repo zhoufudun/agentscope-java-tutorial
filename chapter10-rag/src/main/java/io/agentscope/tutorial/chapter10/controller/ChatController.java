@@ -29,26 +29,35 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * REST controller for RAG query operations.
+ * RAG 查询操作的 REST 控制器
  *
- * <p>Endpoints:
+ * <h2>API 端点</h2>
  * <ul>
- *   <li>POST /api/chat - Query with RAG (retrieve + generate)</li>
- *   <li>GET /api/chat/retrieve - Pure retrieval without generation</li>
- *   <li>POST /api/chat/hybrid - Hybrid search (vector + keyword)</li>
- *   <li>GET /api/chat/stats - Get RAG system statistics</li>
+ *   <li>POST /api/chat - RAG 查询（检索 + 生成）</li>
+ *   <li>GET /api/chat/retrieve - 纯检索（不生成）</li>
+ *   <li>POST /api/chat/hybrid - 混合搜索（向量 + 关键词）</li>
+ *   <li>GET /api/chat/stats - 获取 RAG 系统统计</li>
  * </ul>
  *
- * <p>Example usage:
+ * <h2>使用示例</h2>
  * <pre>{@code
- * // Query with RAG
+ * // RAG 查询
  * curl -X POST -H "Content-Type: application/json" \
- *   -d '{"query":"What is AgentScope?"}' \
+ *   -d '{"query":"什么是 AgentScope？"}' \
  *   http://localhost:8080/api/chat
  *
- * // Pure retrieval
- * curl -G --data-urlencode "query=What is AgentScope?" http://localhost:8080/api/chat/retrieve
+ * // 纯检索
+ * curl -G --data-urlencode "query=什么是 AgentScope？" http://localhost:8080/api/chat/retrieve
  * }</pre>
+ *
+ * <h2>AgentScope 学习要点</h2>
+ * <ul>
+ *   <li>RAG 查询流程：查询嵌入 -> 向量检索 -> 上下文构建 -> 回答生成</li>
+ *   <li>Document 对象包含内容、元数据和相似度分数</li>
+ *   <li>混合搜索结合语义理解和精确匹配</li>
+ * </ul>
+ *
+ * @author AgentScope Tutorial
  */
 @Slf4j
 @RestController
@@ -60,26 +69,34 @@ public class ChatController {
     private final RAGConfig ragConfig;
 
     /**
-     * Query with RAG (retrieve + generate).
+     * RAG 查询（检索 + 生成）
      *
-     * @param request the chat request containing query and options
-     * @return RAG result with answer and sources
+     * <p>完整的 RAG 流程：
+     * <ol>
+     *   <li>将查询转换为嵌入向量</li>
+     *   <li>从向量数据库检索相关文档</li>
+     *   <li>基于检索结果构建上下文</li>
+     *   <li>生成回答</li>
+     * </ol>
+     *
+     * @param request 聊天请求，包含查询和选项
+     * @return RAG 结果，包含回答和来源
      */
     @PostMapping
     public ResponseEntity<Map<String, Object>> query(@RequestBody ChatRequest request) {
-        log.info("Received RAG query: '{}'", request.query());
+        log.info("收到 RAG 查询：'{}'", request.query());
 
         try {
-            // Build retrieval config from request
+            // 从请求构建检索配置
             RAGConfig.RetrievalConfig retrievalConfig = buildRetrievalConfig(request);
 
-            // Perform RAG query
+            // 执行 RAG 查询
             CompletableFuture<RAGService.RAGResult> future =
                     ragService.query(request.query(), retrievalConfig);
 
             RAGService.RAGResult result = future.join();
 
-            // Build response
+            // 构建响应
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("query", result.query());
@@ -88,32 +105,35 @@ public class ChatController {
             response.put("sourceCount", result.sources().size());
             response.put("formattedSources", result.getFormattedSources());
 
-            log.info("RAG query completed: {} sources used", result.sources().size());
+            log.info("RAG 查询完成：使用了 {} 个来源", result.sources().size());
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
-            log.error("RAG query failed", e);
+            log.error("RAG 查询失败", e);
             return ResponseEntity.internalServerError()
                     .body(Map.of(
-                            "error", "RAG query failed: " + e.getMessage(),
+                            "error", "RAG 查询失败：" + e.getMessage(),
                             "success", false
                     ));
         }
     }
 
     /**
-     * Pure retrieval without generation.
+     * 纯检索（不生成回答）
      *
-     * @param query the search query
-     * @param topK the number of documents to retrieve (optional)
-     * @return list of retrieved documents
+     * <p>仅执行向量检索，返回相关文档，不调用 LLM 生成回答。
+     * 适用于需要查看原始检索结果的场景。
+     *
+     * @param query 搜索查询
+     * @param topK 要检索的文档数量（可选）
+     * @return 检索到的文档列表
      */
     @GetMapping("/retrieve")
     public ResponseEntity<Map<String, Object>> retrieve(
             @RequestParam String query,
             @RequestParam(value = "topK", required = false) Integer topK) {
 
-        log.info("Received retrieval request: query='{}', topK={}", query, topK);
+        log.info("收到检索请求：query='{}'，topK={}", query, topK);
 
         try {
             int k = topK != null && topK > 0
@@ -123,7 +143,7 @@ public class ChatController {
             CompletableFuture<List<Document>> future = ragService.retrieve(query, k);
             List<Document> documents = future.join();
 
-            // Build response
+            // 构建响应
             List<Map<String, Object>> docList = documents.stream()
                     .map(this::documentToMap)
                     .toList();
@@ -134,28 +154,34 @@ public class ChatController {
             response.put("documentCount", documents.size());
             response.put("documents", docList);
 
-            log.info("Retrieval completed: {} documents", documents.size());
+            log.info("检索完成：{} 个文档", documents.size());
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
-            log.error("Retrieval failed", e);
+            log.error("检索失败", e);
             return ResponseEntity.internalServerError()
                     .body(Map.of(
-                            "error", "Retrieval failed: " + e.getMessage(),
+                            "error", "检索失败：" + e.getMessage(),
                             "success", false
                     ));
         }
     }
 
     /**
-     * Hybrid search combining vector and keyword search.
+     * 混合搜索（结合向量搜索和关键词搜索）
      *
-     * @param request the hybrid search request
-     * @return list of retrieved documents with combined scores
+     * <p>混合搜索的优势：
+     * <ul>
+     *   <li>向量搜索：理解语义相似性</li>
+     *   <li>关键词搜索：精确匹配专有名词</li>
+     * </ul>
+     *
+     * @param request 混合搜索请求
+     * @return 检索到的文档列表（带组合分数）
      */
     @PostMapping("/hybrid")
     public ResponseEntity<Map<String, Object>> hybridSearch(@RequestBody HybridSearchRequest request) {
-        log.info("Received hybrid search: query='{}', topK={}", request.query(), request.topK());
+        log.info("收到混合搜索：query='{}'，topK={}", request.query(), request.topK());
 
         try {
             int topK = request.topK() != null && request.topK() > 0
@@ -165,7 +191,7 @@ public class ChatController {
             CompletableFuture<List<Document>> future = ragService.hybridSearch(request.query(), topK);
             List<Document> documents = future.join();
 
-            // Build response
+            // 构建响应
             List<Map<String, Object>> docList = documents.stream()
                     .map(this::documentToMap)
                     .toList();
@@ -177,23 +203,23 @@ public class ChatController {
             response.put("documents", docList);
             response.put("searchType", "hybrid");
 
-            log.info("Hybrid search completed: {} documents", documents.size());
+            log.info("混合搜索完成：{} 个文档", documents.size());
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
-            log.error("Hybrid search failed", e);
+            log.error("混合搜索失败", e);
             return ResponseEntity.internalServerError()
                     .body(Map.of(
-                            "error", "Hybrid search failed: " + e.getMessage(),
+                            "error", "混合搜索失败：" + e.getMessage(),
                             "success", false
                     ));
         }
     }
 
     /**
-     * Get RAG system statistics and configuration.
+     * 获取 RAG 系统统计信息和配置
      *
-     * @return system stats
+     * @return 系统统计信息
      */
     @GetMapping("/stats")
     public ResponseEntity<Map<String, Object>> getStats() {
@@ -201,21 +227,21 @@ public class ChatController {
             Map<String, Object> stats = new HashMap<>();
             stats.put("success", true);
 
-            // Embedding config
+            // 嵌入配置
             Map<String, Object> embedding = new HashMap<>();
             embedding.put("modelType", ragConfig.getEmbedding().getModelType());
             embedding.put("modelName", ragConfig.getEmbedding().getModelName());
             embedding.put("dimensions", ragConfig.getEmbedding().getDimensions());
             stats.put("embedding", embedding);
 
-            // Chunking config
+            // 分块配置
             Map<String, Object> chunking = new HashMap<>();
             chunking.put("strategy", ragConfig.getChunking().getStrategy());
             chunking.put("chunkSize", ragConfig.getChunking().getChunkSize());
             chunking.put("overlapSize", ragConfig.getChunking().getOverlapSize());
             stats.put("chunking", chunking);
 
-            // Retrieval config
+            // 检索配置
             Map<String, Object> retrieval = new HashMap<>();
             retrieval.put("topK", ragConfig.getRetrieval().getTopK());
             retrieval.put("scoreThreshold", ragConfig.getRetrieval().getScoreThreshold());
@@ -225,14 +251,17 @@ public class ChatController {
             return ResponseEntity.ok(stats);
 
         } catch (Exception e) {
-            log.error("Failed to get stats", e);
+            log.error("获取统计信息失败", e);
             return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Failed to get stats: " + e.getMessage()));
+                    .body(Map.of("error", "获取统计信息失败：" + e.getMessage()));
         }
     }
 
     /**
-     * Build retrieval config from request.
+     * 从请求构建检索配置
+     *
+     * @param request 聊天请求
+     * @return 检索配置
      */
     private RAGConfig.RetrievalConfig buildRetrievalConfig(ChatRequest request) {
         RAGConfig.RetrievalConfig config = new RAGConfig.RetrievalConfig();
@@ -247,7 +276,10 @@ public class ChatController {
     }
 
     /**
-     * Convert Document to Map for JSON response.
+     * 将 Document 转换为 Map 用于 JSON 响应
+     *
+     * @param doc 文档对象
+     * @return Map 表示
      */
     private Map<String, Object> documentToMap(Document doc) {
         Map<String, Object> map = new HashMap<>();
@@ -263,12 +295,12 @@ public class ChatController {
     }
 
     /**
-     * Chat request with RAG options.
+     * 聊天请求（带 RAG 选项）
      *
-     * @param query the user query
-     * @param topK number of documents to retrieve
-     * @param scoreThreshold minimum similarity score (0-1)
-     * @param hybridSearch enable hybrid search
+     * @param query 用户查询
+     * @param topK 要检索的文档数量
+     * @param scoreThreshold 最小相似度分数（0-1）
+     * @param hybridSearch 是否启用混合搜索
      */
     public record ChatRequest(
             String query,
@@ -276,26 +308,32 @@ public class ChatController {
             Double scoreThreshold,
             Boolean hybridSearch
     ) {
+        /**
+         * 验证查询不为空
+         */
         public ChatRequest {
             if (query == null || query.isBlank()) {
-                throw new IllegalArgumentException("Query cannot be empty");
+                throw new IllegalArgumentException("查询不能为空");
             }
         }
     }
 
     /**
-     * Hybrid search request.
+     * 混合搜索请求
      *
-     * @param query the search query
-     * @param topK number of results to return
+     * @param query 搜索查询
+     * @param topK 返回结果数量
      */
     public record HybridSearchRequest(
             String query,
             Integer topK
     ) {
+        /**
+         * 验证查询不为空
+         */
         public HybridSearchRequest {
             if (query == null || query.isBlank()) {
-                throw new IllegalArgumentException("Query cannot be empty");
+                throw new IllegalArgumentException("查询不能为空");
             }
         }
     }
