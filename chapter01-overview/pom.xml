@@ -53,6 +53,13 @@
             <artifactId>agentscope-spring-boot-starter</artifactId>
         </dependency>
 
+        <!-- AgentScope DashScope 模型 Starter（注册 Model Bean，ReActAgent 依赖它自动装配） -->
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-dashscope-spring-boot-starter</artifactId>
+            <version>${agentscope.version}</version>
+        </dependency>
+
         <!-- Spring Boot Web -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -97,6 +104,10 @@
             <version>${agentscope.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-core</artifactId>
         </dependency>
     </dependencies>
 

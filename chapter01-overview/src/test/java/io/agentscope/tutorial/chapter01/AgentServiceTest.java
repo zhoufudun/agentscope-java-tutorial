@@ -18,6 +18,7 @@ package io.agentscope.tutorial.chapter01;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agent.test.MockModel;
 import io.agentscope.core.agent.test.MockToolkit;
+import io.agentscope.extensions.model.dashscope.DashScopeChatModel;
 import io.agentscope.tutorial.chapter01.controller.ChatRequest;
 import io.agentscope.tutorial.chapter01.controller.ChatResponse;
 import io.agentscope.tutorial.chapter01.service.AgentService;

@@ -47,7 +47,23 @@ import reactor.core.publisher.Mono;
 @Slf4j
 public class AgentService {
 
-    /** Agent 实例提供器（prototype scope，每个请求获取新实例） */
+    /**
+     * Agent 实例提供器（prototype scope）。
+     *
+     * <p>ReActAgent Bean 并非本项目创建，而是由 agentscope-spring-boot-starter 中的
+     * {@code io.agentscope.spring.boot.AgentscopeAutoConfiguration#agentscopeReActAgent(...)}
+     * 工厂方法自动注册（{@code @Bean + @Scope(PROTOTYPE)}，且依赖 {@code Model} Bean 存在）。
+     *
+     * <p>这里注入的是 ObjectProvider「取用句柄」，而非 Agent 实例本身。调用链路：
+     * <pre>
+     * 启动时：Spring 登记 @Bean 方法 → bean 定义（prototype，暂不实例化）
+     * 注入时：AgentService 构造器收到 ObjectProvider（句柄）
+     * 请求时：agentProvider.getObject()
+     *          → Spring 查 bean 定义 → 发现是 prototype
+     *          → 调用 agentscopeReActAgent(...) 工厂方法
+     *          → 得到全新的 ReActAgent 返回，保证每个会话实例隔离
+     * </pre>
+     */
     private final ObjectProvider<ReActAgent> agentProvider;
 
     /**
@@ -119,20 +135,18 @@ public class AgentService {
             return Mono.just("消息内容不能为空");
         }
 
+        // 获取新的 Agent 实例（每个请求一个独立实例，见字段注释）
         ReActAgent agent = agentProvider.getObject();
 
-        Msg userMsg = Msg.builder()
-                .role(MsgRole.USER)
+        Msg userMsg = Msg.builder().role(MsgRole.USER)
                 .content(TextBlock.builder().text(request.getMessage()).build())
                 .build();
 
-        return agent.stream(userMsg)
-                .next()
-                .map(event -> {
-                    // 这里可以处理流式事件，如思考过程、工具调用结果等
-                    Msg msg = event.getMessage();
-                    return extractTextFromMsg(msg);
-                });
+        return agent.stream(userMsg).next().map(event -> {
+            // 这里可以处理流式事件，如思考过程、工具调用结果等
+            Msg msg = event.getMessage();
+            return extractTextFromMsg(msg);
+        });
     }
 
     /**

@@ -31,6 +31,20 @@ import org.springframework.context.annotation.Configuration;
  *   <li>ollama - Ollama 本地模型配置</li>
  * </ul>
  *
+ * <p>注意：这是本章「自定义」的配置类（{@code @ConfigurationProperties(prefix = "agentscope")}），
+ * 与库自带的 {@code AgentscopeProperties}（agentscope-spring-boot-starter）前缀相同但字段不同、互不影响：
+ * <ul>
+ *   <li>库的 {@code AgentscopeProperties} 只认 {@code agentscope.model.provider} 和 {@code agentscope.agent.*}；</li>
+ *   <li>库的模型 Starter 用平级前缀 {@code agentscope.dashscope.*}（dashscope starter）、
+ *       {@code agentscope.openai.*}、{@code agentscope.ollama.*}，而非这里的 {@code agentscope.model.*}。</li>
+ * </ul>
+ *
+ * <p>本章的消费关系（手动构建，不走任何 Starter 的自动装配）：
+ * <ul>
+ *   <li>{@code model.dashscope} → {@code QuickStartService.createDashScopeModel()} 手动 new 模型（实际使用）</li>
+ *   <li>{@code model.openai} / {@code model.ollama} → 仅绑定，未实现对应模型构建（预留）</li>
+ * </ul>
+ *
  * @author AgentScope Team
  * @since 1.0
  */

@@ -28,6 +28,9 @@ spring:
         format_sql: true
 
 # AgentScope 配置
+# 注意：下面的 agentscope.model.dashscope/openai/ollama 是「本章自定义」的 AgentConfig 类绑定的
+# （@ConfigurationProperties(prefix="agentscope")），由 QuickStartService 手动 new 模型消费，
+# 并非库 Starter 的自动装配。库 Starter 用的是平级前缀 agentscope.dashscope.* / openai.* / ollama.*。
 agentscope:
   # 模型配置
   model:
